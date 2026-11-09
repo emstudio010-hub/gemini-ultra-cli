@@ -14,7 +14,8 @@ import {
 
 export const copyCommand: SlashCommand = {
   name: 'copy',
-  description: 'Copy the last result or code snippet to clipboard',
+  altNames: ['复制', '拷贝'],
+  description: '将上一条回复内容或完整会话复制到系统剪贴板',
   kind: CommandKind.BUILT_IN,
   autoExecute: true,
   action: async (context, _args): Promise<SlashCommandActionReturn | void> => {

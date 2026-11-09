@@ -35,7 +35,7 @@ import { parseSlashCommand } from '../../utils/commands.js';
 
 const authCommand: SlashCommand = {
   name: 'auth',
-  description: 'Authenticate with an OAuth-enabled MCP server',
+  description: '管理 Model Context Protocol (MCP) 外部工具与服务',
   kind: CommandKind.BUILT_IN,
   autoExecute: true,
   action: async (
@@ -319,7 +319,7 @@ const listAction = async (
 };
 const listCommand: SlashCommand = {
   name: 'list',
-  altNames: ['ls', 'nodesc', 'nodescription'],
+  altNames: ['mcp服务', '工具服务'],
   description: 'List configured MCP servers and tools',
   kind: CommandKind.BUILT_IN,
   autoExecute: true,

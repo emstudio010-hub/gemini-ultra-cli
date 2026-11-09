@@ -132,9 +132,8 @@ async function heatmapView(context: CommandContext, rawArgs: string) {
 
 export const statsCommand: SlashCommand = {
   name: 'stats',
-  altNames: ['usage'],
-  description:
-    'Check session stats. Usage: /stats [session|model|tools|heatmap]',
+  altNames: ['统计', '用量', '消耗'],
+  description: '查看当前会话的 Token 消耗、工具调用频次与响应耗时统计',
   kind: CommandKind.BUILT_IN,
   autoExecute: false,
   isSafeConcurrent: true,

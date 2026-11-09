@@ -12,7 +12,8 @@ import {
 
 export const settingsCommand: SlashCommand = {
   name: 'settings',
-  description: 'View and edit Gemini CLI settings',
+  altNames: ['设置', '配置'],
+  description: '打开交互式设置面板，调整编辑器、主题与模型策略',
   kind: CommandKind.BUILT_IN,
   autoExecute: true,
   action: (_context, _args): OpenDialogActionReturn => ({

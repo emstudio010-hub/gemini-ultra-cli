@@ -83,7 +83,7 @@ export class SkillManager {
     const extraDirs = getMultiSourceSkillDirs();
     for (const d of extraDirs) {
       const extraSkills = await loadSkillsFromDir(d);
-      this.addSkillsWithPrecedence(extraSkills);
+      this.addSkillsWithPrecedence(extraSkills, true);
     }
 
     // 4. Workspace skills (highest precedence)
@@ -129,7 +129,10 @@ export class SkillManager {
     this.addSkillsWithPrecedence(skills);
   }
 
-  private addSkillsWithPrecedence(newSkills: SkillDefinition[]): void {
+  private addSkillsWithPrecedence(
+    newSkills: SkillDefinition[],
+    silentConflicts = false,
+  ): void {
     const skillMap = new Map<string, SkillDefinition>(
       this.skills.map((s) => [s.name, s]),
     );
@@ -141,10 +144,14 @@ export class SkillManager {
           debugLogger.warn(
             `Skill "${newSkill.name}" from "${newSkill.location}" is overriding the built-in skill.`,
           );
-        } else {
+        } else if (!silentConflicts) {
           coreEvents.emitFeedback(
             'warning',
             `Skill conflict detected: "${newSkill.name}" from "${newSkill.location}" is overriding the same skill from "${existingSkill.location}".`,
+          );
+        } else {
+          debugLogger.debug(
+            `Ecosystem skill "${newSkill.name}" merged from "${newSkill.location}".`,
           );
         }
       }

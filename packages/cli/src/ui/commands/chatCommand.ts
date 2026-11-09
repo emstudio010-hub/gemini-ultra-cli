@@ -72,7 +72,7 @@ const getSavedChatTags = async (
 
 const listCommand: SlashCommand = {
   name: 'list',
-  description: 'List saved manual conversation checkpoints',
+  description: '查看历史对话列表、重命名或切换会话',
   kind: CommandKind.BUILT_IN,
   autoExecute: true,
   takesArgs: false,
@@ -159,7 +159,7 @@ const saveCommand: SlashCommand = {
 
 const resumeCheckpointCommand: SlashCommand = {
   name: 'resume',
-  altNames: ['load'],
+  altNames: ['对话', '会话', '历史'],
   description:
     'Resume a conversation from a checkpoint. Usage: /resume resume <tag>',
   kind: CommandKind.BUILT_IN,

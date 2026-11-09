@@ -14,6 +14,16 @@ import {
 import { useKeypress } from '../hooks/useKeypress.js';
 import { theme } from '../semantic-colors.js';
 
+function isEnter(key: { name?: string; sequence?: string }): boolean {
+  return (
+    key.name === 'return' ||
+    key.name === 'enter' ||
+    key.sequence === '\r' ||
+    key.sequence === '\n' ||
+    key.sequence === '\r\n'
+  );
+}
+
 interface ProviderConfigDialogProps {
   onClose: () => void;
 }
@@ -124,7 +134,7 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({ onCl
           setSelectedProviderIdx((prev) => (prev < providers.length - 1 ? prev + 1 : 0));
           return true;
         }
-        if (key.name === 'return') {
+        if (isEnter(key)) {
           const chosen = providers[selectedProviderIdx];
           if (chosen) {
             mgr.setActiveSelection(chosen.id, chosen.defaultModel);
@@ -156,7 +166,7 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({ onCl
 
       // --- 2. INPUT NAME ---
       if (step === 'input-name') {
-        if (key.name === 'return') {
+        if (isEnter(key)) {
           if (formName.trim()) setStep('input-url');
           return true;
         }
@@ -173,7 +183,7 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({ onCl
 
       // --- 3. INPUT URL ---
       if (step === 'input-url') {
-        if (key.name === 'return') {
+        if (isEnter(key)) {
           if (formUrl.trim()) setStep('input-key');
           return true;
         }
@@ -190,7 +200,7 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({ onCl
 
       // --- 4. INPUT KEY ---
       if (step === 'input-key') {
-        if (key.name === 'return') {
+        if (isEnter(key)) {
           setStep('select-protocol');
           return true;
         }
@@ -215,7 +225,7 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({ onCl
           setProtocolIdx((prev) => (prev < protocols.length - 1 ? prev + 1 : 0));
           return true;
         }
-        if (key.name === 'return') {
+        if (isEnter(key)) {
           const chosenProto = protocols[protocolIdx].id;
           setFormProtocol(chosenProto);
           void handleFetchModels(formUrl, formKey, chosenProto);
@@ -233,7 +243,7 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({ onCl
           setSelectedModelIdx((prev) => (prev < fetchedModels.length - 1 ? prev + 1 : 0));
           return true;
         }
-        if (key.name === 'return') {
+        if (isEnter(key)) {
           setPendingModel(
             customModelInput.trim() ||
               fetchedModels[selectedModelIdx] ||
@@ -256,7 +266,7 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({ onCl
 
       // --- 7. OPTIONAL IMAGE MODEL ---
       if (step === 'input-image-model') {
-        if (key.name === 'return') {
+        if (isEnter(key)) {
           handleSaveProvider(pendingModel, imageModelInput.trim() || undefined);
           setCustomModelInput('');
           return true;

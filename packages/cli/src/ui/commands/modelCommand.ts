@@ -72,8 +72,7 @@ function getValidModelNames(context: CommandContext): Set<string> {
 
 const setModelCommand: SlashCommand = {
   name: 'set',
-  description:
-    'Set the model to use. Usage: /model set <model-name> [--persist]',
+  description: '切换当前激活的生成模型（支持 Gemini 及全部已配置的外接供应商模型）',
   kind: CommandKind.BUILT_IN,
   autoExecute: false,
   action: async (context: CommandContext, args: string) => {

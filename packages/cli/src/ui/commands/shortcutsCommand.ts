@@ -8,9 +8,9 @@ import { CommandKind, type SlashCommand } from './types.js';
 
 export const shortcutsCommand: SlashCommand = {
   name: 'shortcuts',
-  altNames: [],
+  altNames: ['快捷键'],
   kind: CommandKind.BUILT_IN,
-  description: 'Toggle the shortcuts panel above the input',
+  description: '查看所有全局与编辑模式的键盘快捷键',
   autoExecute: true,
   action: (context) => {
     context.ui.toggleShortcutsHelp();

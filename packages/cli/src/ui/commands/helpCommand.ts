@@ -12,7 +12,7 @@ export const helpCommand: SlashCommand = {
   name: 'help',
   altNames: ['帮助', '菜单', 'h'],
   kind: CommandKind.BUILT_IN,
-  description: 'For help on gemini-cli',
+  description: '显示所有可用命令、快捷键与使用帮助',
   autoExecute: true,
   action: async (context, args) => {
     const lowerArgs = args?.toLowerCase() || '';

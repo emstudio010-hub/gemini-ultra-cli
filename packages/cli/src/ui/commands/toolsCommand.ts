@@ -43,7 +43,7 @@ async function listTools(
 
 const listSubCommand: SlashCommand = {
   name: 'list',
-  description: 'List available Gemini CLI tools.',
+  description: '查看当前已就绪并挂载的所有大模型可用工具',
   kind: CommandKind.BUILT_IN,
   autoExecute: true,
   action: async (context: CommandContext): Promise<void> =>
@@ -52,7 +52,7 @@ const listSubCommand: SlashCommand = {
 
 const descSubCommand: SlashCommand = {
   name: 'desc',
-  altNames: ['descriptions'],
+  altNames: ['工具', '工具列表'],
   description: 'List available Gemini CLI tools with descriptions.',
   kind: CommandKind.BUILT_IN,
   autoExecute: true,

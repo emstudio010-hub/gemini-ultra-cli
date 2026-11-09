@@ -23,7 +23,7 @@ import { InboxDialog } from '../components/InboxDialog.js';
 
 const showSubCommand: SlashCommand = {
   name: 'show',
-  description: 'Show the current memory contents',
+  description: '查看或刷新当前加载的 GEMINI.md 上下文记忆文件',
   kind: CommandKind.BUILT_IN,
   autoExecute: true,
   action: async (context) => {
@@ -43,7 +43,7 @@ const showSubCommand: SlashCommand = {
 
 const reloadSubCommand: SlashCommand = {
   name: 'reload',
-  altNames: ['refresh'],
+  altNames: ['记忆', '记忆库'],
   description: 'Reload the memory from the source',
   kind: CommandKind.BUILT_IN,
   autoExecute: true,

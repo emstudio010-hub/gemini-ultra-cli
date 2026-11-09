@@ -20,7 +20,8 @@ import {
 
 export const aboutCommand: SlashCommand = {
   name: 'about',
-  description: 'Show version info',
+  altNames: ['关于', '版本'],
+  description: '查看 Gemini Ultra CLI 架构信息、版本号与版权说明',
   kind: CommandKind.BUILT_IN,
   autoExecute: true,
   isSafeConcurrent: true,

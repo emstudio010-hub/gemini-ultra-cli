@@ -49,8 +49,8 @@ async function copyAction(context: CommandContext) {
 
 export const planCommand: SlashCommand = {
   name: 'plan',
-  altNames: ['规划', '计划'],
-  description: 'Switch to Plan Mode and view current plan',
+  altNames: ['计划', '规划', '计划模式'],
+  description: '开启结构化计划模式 (Plan Mode)，模型将在行动前制定逐步实施方案',
   kind: CommandKind.BUILT_IN,
   autoExecute: false,
   action: async (context) => {

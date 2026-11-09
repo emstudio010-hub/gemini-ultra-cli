@@ -9,8 +9,8 @@ import { CommandKind, type SlashCommand } from './types.js';
 
 export const quitCommand: SlashCommand = {
   name: 'quit',
-  altNames: ['exit'],
-  description: 'Exit the cli',
+  altNames: ['退出', '离开', 'q'],
+  description: '安全保存并退出 Gemini Ultra CLI',
   kind: CommandKind.BUILT_IN,
   autoExecute: true,
   action: (context, args) => {

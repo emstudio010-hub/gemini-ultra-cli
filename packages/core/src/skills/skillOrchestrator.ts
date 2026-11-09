@@ -37,7 +37,7 @@ export function getMultiSourceSkillDirs(): string[] {
   const home = os.homedir();
   const dirs = [
     path.join(home, '.gemini', 'config', 'skills'),
-    path.join(home, '.agents', 'skills'),
+    // Note: ~/.agents/skills is already loaded natively by Storage.getUserAgentSkillsDir()
     path.join(home, 'reverse-skill', 'skills'),
     path.join(home, '.dsh', 'redteam', 'skills'),
     path.join(home, '.zcode', 'skills'),

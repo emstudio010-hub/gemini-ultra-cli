@@ -167,8 +167,8 @@ export const restoreCommand = (config: Config | null): SlashCommand | null => {
 
   return {
     name: 'restore',
-    description:
-      'Restore a tool call. This will reset the conversation and file history to the state it was in when the tool call was suggested',
+  altNames: ['还原', '撤销更改'],
+    description: '回滚由模型引发的代码变更或恢复上一个会话快照',
     kind: CommandKind.BUILT_IN,
     autoExecute: true,
     action: restoreAction,

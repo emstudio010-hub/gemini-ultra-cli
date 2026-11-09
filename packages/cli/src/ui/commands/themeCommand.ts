@@ -12,7 +12,8 @@ import {
 
 export const themeCommand: SlashCommand = {
   name: 'theme',
-  description: 'Change the theme',
+  altNames: ['主题', '配色'],
+  description: '切换终端 UI 颜色主题 (支持 Dark, Tokyo Night, Light, No Color 等)',
   kind: CommandKind.BUILT_IN,
   autoExecute: true,
   action: (_context, _args): OpenDialogActionReturn => ({
