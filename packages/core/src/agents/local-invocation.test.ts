@@ -219,24 +219,32 @@ describe('LocalSubagentInvocation', () => {
       expect(display.terminateReason).toBe(AgentTerminateMode.GOAL);
     });
 
-    it('should show detailed UI for non-goal terminations (e.g., TIMEOUT)', async () => {
-      const mockOutput = {
-        result: 'Partial progress...',
-        terminate_reason: AgentTerminateMode.TIMEOUT,
-      };
-      mockExecutorInstance.run.mockResolvedValue(mockOutput);
+    it.each([
+      AgentTerminateMode.TIMEOUT,
+      AgentTerminateMode.MAX_TURNS,
+      AgentTerminateMode.ERROR,
+      AgentTerminateMode.ERROR_NO_COMPLETE_TASK_CALL,
+    ])(
+      'should mark non-goal termination %s as an error and preserve partial results',
+      async (reason) => {
+        const mockOutput = {
+          result: 'Partial progress...',
+          terminate_reason: reason,
+        };
+        mockExecutorInstance.run.mockResolvedValue(mockOutput);
 
-      const result = await invocation.execute({
-        abortSignal: signal,
-        updateOutput,
-      });
+        const result = await invocation.execute({
+          abortSignal: signal,
+          updateOutput,
+        });
 
-      const display = result.returnDisplay as SubagentProgress;
-      expect(display.isSubagentProgress).toBe(true);
-      expect(display.state).toBe(SubagentState.COMPLETED);
-      expect(display.result).toBe('Partial progress...');
-      expect(display.terminateReason).toBe(AgentTerminateMode.TIMEOUT);
-    });
+        const display = result.returnDisplay as SubagentProgress;
+        expect(display.isSubagentProgress).toBe(true);
+        expect(display.state).toBe(SubagentState.ERROR);
+        expect(display.result).toBe('Partial progress...');
+        expect(display.terminateReason).toBe(reason);
+      },
+    );
 
     it('should stream THOUGHT_CHUNK activities from the executor, replacing the last running thought', async () => {
       mockExecutorInstance.run.mockImplementation(async () => {

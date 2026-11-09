@@ -273,6 +273,20 @@ export const ALL_BUILTIN_TOOL_NAMES = [
   AGENT_TOOL_NAME,
   READ_MCP_RESOURCE_TOOL_NAME,
   LIST_MCP_RESOURCES_TOOL_NAME,
+  'spawn_subagents',
+  'generate_image',
+  'deep_web_fetch',
+  'render_diagram',
+  'memory_store_observation',
+  'memory_search_graph',
+  'taste_update',
+  'drill_preflight',
+  'drill_record_fact',
+  'drill_query_facts',
+  'binary_triage',
+  'binary_inspect',
+  'verified_patch_transaction',
+  'apply_patch',
 ] as const;
 
 /**
@@ -284,6 +298,7 @@ export const PLAN_MODE_TOOLS = [
   GLOB_TOOL_NAME,
   GREP_TOOL_NAME,
   READ_FILE_TOOL_NAME,
+  READ_MANY_FILES_TOOL_NAME,
   LS_TOOL_NAME,
   WEB_SEARCH_TOOL_NAME,
   ASK_USER_TOOL_NAME,
@@ -294,6 +309,11 @@ export const PLAN_MODE_TOOLS = [
   'cli_help',
   READ_MCP_RESOURCE_TOOL_NAME,
   LIST_MCP_RESOURCES_TOOL_NAME,
+  'drill_query_facts',
+  'memory_search_graph',
+  'deep_web_fetch',
+  'binary_triage',
+  'binary_inspect',
 ] as const;
 
 /**

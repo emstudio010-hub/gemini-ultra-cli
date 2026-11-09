@@ -33,6 +33,8 @@ import type { LlmRole } from '../telemetry/llmRole.js';
 import { ModelMappingContentGenerator } from './modelMappingContentGenerator.js';
 import { getBackendModelMappings } from '../config/models.js';
 import { UniversalContentGenerator } from '../providers/universalContentGenerator.js';
+import { ProviderManager } from '../providers/providerManager.js';
+import { ExternalFallbackGenerator } from '../providers/externalFallbackGenerator.js';
 
 /**
  * Interface abstracting the core functionalities for generating content and counting tokens.
@@ -91,6 +93,11 @@ export function getAuthTypeFromEnv(): AuthType | undefined {
   if (process.env['GEMINI_API_KEY']) {
     return AuthType.USE_GEMINI;
   }
+  if (
+    ProviderManager.getInstance().getActiveProvider() &&
+    ProviderManager.getInstance().getActiveModel()
+  )
+    return AuthType.GATEWAY;
   if (
     process.env['CLOUD_SHELL'] === 'true' ||
     process.env['GEMINI_CLI_USE_COMPUTE_ADC'] === 'true'
@@ -162,6 +169,15 @@ export async function createContentGeneratorConfig(
     return process.env[key];
   };
 
+  if (
+    authType === AuthType.GATEWAY &&
+    ProviderManager.getInstance().getActiveProvider()
+  ) {
+    contentGeneratorConfig.apiKey = '';
+    contentGeneratorConfig.vertexai = false;
+    return contentGeneratorConfig;
+  }
+
   // If we are using Google auth or we are in Cloud Shell, there is nothing else to validate for now.
   // Return before touching the API-key keychain: on Linux without a Secret Service
   // (WSL/SSH/Docker/CI) keytar can block indefinitely on its functional probe.
@@ -227,6 +243,11 @@ export async function createContentGenerator(
       );
       return new LoggingContentGenerator(fakeGenerator, gcConfig);
     }
+    if (
+      config.authType === AuthType.GATEWAY &&
+      ProviderManager.getInstance().getActiveProvider()
+    )
+      return new ExternalFallbackGenerator();
     const version = await getVersion();
     const model = resolveModel(
       gcConfig.getModel(),
@@ -422,7 +443,10 @@ export async function createContentGenerator(
 
   const wrappedGenerator = new UniversalContentGenerator(generator, gcConfig);
   if (gcConfig.recordResponses) {
-    return new RecordingContentGenerator(wrappedGenerator, gcConfig.recordResponses);
+    return new RecordingContentGenerator(
+      wrappedGenerator,
+      gcConfig.recordResponses,
+    );
   }
 
   return wrappedGenerator;

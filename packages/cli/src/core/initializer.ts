@@ -14,8 +14,10 @@ import {
   logCliConfiguration,
   startupProfiler,
   debugLogger,
+  AuthType,
+  ProviderManager,
 } from '@google/gemini-cli-core';
-import { type LoadedSettings } from '../config/settings.js';
+import { type LoadedSettings, SettingScope } from '../config/settings.js';
 import { performInitialAuth } from './auth.js';
 import { validateTheme } from './theme.js';
 import type { AccountSuspensionInfo } from '../ui/contexts/UIStateContext.js';
@@ -39,6 +41,22 @@ export async function initializeApp(
   config: Config,
   settings: LoadedSettings,
 ): Promise<InitializationResult> {
+  const manager = ProviderManager.getInstance();
+  if (
+    !settings.merged.security.auth.selectedType &&
+    !settings.merged.security.auth.enforcedType &&
+    manager.getActiveProvider() &&
+    manager.getActiveModel()
+  ) {
+    settings.setValue(
+      SettingScope.User,
+      'security.auth.selectedType',
+      AuthType.GATEWAY,
+    );
+    config.setModel(
+      `${manager.getActiveProvider()!.id}:${manager.getActiveModel()}`,
+    );
+  }
   const authHandle = startupProfiler.start('authenticate');
   const { authError, accountSuspensionInfo } = await performInitialAuth(
     config,

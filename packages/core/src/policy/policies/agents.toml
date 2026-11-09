@@ -4,7 +4,7 @@
 
 [[rule]]
 name = "Allow invoke_agent"
-toolName = "invoke_agent"
+toolName = ["invoke_agent", "spawn_subagents"]
 decision = "allow"
 priority = 50
 modes = ["default", "autoEdit", "yolo"]

@@ -1022,7 +1022,9 @@ export async function main() {
     });
     // Call cleanup before process.exit, which causes cleanup to not run
     await runExitCleanup();
-    process.exit(ExitCodes.SUCCESS);
+    // Let pending native/stream close callbacks drain; forcing exit here can
+    // double-close async handles on Windows after a tool has opened SQLite.
+    process.exitCode = ExitCodes.SUCCESS;
   }
 }
 

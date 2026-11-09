@@ -7,7 +7,9 @@
 import React from 'react';
 import {
   ProviderManager,
-  type ReasoningEffortLevel,
+  I18nManager,
+  getEffortOptions,
+  parseEffort,
 } from '@google/gemini-cli-core';
 import {
   type CommandContext,
@@ -21,11 +23,18 @@ import { EffortDialog } from '../components/EffortDialog.js';
 export const effortCommand: SlashCommand = {
   name: 'effort',
   altNames: ['深思', '强度', '思考', 'e'],
-  description:
-    '调整大模型思考/推理强度: low (轻快) / medium (均衡) / high (深思) / xhigh (极智) / max (穷尽) / ultra (终极·多代理)。用法: /effort <级别>',
+  get description() {
+    return I18nManager.getInstance().t(
+      '选择推理强度，提供六个档位',
+      'Choose one of six reasoning effort levels',
+    );
+  },
   kind: CommandKind.BUILT_IN,
   autoExecute: false,
-  action: async (context: CommandContext, args: string): Promise<void | SlashCommandActionReturn> => {
+  action: async (
+    context: CommandContext,
+    args: string,
+  ): Promise<void | SlashCommandActionReturn> => {
     const mgr = ProviderManager.getInstance();
     const target = args.trim().toLowerCase();
 
@@ -38,26 +47,15 @@ export const effortCommand: SlashCommand = {
       };
     }
 
-    const validLevels: Record<string, ReasoningEffortLevel> = {
-      low: 'low',
-      轻快: 'low',
-      medium: 'medium',
-      均衡: 'medium',
-      high: 'high',
-      深思: 'high',
-      xhigh: 'xhigh',
-      极智: 'xhigh',
-      max: 'max',
-      穷尽: 'max',
-      ultra: 'ultra',
-      终极: 'ultra',
-    };
-
-    const chosen = validLevels[target];
+    const i18n = I18nManager.getInstance();
+    const chosen = parseEffort(target);
     if (!chosen) {
       context.ui.addItem({
         type: MessageType.ERROR,
-        text: `无效级别 "${target}"。可选: low, medium, high, xhigh, max, ultra`,
+        text: i18n.t(
+          '无效档位。请使用 /effort 选择推理强度。',
+          'Invalid level. Use /effort to choose a reasoning effort.',
+        ),
       });
       return;
     }
@@ -65,11 +63,20 @@ export const effortCommand: SlashCommand = {
     mgr.setReasoningEffort(chosen);
     context.ui.addItem({
       type: MessageType.INFO,
-      text: `✓ 思考强度已更新为: [${chosen.toUpperCase()}]（将自动注入后续推理与代码生成请求）`,
+      text: i18n.t(
+        `推理强度已更新为：${getEffortOptions('zh').find((option) => option.level === chosen)?.label}`,
+        `Reasoning effort updated: ${chosen}`,
+      ),
     });
   },
   completion: async (_context: CommandContext, partial: string) => {
-    const list = ['low', 'medium', 'high', 'xhigh', 'max', 'ultra', '轻快', '均衡', '深思', '极智', '穷尽', '终极'];
-    return list.filter((l) => l.startsWith(partial));
+    const locale = I18nManager.getInstance().getLocale();
+    return getEffortOptions(locale)
+      .filter(
+        (option) =>
+          option.label.toLowerCase().startsWith(partial.toLowerCase()) ||
+          option.level.startsWith(partial.toLowerCase()),
+      )
+      .map((option) => (locale === 'zh' ? option.label : option.level));
   },
 };

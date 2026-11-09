@@ -4,13 +4,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { AuthType, loadApiKey } from '@google/gemini-cli-core';
+import { AuthType, loadApiKey, ProviderManager } from '@google/gemini-cli-core';
 import { loadEnvironment, loadSettings } from './settings.js';
 
 export async function validateAuthMethod(
   authMethod: string,
 ): Promise<string | null> {
   loadEnvironment(loadSettings().merged, process.cwd());
+  if (authMethod === AuthType.GATEWAY) {
+    const manager = ProviderManager.getInstance();
+    return (manager.getActiveProvider() && manager.getActiveModel()) ||
+      process.env['GOOGLE_GEMINI_BASE_URL']
+      ? null
+      : 'Configure an external provider and model first.';
+  }
   if (
     authMethod === AuthType.LOGIN_WITH_GOOGLE ||
     authMethod === AuthType.COMPUTE_ADC

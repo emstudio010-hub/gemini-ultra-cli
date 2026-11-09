@@ -71,3 +71,7 @@ conductor/
 .vscode-test/
 
 upstreams/
+artifacts/ultra-release/
+
+# Local engineering case ledgers
+/work/

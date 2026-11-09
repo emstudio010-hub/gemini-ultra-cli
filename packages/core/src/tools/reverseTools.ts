@@ -7,6 +7,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
+import { createTwoFilesPatch } from 'diff';
 import { DrillStore } from '../drill/drillStore.js';
 import type { Config } from '../config/config.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
@@ -94,12 +95,20 @@ export function detectBinaryFileType(buffer: Buffer): string {
   return 'Unknown/Raw Binary';
 }
 
-export function binaryTriage(filePath: string, sessionId?: string): BinaryTriageResult {
+export function binaryTriage(
+  filePath: string,
+  sessionId?: string,
+): BinaryTriageResult {
   const resolved = path.resolve(filePath);
   if (!fs.existsSync(resolved)) {
     throw new Error(`File not found: ${resolved}`);
   }
   const stat = fs.statSync(resolved);
+  if (!stat.isFile()) throw new Error('The sample must be a regular file.');
+  if (stat.size > 64 * 1024 * 1024)
+    throw new Error(
+      'The sample exceeds the 64 MiB inline triage limit. Use a dedicated reverse engineering tool for this file.',
+    );
   const buffer = fs.readFileSync(resolved);
 
   const md5 = crypto.createHash('md5').update(buffer).digest('hex');
@@ -128,7 +137,18 @@ export function binaryTriage(filePath: string, sessionId?: string): BinaryTriage
     'win_inet',
     'InternetOpen',
   ];
-  const foundApis = knownHighRisk.filter((api) => rawStr.includes(api));
+  const foundApis = knownHighRisk.filter((api) => {
+    if (api === 'system') {
+      return matched.some(
+        (m) =>
+          m === 'system' ||
+          m === '_system' ||
+          m === 'systemA' ||
+          m === 'msvcrt!system',
+      );
+    }
+    return rawStr.includes(api);
+  });
 
   const interestingStrings = matched
     .filter(
@@ -165,7 +185,7 @@ export function binaryTriage(filePath: string, sessionId?: string): BinaryTriage
         entropy,
         isPacked,
         highRiskApis: foundApis,
-        notes: `Triage complete. Interesting strings: ${interestingStrings.length}`,
+        notes: `Triage complete. Interesting strings: ${interestingStrings.length}. API matches are string candidates, not verified imports; use binary_inspect to inspect the actual import table.`,
       });
     } catch {}
   }
@@ -180,6 +200,7 @@ export interface PatchTransactionResult {
   diffFile: string;
   verificationFile: string;
   rollbackScript: string;
+  appliedToTarget: boolean;
 }
 
 export function verifiedPatchTransaction(params: {
@@ -188,13 +209,15 @@ export function verifiedPatchTransaction(params: {
   newContent?: string;
   hexPatchOffset?: number;
   hexPatchBytes?: string;
+  applyToTarget?: boolean;
 }): PatchTransactionResult {
   const resolved = path.resolve(params.targetFile);
   if (!fs.existsSync(resolved)) {
     throw new Error(`File not found: ${resolved}`);
   }
 
-  const timestamp = Date.now();
+  const applyInPlace = params.applyToTarget !== false;
+  const timestamp = `${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
   const dir = path.dirname(resolved);
   const ext = path.extname(resolved);
   const base = path.basename(resolved, ext);
@@ -202,31 +225,59 @@ export function verifiedPatchTransaction(params: {
   const backupFile = path.join(dir, `${base}.orig.${timestamp}${ext}`);
   const modifiedFile = path.join(dir, `${base}.patched.${timestamp}${ext}`);
   const diffFile = path.join(dir, `${base}.patch.${timestamp}.diff`);
-  const verificationFile = path.join(dir, `${base}.VERIFICATION.${timestamp}.txt`);
-  const rollbackScript = path.join(dir, `rollback_${base}_${timestamp}.bat`);
-
-  fs.copyFileSync(resolved, backupFile);
+  const verificationFile = path.join(
+    dir,
+    `${base}.VERIFICATION.${timestamp}.txt`,
+  );
+  const rollbackScript = path.join(dir, `rollback_${base}_${timestamp}.mjs`);
 
   const origBuffer = fs.readFileSync(resolved);
   let patchedBuffer: Buffer;
 
   if (params.hexPatchBytes && params.hexPatchOffset !== undefined) {
     patchedBuffer = Buffer.from(origBuffer);
-    const patchBytes = Buffer.from(params.hexPatchBytes.replace(/\s+/g, ''), 'hex');
+    const hex = params.hexPatchBytes.replace(/\s+/g, '');
+    if (!/^(?:[0-9a-fA-F]{2})+$/.test(hex))
+      throw new Error(
+        'hexPatchBytes must contain complete hexadecimal byte pairs.',
+      );
+    const patchBytes = Buffer.from(hex, 'hex');
+    if (
+      !Number.isSafeInteger(params.hexPatchOffset) ||
+      params.hexPatchOffset < 0 ||
+      params.hexPatchOffset + patchBytes.length > origBuffer.length
+    )
+      throw new Error(
+        'The hex patch must fit entirely inside the original file.',
+      );
     patchBytes.copy(patchedBuffer, params.hexPatchOffset);
   } else if (params.newContent !== undefined) {
     patchedBuffer = Buffer.from(params.newContent, 'utf8');
   } else {
-    throw new Error('Either newContent or hexPatchBytes + hexPatchOffset must be specified');
+    throw new Error(
+      'Either newContent or hexPatchBytes + hexPatchOffset must be specified',
+    );
   }
 
+  fs.copyFileSync(resolved, backupFile);
   fs.writeFileSync(modifiedFile, patchedBuffer);
 
-  const diffContent = `--- a/${path.basename(resolved)}\n+++ b/${path.basename(resolved)}\n@@ Patch applied at ${new Date().toISOString()} @@\nOriginal size: ${origBuffer.length}, New size: ${patchedBuffer.length}\n`;
+  const diffContent =
+    params.newContent !== undefined
+      ? createTwoFilesPatch(
+          `a/${path.basename(resolved)}`,
+          `b/${path.basename(resolved)}`,
+          origBuffer.toString('utf8'),
+          patchedBuffer.toString('utf8'),
+        )
+      : `Binary patch: ${path.basename(resolved)}\nOffset: ${params.hexPatchOffset}\nNew bytes: ${params.hexPatchBytes}\n`;
   fs.writeFileSync(diffFile, diffContent, 'utf8');
 
   const origSha = crypto.createHash('sha256').update(origBuffer).digest('hex');
-  const patchSha = crypto.createHash('sha256').update(patchedBuffer).digest('hex');
+  const patchSha = crypto
+    .createHash('sha256')
+    .update(patchedBuffer)
+    .digest('hex');
   const report = [
     `=== Verified Patch Transaction ===`,
     `Date: ${new Date().toISOString()}`,
@@ -234,21 +285,53 @@ export function verifiedPatchTransaction(params: {
     `Backup: ${backupFile}`,
     `Original SHA-256: ${origSha}`,
     `Patched SHA-256:  ${patchSha}`,
-    `Status: STAGED_VERIFIED`,
+    'Status: STAGED_VERIFIED',
   ].join('\n');
   fs.writeFileSync(verificationFile, report, 'utf8');
 
-  const rollbackContent = `@echo off\ncopy /Y "${backupFile}" "${resolved}"\necho Rollback completed.\n`;
+  const rollbackContent = `import { copyFileSync } from 'node:fs';\ncopyFileSync(new URL(${JSON.stringify('./' + path.basename(backupFile))}, import.meta.url), new URL(${JSON.stringify('./' + path.basename(resolved))}, import.meta.url));\nconsole.log('Rollback completed.');\n`;
   fs.writeFileSync(rollbackScript, rollbackContent, 'utf8');
 
-  DrillStore.getInstance().recordPatchTransaction({
-    sessionId: params.sessionId,
-    originalPath: resolved,
-    backupPath: backupFile,
-    modifiedPath: modifiedFile,
-    diffPath: diffFile,
-    rollbackScript,
-  });
+  try {
+    if (applyInPlace) {
+      const targetTemp = `${resolved}.${timestamp}.tmp`;
+      try {
+        fs.writeFileSync(targetTemp, patchedBuffer, {
+          mode: fs.statSync(resolved).mode,
+        });
+        fs.renameSync(targetTemp, resolved);
+      } finally {
+        if (fs.existsSync(targetTemp)) fs.unlinkSync(targetTemp);
+      }
+      const actualSha = crypto
+        .createHash('sha256')
+        .update(fs.readFileSync(resolved))
+        .digest('hex');
+      if (actualSha !== patchSha)
+        throw new Error('Patched target verification failed.');
+      fs.writeFileSync(
+        verificationFile,
+        report.replace('STAGED_VERIFIED', 'APPLIED_AND_VERIFIED'),
+        'utf8',
+      );
+    }
+    DrillStore.getInstance().recordPatchTransaction({
+      sessionId: params.sessionId,
+      originalPath: resolved,
+      backupPath: backupFile,
+      modifiedPath: modifiedFile,
+      diffPath: diffFile,
+      rollbackScript,
+      status: applyInPlace ? 'applied' : 'staged',
+    });
+  } catch (error) {
+    if (applyInPlace) fs.copyFileSync(backupFile, resolved);
+    fs.appendFileSync(
+      verificationFile,
+      '\nStatus: FAILED; original target restored.\n',
+    );
+    throw error;
+  }
 
   return {
     originalFile: resolved,
@@ -257,13 +340,17 @@ export function verifiedPatchTransaction(params: {
     diffFile,
     verificationFile,
     rollbackScript,
+    appliedToTarget: applyInPlace,
   };
 }
 
 /**
  * Apply Codex V4A patch format (`*** Begin Patch` ... `*** End Patch`) across one or more files.
  */
-export function applyCodexPatch(patchText: string, workspaceDir: string): {
+export function applyCodexPatch(
+  patchText: string,
+  workspaceDir: string,
+): {
   appliedFiles: string[];
   summary: string[];
 } {
@@ -309,7 +396,9 @@ export function applyCodexPatch(patchText: string, workspaceDir: string): {
       if (!fs.existsSync(fullPath)) {
         throw new Error(`Cannot update non-existent file: ${relPath}`);
       }
-      let fileContent = fs.readFileSync(fullPath, 'utf8').replace(/\r\n/g, '\n');
+      let fileContent = fs
+        .readFileSync(fullPath, 'utf8')
+        .replace(/\r\n/g, '\n');
       i++;
 
       while (i < lines.length && !lines[i].startsWith('*** ')) {
@@ -340,10 +429,18 @@ export function applyCodexPatch(patchText: string, workspaceDir: string): {
           const replacementBlock = newChunk.join('\n');
           if (targetBlock && fileContent.includes(targetBlock)) {
             fileContent = fileContent.replace(targetBlock, replacementBlock);
-          } else if (targetBlock.trim() && fileContent.includes(targetBlock.trim())) {
-            fileContent = fileContent.replace(targetBlock.trim(), replacementBlock.trim());
+          } else if (
+            targetBlock.trim() &&
+            fileContent.includes(targetBlock.trim())
+          ) {
+            fileContent = fileContent.replace(
+              targetBlock.trim(),
+              replacementBlock.trim(),
+            );
           } else {
-            throw new Error(`Hunk context mismatch in ${relPath} near:\n${targetBlock.slice(0, 120)}`);
+            throw new Error(
+              `Hunk context mismatch in ${relPath} near:\n${targetBlock.slice(0, 120)}`,
+            );
           }
         } else {
           i++;
@@ -385,7 +482,10 @@ class BinaryTriageInvocation extends BaseToolInvocation<
 
   override async execute(_options: ExecuteOptions): Promise<ToolResult> {
     try {
-      const res = binaryTriage(this.params.filePath, this.config.getSessionId());
+      const res = binaryTriage(
+        this.params.filePath,
+        this.config.getSessionId(),
+      );
       return {
         llmContent: JSON.stringify(res, null, 2),
         returnDisplay: `✓ 样本静态初筛完成: ${res.fileType} | 熵值: ${res.entropy} (${res.isPacked ? '疑似加壳' : '未加壳'}) | SHA256: ${res.sha256.slice(0, 16)}...`,
@@ -414,7 +514,7 @@ export class BinaryTriageTool extends BaseDeclarativeTool<
     super(
       BinaryTriageTool.Name,
       'Binary Static Triage',
-      'Performs static binary triage on an executable or library (PE/ELF/Mach-O/APK/DEX): computes hashes, Shannon entropy, packing heuristics, high-risk API imports, and interesting strings.',
+      'Performs static binary triage on a local file (PE/ELF/Mach-O/APK/DEX): computes hashes, Shannon entropy, packing heuristics, high-risk API string candidates (not verified imports), and interesting strings. Use binary_inspect to inspect actual binary structure and imports.',
       Kind.Read,
       {
         type: 'object',
@@ -437,7 +537,12 @@ export class BinaryTriageTool extends BaseDeclarativeTool<
     messageBus: MessageBus,
     toolName?: string,
   ) {
-    return new BinaryTriageInvocation(this.config, params, messageBus, toolName);
+    return new BinaryTriageInvocation(
+      this.config,
+      params,
+      messageBus,
+      toolName,
+    );
   }
 }
 
@@ -446,6 +551,7 @@ export interface VerifiedPatchParams {
   newContent?: string;
   hexPatchOffset?: number;
   hexPatchBytes?: string;
+  applyToTarget?: boolean;
 }
 
 class VerifiedPatchInvocation extends BaseToolInvocation<
@@ -458,7 +564,12 @@ class VerifiedPatchInvocation extends BaseToolInvocation<
     messageBus: MessageBus,
     toolName?: string,
   ) {
-    super(params, messageBus, toolName, 'Verified Five-Piece Patch Transaction');
+    super(
+      params,
+      messageBus,
+      toolName,
+      'Verified Five-Piece Patch Transaction',
+    );
   }
 
   getDescription(): string {
@@ -471,9 +582,12 @@ class VerifiedPatchInvocation extends BaseToolInvocation<
         sessionId: this.config.getSessionId(),
         ...this.params,
       });
+      const applyMsg = res.appliedToTarget
+        ? '✓ 补丁事务已应用到目标文件并生成五件套备份:'
+        : '✓ 补丁五件套已生成 (未直接写入目标文件):';
       return {
         llmContent: JSON.stringify(res, null, 2),
-        returnDisplay: `✓ 补丁五件套已生成:\n  备份: ${res.backupFile}\n  修改副本: ${res.modifiedFile}\n  校验单: ${res.verificationFile}\n  回滚脚本: ${res.rollbackScript}`,
+        returnDisplay: `${applyMsg}\n  目标文件: ${res.originalFile}\n  备份: ${res.backupFile}\n  修改副本: ${res.modifiedFile}\n  校验单: ${res.verificationFile}\n  回滚脚本: ${res.rollbackScript}`,
       };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -499,18 +613,18 @@ export class VerifiedPatchTransactionTool extends BaseDeclarativeTool<
     super(
       VerifiedPatchTransactionTool.Name,
       'Verified Patch Transaction',
-      'Stages a safe patch transaction with five-piece artifacts (.orig backup, .patched file, .diff, .VERIFICATION report, and rollback script) without destructively overwriting the original file in place.',
+      'Executes a verified patch transaction with a backup, modified copy, actual diff, verification report and cross-platform Node rollback script (run with node). By default modifies targetFile after artifacts are saved, verifies its hash and restores the original on failure.',
       Kind.Edit,
       {
         type: 'object',
         properties: {
           targetFile: {
             type: 'string',
-            description: 'Target file path.',
+            description: 'Target file path to patch.',
           },
           newContent: {
             type: 'string',
-            description: 'Optional text content for the patched file.',
+            description: 'Optional new text content for the patched file.',
           },
           hexPatchOffset: {
             type: 'number',
@@ -518,7 +632,13 @@ export class VerifiedPatchTransactionTool extends BaseDeclarativeTool<
           },
           hexPatchBytes: {
             type: 'string',
-            description: 'Optional hex string (e.g. "90 90") to patch at hexPatchOffset.',
+            description:
+              'Optional hex string (e.g. "90 90") to patch at hexPatchOffset.',
+          },
+          applyToTarget: {
+            type: 'boolean',
+            description:
+              'Whether to apply the patch directly to targetFile in place (default: true). Set to false to only generate staged copies without touching targetFile.',
           },
         },
         required: ['targetFile'],
@@ -534,7 +654,12 @@ export class VerifiedPatchTransactionTool extends BaseDeclarativeTool<
     messageBus: MessageBus,
     toolName?: string,
   ) {
-    return new VerifiedPatchInvocation(this.config, params, messageBus, toolName);
+    return new VerifiedPatchInvocation(
+      this.config,
+      params,
+      messageBus,
+      toolName,
+    );
   }
 }
 
@@ -561,7 +686,10 @@ class ApplyPatchInvocation extends BaseToolInvocation<
 
   override async execute(_options: ExecuteOptions): Promise<ToolResult> {
     try {
-      const res = applyCodexPatch(this.params.patch, this.config.getTargetDir());
+      const res = applyCodexPatch(
+        this.params.patch,
+        this.config.getTargetDir(),
+      );
       return {
         llmContent: `Applied patch to ${res.appliedFiles.length} file(s):\n${res.summary.join('\n')}`,
         returnDisplay: `✓ 已应用多文件补丁 (${res.appliedFiles.length} 个文件):\n${res.summary.join('\n')}`,

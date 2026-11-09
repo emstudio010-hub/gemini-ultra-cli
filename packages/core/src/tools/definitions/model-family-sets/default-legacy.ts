@@ -307,7 +307,8 @@ export const DEFAULT_LEGACY_SET: CoreToolSet = {
           type: 'string',
         },
         [LS_PARAM_IGNORE]: {
-          description: 'List of glob patterns to ignore',
+          description:
+            'List of glob patterns to ignore (pass an array of patterns, e.g. ["*.git", "node_modules"])',
           items: {
             type: 'string',
           },

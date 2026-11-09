@@ -9,6 +9,8 @@
 import { spawn } from 'node:child_process';
 import os from 'node:os';
 import v8 from 'node:v8';
+import { readFileSync } from 'node:fs';
+import * as nodeModule from 'node:module';
 import {
   RELAUNCH_EXIT_CODE,
   getSpawnConfig,
@@ -25,8 +27,10 @@ async function getMemoryNodeArgs(): Promise<string[]> {
     const { readFileSync } = await import('node:fs');
     const { join } = await import('node:path');
     // Respect GEMINI_CLI_HOME environment variable, falling back to os.homedir()
-    const baseDir =
-      process.env['GEMINI_CLI_HOME'] || join(os.homedir(), '.gemini');
+    const baseDir = join(
+      process.env['GEMINI_CLI_HOME'] || os.homedir(),
+      '.gemini',
+    );
     const settingsPath = join(baseDir, 'settings.json');
     const rawSettings = readFileSync(settingsPath, 'utf8');
     const settings = JSON.parse(rawSettings);
@@ -54,6 +58,37 @@ async function getMemoryNodeArgs(): Promise<string[]> {
 }
 
 async function run() {
+  process.env['GEMINI_ULTRA_CLI'] = '1';
+  const [nodeMajor, nodeMinor] = process.versions.node.split('.').map(Number);
+  if (nodeMajor < 22 || (nodeMajor === 22 && nodeMinor < 19)) {
+    process.stderr.write(
+      `Gemini Ultra CLI requires Node.js 22.19 or newer (current: ${process.versions.node}). Update Node.js and restart your terminal.\n`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+  // Version lookup must not initialize providers, tools, authentication or a child process.
+  if (
+    process.argv.length === 3 &&
+    ['--version', '-v'].includes(process.argv[2])
+  ) {
+    const version =
+      process.env['CLI_VERSION'] ||
+      (
+        JSON.parse(
+          readFileSync(new URL('./package.json', import.meta.url), 'utf8'),
+        ) as { version: string }
+      ).version;
+    process.stdout.write(`${version}\n`);
+    return;
+  }
+  // Compile caching is optional on supported Node releases.
+  if (
+    'enableCompileCache' in nodeModule &&
+    typeof nodeModule.enableCompileCache === 'function'
+  ) {
+    nodeModule.enableCompileCache();
+  }
   if (!process.env['GEMINI_CLI_NO_RELAUNCH'] && !process.env['SANDBOX']) {
     // --- Lightweight Parent Process / Daemon ---
     // We avoid importing heavy dependencies here to save ~1.5s of startup time.

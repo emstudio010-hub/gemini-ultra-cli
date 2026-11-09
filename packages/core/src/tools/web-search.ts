@@ -24,7 +24,7 @@ import { WEB_SEARCH_DEFINITION } from './definitions/coreTools.js';
 import { resolveToolDeclaration } from './definitions/resolver.js';
 import { LlmRole } from '../telemetry/llmRole.js';
 import type { AgentLoopContext } from '../config/agent-loop-context.js';
-import { wrapUntrusted } from '../utils/textUtils.js';
+import { wrapUntrusted, cleanDsmlAndRawTokens } from '../utils/textUtils.js';
 
 interface GroundingChunkWeb {
   uri?: string;
@@ -34,6 +34,83 @@ interface GroundingChunkWeb {
 interface GroundingChunkItem {
   web?: GroundingChunkWeb;
   // Other properties might exist if needed in the future
+}
+
+async function fetchDuckDuckGoSearchResults(
+  query: string,
+  signal?: AbortSignal,
+): Promise<{ text: string; sources: GroundingChunkItem[] }> {
+  try {
+    const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+    const res = await fetch(url, {
+      signal,
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        Accept: 'text/html',
+      },
+    });
+    if (!res.ok) {
+      return { text: `Search request failed with HTTP ${res.status}`, sources: [] };
+    }
+    const html = await res.text();
+    const resultBlocks = html.split('<div class="result results_links');
+    const items: Array<{ title: string; snippet: string; url: string }> = [];
+
+    for (const block of resultBlocks.slice(1, 8)) {
+      const urlMatch =
+        block.match(/href="([^"]+)" class="result__url"/i) ||
+        block.match(/class="result__snippet"[^>]*href="([^"]+)"/i) ||
+        block.match(/<a[^>]*class="[^"]*result__url[^"]*"[^>]*href="([^"]+)"/i);
+      const titleMatch =
+        block.match(/<a[^>]*class="result__title"[^>]*>([\s\S]*?)<\/a>/i) ||
+        block.match(/<h2[^>]*>[\s\S]*?<a[^>]*>([\s\S]*?)<\/a>/i);
+      const snippetMatch =
+        block.match(/<a[^>]*class="result__snippet"[^>]*>([\s\S]*?)<\/a>/i) ||
+        block.match(/<div[^>]*class="result__snippet"[^>]*>([\s\S]*?)<\/div>/i);
+
+      if (urlMatch || titleMatch) {
+        let rawUrl = urlMatch ? urlMatch[1] : '';
+        if (rawUrl.includes('uddg=')) {
+          const match = rawUrl.match(/uddg=([^&]+)/);
+          if (match) rawUrl = decodeURIComponent(match[1]);
+        }
+        const cleanTitle = (titleMatch ? titleMatch[1] : 'Result')
+          .replace(/<[^>]+>/g, '')
+          .trim();
+        const cleanSnippet = (snippetMatch ? snippetMatch[1] : '')
+          .replace(/<[^>]+>/g, '')
+          .trim();
+        if (cleanTitle || cleanSnippet) {
+          items.push({
+            title: cleanTitle || rawUrl,
+            snippet: cleanSnippet,
+            url: rawUrl,
+          });
+        }
+      }
+    }
+
+    if (items.length === 0) {
+      return { text: `No direct search results found for: "${query}"`, sources: [] };
+    }
+
+    const sources: GroundingChunkItem[] = items.map((it) => ({
+      web: { title: it.title, uri: it.url },
+    }));
+
+    const textLines = items.map((it, idx) => {
+      return `[${idx + 1}] ${it.title}\n    URL: ${it.url}\n    Snippet: ${it.snippet}`;
+    });
+
+    return {
+      text: `Live Web Search Results for "${query}":\n\n` + textLines.join('\n\n'),
+      sources,
+    };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { text: `Search error: ${msg}`, sources: [] };
+  }
 }
 
 interface GroundingSupportSegment {
@@ -92,15 +169,56 @@ class WebSearchToolInvocation extends BaseToolInvocation<
     const geminiClient = this.context.geminiClient;
 
     try {
-      const response = await geminiClient.generateContent(
-        { model: 'web-search' },
-        [{ role: 'user', parts: [{ text: this.params.query }] }],
-        signal,
-        LlmRole.UTILITY_TOOL,
-      );
+      let isDsmlGarbage = false;
+      let rawText = '';
+      let response: any = null;
+      try {
+        response = await geminiClient.generateContent(
+          { model: 'web-search' },
+          [{ role: 'user', parts: [{ text: this.params.query }] }],
+          signal,
+          LlmRole.UTILITY_TOOL,
+        );
+        rawText = getResponseText(response) || '';
+        if (
+          rawText.includes('DSML') ||
+          rawText.includes('<｜｜') ||
+          rawText.includes('<invoke') ||
+          rawText.includes('functionCall')
+        ) {
+          isDsmlGarbage = true;
+        }
+      } catch {
+        isDsmlGarbage = true;
+      }
 
-      const responseText = getResponseText(response);
-      const groundingMetadata = response.candidates?.[0]?.groundingMetadata;
+      // If upstream model emitted DSML tool tokens or failed, fallback to direct search engine
+      if (isDsmlGarbage || !rawText.trim()) {
+        const direct = await fetchDuckDuckGoSearchResults(
+          this.params.query,
+          signal,
+        );
+        return {
+          llmContent: `Web search results for "${this.params.query}":\n\n${wrapUntrusted(direct.text)}`,
+          returnDisplay: `Live search results for "${this.params.query}" (${direct.sources.length} sources).`,
+          sources: direct.sources,
+        };
+      }
+
+      const responseText = cleanDsmlAndRawTokens(rawText);
+      if (!responseText.trim()) {
+        const direct = await fetchDuckDuckGoSearchResults(
+          this.params.query,
+          signal,
+        );
+        return {
+          llmContent: `Web search results for "${this.params.query}":\n\n${wrapUntrusted(direct.text)}`,
+          returnDisplay: `Live search results for "${this.params.query}" (${direct.sources.length} sources).`,
+          sources: direct.sources,
+        };
+      }
+
+      const groundingMetadata = response?.candidates?.[0]?.groundingMetadata;
       const sources = groundingMetadata?.groundingChunks as
         | GroundingChunkItem[]
         | undefined;

@@ -32,6 +32,7 @@ import {
   GEN_AI_AGENT_NAME,
 } from '../telemetry/constants.js';
 import { AGENT_TOOL_NAME } from '../tools/tool-names.js';
+import { scheduleSubagent } from './subagentScheduler.js';
 
 /**
  * A unified tool for invoking subagents.
@@ -50,6 +51,7 @@ export class AgentTool extends BaseDeclarativeTool<
     private readonly context: AgentLoopContext,
     messageBus: MessageBus,
     private readonly onAgentEvent?: (event: AgentEvent) => void,
+    private readonly onStart?: () => void,
   ) {
     super(
       AGENT_TOOL_NAME,
@@ -105,6 +107,7 @@ export class AgentTool extends BaseDeclarativeTool<
       _toolName,
       _toolDisplayName,
       this.onAgentEvent,
+      this.onStart,
     );
   }
 
@@ -139,6 +142,7 @@ class DelegateInvocation extends BaseToolInvocation<
     _toolName?: string,
     _toolDisplayName?: string,
     private readonly onAgentEvent?: (event: AgentEvent) => void,
+    private readonly onStart?: () => void,
   ) {
     super(
       params,
@@ -217,29 +221,33 @@ class DelegateInvocation extends BaseToolInvocation<
   async execute(options: ExecuteOptions): Promise<ToolResult> {
     const { abortSignal: signal, updateOutput } = options;
     const hintedParams = this.withUserHints(this.mappedInputs);
-    const invocation = this.buildChildInvocation(hintedParams);
-
-    return runInDevTraceSpan(
-      {
-        operation: GeminiCliOperation.AgentCall,
-        logPrompts: this.context.config.getTelemetryLogPromptsEnabled(),
-        tracesEnabled: this.context.config.getTelemetryTracesEnabled(),
-        sessionId: this.context.config.getSessionId(),
-        attributes: {
-          [GEN_AI_AGENT_NAME]: this.definition.name,
-          [GEN_AI_AGENT_DESCRIPTION]: this.definition.description,
+    const execute = () =>
+      runInDevTraceSpan(
+        {
+          operation: GeminiCliOperation.AgentCall,
+          logPrompts: this.context.config.getTelemetryLogPromptsEnabled(),
+          tracesEnabled: this.context.config.getTelemetryTracesEnabled(),
+          sessionId: this.context.config.getSessionId(),
+          attributes: {
+            [GEN_AI_AGENT_NAME]: this.definition.name,
+            [GEN_AI_AGENT_DESCRIPTION]: this.definition.description,
+          },
         },
-      },
-      async ({ metadata }) => {
-        metadata.input = this.params;
-        const result = await invocation.execute({
-          abortSignal: signal,
-          updateOutput,
-        });
-        metadata.output = result;
-        return result;
-      },
-    );
+        async ({ metadata }) => {
+          this.onStart?.();
+          const invocation = this.buildChildInvocation(hintedParams);
+          metadata.input = this.params;
+          const result = await invocation.execute({
+            abortSignal: signal,
+            updateOutput,
+          });
+          metadata.output = result;
+          return result;
+        },
+      );
+    return this.definition.kind === 'remote'
+      ? execute()
+      : scheduleSubagent(this.context.config.getSessionId(), signal, execute);
   }
 
   private withUserHints(agentArgs: AgentInputs): AgentInputs {

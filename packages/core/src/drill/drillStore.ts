@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { DatabaseSync } from 'node:sqlite';
+import { DatabaseSync, type SQLOutputValue } from 'node:sqlite';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -50,7 +50,9 @@ export class DrillStore {
     if (DrillStore.instance) {
       try {
         DrillStore.instance.db.close();
-      } catch {}
+      } catch {
+        // Reset must still release the singleton after an already closed DB.
+      }
       DrillStore.instance = null;
     }
   }
@@ -118,6 +120,15 @@ export class DrillStore {
         created_at TEXT NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS note (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        evidence TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL
+      );
+
       CREATE TABLE IF NOT EXISTS patch_transaction (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         session_id TEXT NOT NULL,
@@ -138,7 +149,9 @@ export class DrillStore {
             session_id UNINDEXED, category, title, content
           );
         `);
-      } catch {}
+      } catch {
+        // Full-text search is optional; canonical tables remain available.
+      }
     }
   }
 
@@ -197,7 +210,9 @@ export class DrillStore {
             path.basename(data.samplePath),
             `${data.sha256} ${data.fileType || ''} ${data.notes || ''}`,
           );
-      } catch {}
+      } catch {
+        // Preserve the binary record when the optional index is unavailable.
+      }
     }
     return lastId;
   }
@@ -241,9 +256,46 @@ export class DrillStore {
             data.title,
             `${data.cve || ''} ${data.severity || ''} ${data.evidence || ''} ${data.poc || ''}`,
           );
-      } catch {}
+      } catch {
+        // Preserve the finding when the optional index is unavailable.
+      }
     }
     return lastId;
+  }
+
+  recordNote(data: {
+    sessionId: string;
+    title: string;
+    content?: string;
+    evidence?: string;
+  }): number {
+    const result = this.db
+      .prepare(
+        'INSERT INTO note (session_id, title, content, evidence, created_at) VALUES (?, ?, ?, ?, ?);',
+      )
+      .run(
+        data.sessionId,
+        data.title,
+        data.content || '',
+        data.evidence || '',
+        new Date().toISOString(),
+      );
+    if (HAS_FTS5) {
+      try {
+        this.db
+          .prepare(
+            "INSERT INTO facts_fts (session_id, category, title, content) VALUES (?, 'note', ?, ?);",
+          )
+          .run(
+            data.sessionId,
+            data.title,
+            `${data.content || ''} ${data.evidence || ''}`,
+          );
+      } catch {
+        // The canonical note remains available without the optional search index.
+      }
+    }
+    return Number(result.lastInsertRowid);
   }
 
   recordPatchTransaction(data: {
@@ -253,11 +305,12 @@ export class DrillStore {
     modifiedPath: string;
     diffPath: string;
     rollbackScript: string;
+    status?: 'applied' | 'staged';
   }): number {
     const stmt = this.db.prepare(`
       INSERT INTO patch_transaction (
-        session_id, original_path, backup_path, modified_path, diff_path, rollback_script, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?);
+        session_id, original_path, backup_path, modified_path, diff_path, rollback_script, created_at, status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
     `);
     const res = stmt.run(
       data.sessionId,
@@ -267,36 +320,83 @@ export class DrillStore {
       data.diffPath,
       data.rollbackScript,
       new Date().toISOString(),
+      data.status || 'applied',
     );
     return Number(res.lastInsertRowid);
   }
 
-  queryFacts(sessionId?: string, keyword?: string): any[] {
+  queryFacts(
+    sessionId?: string,
+    keyword?: string,
+  ): Array<Record<string, SQLOutputValue>> {
     if (keyword && HAS_FTS5) {
       try {
-        const stmt = this.db.prepare(`
-          SELECT * FROM facts_fts WHERE facts_fts MATCH ? LIMIT 50;
-        `);
-        return stmt.all(keyword);
-      } catch {}
+        const sessionFilter = sessionId ? ' AND session_id = ?' : '';
+        const stmt = this.db.prepare(
+          `SELECT *, category AS factType FROM facts_fts WHERE facts_fts MATCH ?${sessionFilter} ORDER BY rowid DESC LIMIT 50;`,
+        );
+        return sessionId ? stmt.all(keyword, sessionId) : stmt.all(keyword);
+      } catch {
+        // Invalid FTS syntax or unavailable index: use literal search below.
+      }
     }
 
-    if (sessionId) {
-      const artStmt = this.db.prepare(
-        'SELECT * FROM binary_artifact WHERE session_id = ? ORDER BY id DESC;',
-      );
-      const vulnStmt = this.db.prepare(
-        'SELECT * FROM vuln WHERE session_id = ? ORDER BY id DESC;',
-      );
-      return [
-        ...artStmt.all(sessionId).map((x: any) => ({ ...x, factType: 'binary' })),
-        ...vulnStmt.all(sessionId).map((x: any) => ({ ...x, factType: 'vuln' })),
-      ];
-    }
+    // Literal substring fallback also works without FTS5 and for punctuation
+    // that is not a valid FTS expression. Never discard the session boundary.
+    const sources = [
+      [
+        'binary_artifact',
+        'binary',
+        ['sample_path', 'sha256', 'file_type', 'notes'],
+      ],
+      ['vuln', 'vuln', ['title', 'cve', 'severity', 'evidence', 'poc']],
+      ['note', 'note', ['title', 'content', 'evidence']],
+    ] as const;
+    const rows = sources.flatMap(([table, factType, columns]) => {
+      const filters: string[] = [];
+      const bindings: string[] = [];
+      if (sessionId) {
+        filters.push('session_id = ?');
+        bindings.push(sessionId);
+      }
+      if (keyword) {
+        filters.push(
+          `(${columns.map((column) => `instr(lower(COALESCE(${column}, '')), lower(?)) > 0`).join(' OR ')})`,
+        );
+        bindings.push(...columns.map(() => keyword));
+      }
+      const where = filters.length ? ` WHERE ${filters.join(' AND ')}` : '';
+      return this.db
+        .prepare(
+          `SELECT *, '${factType}' AS factType FROM ${table}${where} ORDER BY created_at DESC, id DESC LIMIT 50;`,
+        )
+        .all(...bindings);
+    });
+    return rows
+      .sort(
+        (a, b) =>
+          String(b['created_at']).localeCompare(String(a['created_at'])) ||
+          Number(b['id']) - Number(a['id']),
+      )
+      .slice(0, 50);
+  }
 
-    const stmt = this.db.prepare(
-      'SELECT * FROM binary_artifact ORDER BY id DESC LIMIT 20;',
-    );
-    return stmt.all();
+  queryPatchTransactions(
+    sessionId?: string,
+  ): Array<Record<string, SQLOutputValue>> {
+    try {
+      if (sessionId) {
+        const stmt = this.db.prepare(
+          'SELECT * FROM patch_transaction WHERE session_id = ? ORDER BY id DESC LIMIT 50;',
+        );
+        return stmt.all(sessionId);
+      }
+      const stmt = this.db.prepare(
+        'SELECT * FROM patch_transaction ORDER BY id DESC LIMIT 50;',
+      );
+      return stmt.all();
+    } catch {
+      return [];
+    }
   }
 }

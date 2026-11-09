@@ -11,6 +11,7 @@ import { type SkillDefinition, loadSkillsFromDir } from './skillLoader.js';
 import { getMultiSourceSkillDirs } from './skillOrchestrator.js';
 import type { GeminiCLIExtension } from '../config/config.js';
 import { debugLogger } from '../utils/debugLogger.js';
+import { mapWithConcurrency } from '../utils/asyncPool.js';
 // coreEvents removed to eliminate UI skill conflict warnings
 export { type SkillDefinition };
 
@@ -69,21 +70,10 @@ export class SkillManager {
     }
 
     // 3. User skills
-    const userSkills = await loadSkillsFromDir(Storage.getUserSkillsDir());
-    this.addSkillsWithPrecedence(userSkills, true);
-
-    // 3.1 User agent skills alias (.agents/skills)
-    const userAgentSkills = await loadSkillsFromDir(
-      Storage.getUserAgentSkillsDir(),
-    );
-    this.addSkillsWithPrecedence(userAgentSkills, true);
-
-    // 3.2 Multi-source ecosystem skills (reverse, dsh, zcode, grok, etc.)
-    const extraDirs = getMultiSourceSkillDirs();
-    for (const d of extraDirs) {
-      const extraSkills = await loadSkillsFromDir(d);
-      this.addSkillsWithPrecedence(extraSkills, true);
-    }
+    const userDirs = [...new Set([Storage.getUserSkillsDir(), Storage.getUserAgentSkillsDir(), ...getMultiSourceSkillDirs()])];
+    const skillGroups = await mapWithConcurrency(userDirs, 3, loadSkillsFromDir);
+    // Merge in the original precedence order, regardless of read completion order.
+    for (const skills of skillGroups) this.addSkillsWithPrecedence(skills, true);
 
     // 4. Workspace skills (highest precedence)
     if (!isTrusted) {

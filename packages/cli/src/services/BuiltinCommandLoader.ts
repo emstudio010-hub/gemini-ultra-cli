@@ -75,8 +75,11 @@ import { imageCommand } from '../ui/commands/imageCommand.js';
 import { diagramCommand } from '../ui/commands/diagramCommand.js';
 import { fetchCommand } from '../ui/commands/fetchCommand.js';
 import { goalCommand } from '../ui/commands/goalCommand.js';
-import { fullAccessCommand } from '../ui/commands/fullAccessCommand.js';
+import { bypassCommand } from '../ui/commands/bypassCommand.js';
 import { langCommand } from '../ui/commands/langCommand.js';
+import { localizeCommand } from './commandLocale.js';
+import { teamCommand } from '../ui/commands/teamCommand.js';
+import { redteamCommand } from '../ui/commands/redteamCommand.js';
 
 /**
  * Loads the core, hard-coded slash commands that are an integral part
@@ -211,8 +214,10 @@ export class BuiltinCommandLoader implements ICommandLoader {
       diagramCommand,
       fetchCommand,
       goalCommand,
-      fullAccessCommand,
+      bypassCommand,
       langCommand,
+      teamCommand,
+      redteamCommand,
       ...(this.config?.getFolderTrust() ? [permissionsCommand] : []),
       ...(this.config?.isPlanEnabled() ? [planCommand] : []),
       policiesCommand,
@@ -263,6 +268,6 @@ export class BuiltinCommandLoader implements ICommandLoader {
         : []),
     ];
     handle?.end();
-    return allDefinitions.filter((cmd): cmd is SlashCommand => cmd !== null);
+    return allDefinitions.filter((cmd): cmd is SlashCommand => cmd !== null).map(localizeCommand);
   }
 }

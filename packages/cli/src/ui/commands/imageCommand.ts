@@ -34,7 +34,7 @@ export const imageCommand: SlashCommand = {
           const active = mgr.getActiveImageModel();
           context.ui.addItem({
             type: MessageType.INFO,
-            text: `当前生图模型: [${active.modelId}] (供应商: ${active.provider?.name || '默认'})\n设置方法: /image model <模型名> [供应商名称]`,
+            text: `当前生图模型: [${active.modelId || '自动选择'}] (供应商: ${active.provider?.name || '默认'})\n设置方法: /image model <模型名> [供应商名称]`,
           });
           return;
         }

@@ -176,6 +176,20 @@ export function sanitizeOutput(output: string): string {
 }
 
 /**
+ * Strips raw model internal tags like DSML calls, function invoke tags, or raw unparsed tags.
+ */
+export function cleanDsmlAndRawTokens(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(/<｜｜DSML｜｜[\s\S]*?｜｜>/g, '')
+    .replace(/<｜｜DSML｜｜[\s\S]*?>/g, '')
+    .replace(/<untrusted_context>|<\/untrusted_context>/gi, '')
+    .replace(/<function_calls?>[\s\S]*?<\/function_calls?>/gi, '')
+    .replace(/<invoke\s+[^>]*>[\s\S]*?<\/invoke>/gi, '')
+    .trim();
+}
+
+/**
  * Wraps text in <untrusted_context> tags to mitigate prompt injection.
  * When provided, `source` is recorded as a `source` attribute on the tag.
  */

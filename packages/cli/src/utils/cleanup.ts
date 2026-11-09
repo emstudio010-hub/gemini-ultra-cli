@@ -12,6 +12,7 @@ import {
   isTelemetrySdkInitialized,
   ExitCodes,
   resetBrowserSession,
+  DrillStore,
 } from '@google/gemini-cli-core';
 import type { Config } from '@google/gemini-cli-core';
 
@@ -126,6 +127,9 @@ export async function runExitCleanup(): Promise<void> {
           // Ignore errors during disposal
         }
       }
+
+      // Close the synchronous SQLite handle before the Node event loop shuts down.
+      DrillStore.resetInstance();
 
       // IMPORTANT: Shutdown telemetry AFTER all other cleanup functions have run
       // This ensures SessionEnd hooks and other telemetry are properly flushed

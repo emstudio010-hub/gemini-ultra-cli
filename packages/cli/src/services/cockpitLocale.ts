@@ -1,0 +1,79 @@
+/**
+ * @license
+ * Copyright 2026 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+export const cockpitTranslations: Record<string, string> = {
+  '· Gemini Ultra CLI 原生实现 ·': '· Native Gemini Ultra CLI implementation ·',
+  演练台: 'Drill cockpit',
+  'Gemini Ultra CLI · 当前会话控制中心': 'Gemini Ultra CLI · Session control',
+  界面语言: 'Interface language',
+  提示词与规则: 'Prompts and rules',
+  '参考 dsh-purge 的提示词与规则集管理。保留 Gemini 原生系统提示，在后续主会话与子代理请求中追加已启用的内容。':
+    'Manage prompts and rules inspired by dsh-purge. Enabled content is added to future main-agent and subagent requests while preserving the native system instructions.',
+  启用自定义提示词与规则: 'Enable custom prompts and rules',
+  自定义提示词: 'Custom instructions',
+  规则集: 'Rule sets',
+  添加规则: 'Add rule',
+  保存并应用到后续请求: 'Save for subsequent requests',
+  '填写角色、写作风格、编码习惯或项目要求…':
+    'Describe the role, writing style, coding preferences or project requirements…',
+  提交任务: 'Send a task',
+  快捷任务: 'Task template',
+  选择一个起点: 'Choose a starting point',
+  'AI 写作': 'AI writing',
+  深度编码: 'Deep coding',
+  源码审阅: 'Source review',
+  本地样本分析: 'Local sample analysis',
+  目标与要求: 'Goal and requirements',
+  '描述目标、文件路径和完成要求…':
+    'Describe your goal, file paths and completion criteria…',
+  '任务进入当前 CLI 对话，执行过程和审批在终端查看。':
+    'Tasks use the current CLI conversation. Follow execution and approvals in the terminal.',
+  发送到当前会话: 'Send to this session',
+  会话设置: 'Session settings',
+  '供应商 / 模型': 'Provider / model',
+  当前通道: 'Current channel',
+  推理强度: 'Reasoning effort',
+  '实际推理预算取决于模型和端点支持。':
+    'The actual reasoning budget depends on model and endpoint support.',
+  'Bypass · 免人工审批': 'Bypass · Skip manual approvals',
+  演练授权记录: 'Drill authorization record',
+  多代理协作: 'Agent collaboration',
+  协作方式: 'Collaboration mode',
+  按任务自动判断: 'Automatic',
+  单代理: 'Single agent',
+  并发上限: 'Parallel limit',
+  工作流: 'Workflow',
+  通用写作与编码: 'General writing and coding',
+  授权红队分析: 'Authorized red-team analysis',
+  '独立任务并行，依赖任务顺序执行。超出并发上限的任务自动排队。':
+    'Independent tasks run concurrently; dependent tasks run in order. Extra tasks are queued.',
+  当前会话的事实与工件: 'Session evidence and artifacts',
+  '每 4 秒同步，最多显示 50 条。使用 CLI 工具记录后将在此出现。':
+    'Updates every 4 seconds, up to 50 entries. Evidence recorded by CLI tools appears here.',
+  补丁事务: 'Patch transactions',
+  本机工具链: 'Local toolchain',
+  查看就绪状态: 'Check availability',
+  '仅检查本机工具是否可用。': 'Checks local tool availability only.',
+  当前技能目录: 'Session skills',
+  查看已发现的技能: 'View discovered skills',
+  功能结构参考: 'Functionality inspired by',
+  '· Gemini Ultra CLI 原生实现': '· Native Gemini Ultra CLI implementation',
+  模型供应商配置: 'Model provider configuration',
+  选择配置: 'Choose a configuration',
+  新增供应商: 'Add provider',
+  名称: 'Name',
+  端点地址: 'Endpoint URL',
+  通信协议: 'Wire protocol',
+  密钥: 'API key',
+  留空保留已有密钥: 'Leave blank to keep the saved key',
+  模型名称: 'Model names',
+  '多个模型用逗号或换行分隔，首个模型作为默认值。':
+    'Separate models with commas or new lines. The first model is the default.',
+  获取模型清单: 'Fetch model catalog',
+  保存供应商: 'Save provider',
+  '加载中…': 'Loading…',
+  '保存中…': 'Saving…',
+  '任务处理中…': 'Processing task…',
+};

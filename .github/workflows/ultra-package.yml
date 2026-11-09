@@ -1,0 +1,50 @@
+name: Ultra CLI packages
+
+on:
+  push:
+    branches: ['codex/ultra-agent-portable']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run package:ultra
+      - name: Verify isolated package installation
+        shell: pwsh
+        run: |
+          $archive = Get-ChildItem artifacts/ultra-release/*.tgz | Select-Object -First 1
+          $prefix = Join-Path $env:RUNNER_TEMP 'ultra-install'
+          npm install --prefix $prefix --ignore-scripts --no-audit --no-fund $archive.FullName
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $entry = Join-Path $prefix 'node_modules/gemini-ultra-cli/bundle/gemini.js'
+          node $entry --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node $entry --help
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/verify-ultra-install.mjs $entry artifacts/ultra-release/install-verification.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gemini-ultra-cli-${{ matrix.os }}
+          path: |
+            artifacts/ultra-release/*.tgz
+            artifacts/ultra-release/*.sha256
+            artifacts/ultra-release/install-verification.json
+          if-no-files-found: error

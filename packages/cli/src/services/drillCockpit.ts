@@ -1,0 +1,428 @@
+/**
+ * @license
+ * Copyright 2026 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import {
+  createServer,
+  type Server,
+  type IncomingMessage,
+  type ServerResponse,
+} from 'node:http';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { z } from 'zod';
+import {
+  ApprovalMode,
+  DrillStore,
+  ProviderManager,
+  readDrillGrant,
+  writeDrillGrant,
+  runDrillPreflight,
+  readUltraPromptConfig,
+  saveUltraPromptConfig,
+  ultraPromptConfigPath,
+  coreEvents,
+  I18nManager,
+  getEffortOptions,
+  readUltraRuntime,
+  saveUltraRuntime,
+  listCollaborationTasks,
+  type Config,
+} from '@google/gemini-cli-core';
+import { registerCleanup } from '../utils/cleanup.js';
+import { cockpitHtml } from './drillCockpitPage.js';
+import { morphiconsBundle } from './morphiconsBundle.js';
+
+interface DrillSession {
+  config: Config;
+  isReady: () => boolean;
+  submit: (prompt: string) => Promise<void>;
+}
+
+let session: DrillSession | undefined;
+let server: Server | undefined;
+let starting: Promise<string> | undefined;
+let address = '';
+let token = '';
+let submitting = false;
+let preflight: ReturnType<typeof runDrillPreflight> | undefined;
+
+export function connectDrillSession(next: DrillSession): () => void {
+  session = next;
+  return () => {
+    if (session === next) session = undefined;
+  };
+}
+
+class RequestError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+async function readJson(
+  req: IncomingMessage,
+): Promise<Record<string, unknown>> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > 65536) throw new RequestError(413, '内容过长，最多支持 64 KB。');
+    chunks.push(Buffer.from(chunk));
+  }
+  try {
+    return z
+      .record(z.unknown())
+      .parse(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+  } catch {
+    throw new RequestError(400, '请求必须是 JSON 对象。');
+  }
+}
+
+function reply(res: ServerResponse, status: number, value: unknown): void {
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
+  res.end(JSON.stringify(value));
+}
+
+async function handleRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  nonce: string,
+): Promise<void> {
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader(
+    'Content-Security-Policy',
+    `default-src 'none'; script-src 'self' 'nonce-${nonce}'; style-src 'nonce-${nonce}'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'`,
+  );
+  if (
+    req.headers.host !== new URL(address).host ||
+    (req.headers.origin && req.headers.origin !== address)
+  ) {
+    throw new RequestError(403, '仅允许当前本地控制台访问。');
+  }
+  const pathname = new URL(req.url || '/', address).pathname;
+  if (req.method === 'GET' && pathname === '/assets/morphicons.js') {
+    res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
+    res.end(morphiconsBundle);
+    return;
+  }
+  if (req.method === 'GET' && pathname === '/') {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(cockpitHtml(nonce));
+    return;
+  }
+  const supplied = Buffer.from(String(req.headers['x-drill-token'] || ''));
+  const expected = Buffer.from(token);
+  if (
+    supplied.length !== expected.length ||
+    !timingSafeEqual(supplied, expected)
+  ) {
+    throw new RequestError(403, '访问凭证已失效，请在 CLI 中重新运行 /drill。');
+  }
+  const current = session;
+  if (!current) throw new RequestError(409, 'CLI 会话尚未就绪或已关闭。');
+  const { config } = current;
+  const mgr = ProviderManager.getInstance();
+  if (req.method === 'GET' && pathname === '/api/status') {
+    const store = DrillStore.getInstance();
+    reply(res, 200, {
+      ready: current.isReady() && !submitting,
+      sessionId: config.getSessionId(),
+      locale: I18nManager.getInstance().getLocale(),
+      effortOptions: getEffortOptions(I18nManager.getInstance().getLocale()),
+      runtime: readUltraRuntime(),
+      collaborationTasks: listCollaborationTasks(config.getSessionId()),
+      effort: mgr.getReasoningEffort(),
+      bypass: config.getApprovalMode() === ApprovalMode.YOLO,
+      grant: readDrillGrant(),
+      activeProviderId: mgr.getActiveProvider()?.id || '',
+      activeModel: mgr.getActiveModel() || config.getModel(),
+      providers: mgr
+        .listProviders()
+        .map(
+          ({ id, name, models, defaultModel, baseUrl, protocol, apiKey }) => ({
+            id,
+            name,
+            models,
+            defaultModel,
+            baseUrl,
+            protocol,
+            hasKey: Boolean(apiKey),
+          }),
+        ),
+      facts: store.queryFacts(config.getSessionId()).slice(0, 50),
+      patches: store.queryPatchTransactions(config.getSessionId()),
+    });
+    return;
+  }
+  if (req.method === 'GET' && pathname === '/api/preflight') {
+    preflight ??= runDrillPreflight().catch((error: unknown) => {
+      preflight = undefined;
+      throw error;
+    });
+    reply(res, 200, await preflight);
+    return;
+  }
+  if (req.method === 'GET' && pathname === '/api/skills') {
+    const manager = config.getSkillManager();
+    const skills = manager.getAllSkills?.() || manager.getSkills();
+    reply(
+      res,
+      200,
+      skills.map(({ name, description, disabled }) => ({
+        name,
+        description,
+        disabled: Boolean(disabled),
+      })),
+    );
+    return;
+  }
+  if (req.method === 'GET' && pathname === '/api/prompts') {
+    reply(res, 200, {
+      config: readUltraPromptConfig(),
+      path: ultraPromptConfigPath(),
+    });
+    return;
+  }
+  if (req.method !== 'POST') throw new RequestError(404, '接口不存在。');
+  const body = await readJson(req);
+  if (!current.isReady() || submitting)
+    throw new RequestError(
+      409,
+      '会话忙碌或正在等待确认，请回到终端完成当前操作。',
+    );
+  if (pathname === '/api/prompt') {
+    const prompt = z.string().trim().min(1).safeParse(body['prompt']);
+    if (!prompt.success) throw new RequestError(400, '请先输入任务。');
+    submitting = true;
+    void current
+      .submit(prompt.data)
+      .catch((error: unknown) => {
+        coreEvents.emitFeedback(
+          'error',
+          `演练台任务执行失败：${error instanceof Error ? error.message : String(error)}`,
+        );
+      })
+      .finally(() => {
+        submitting = false;
+      });
+    reply(res, 202, {
+      message: I18nManager.getInstance().t(
+        '任务已送入当前 CLI 会话，执行过程与审批请查看终端。',
+        'Task sent to the current CLI session. Follow execution and approvals in the terminal.',
+      ),
+    });
+    return;
+  }
+  if (pathname === '/api/prompts') {
+    try {
+      saveUltraPromptConfig(body['config']);
+    } catch (error) {
+      throw new RequestError(
+        400,
+        error instanceof Error ? error.message : '提示词保存失败。',
+      );
+    }
+    reply(res, 200, {
+      message: I18nManager.getInstance().t(
+        '提示词与规则已保存，下次主会话或子代理请求自动生效。',
+        'Prompts and rules saved for future agent requests.',
+      ),
+    });
+    return;
+  }
+  if (pathname === '/api/providers' || pathname === '/api/provider-models') {
+    const parsed = z
+      .object({
+        id: z.string().optional(),
+        name: z.string().trim().min(1).max(64),
+        baseUrl: z.string().url(),
+        apiKey: z.string(),
+        protocol: z.enum([
+          'openai-chat',
+          'openai-responses',
+          'anthropic',
+          'gemini',
+        ]),
+        models: z.array(z.string().trim().min(1)).max(300),
+        defaultModel: z.string().optional(),
+      })
+      .safeParse(body);
+    if (!parsed.success)
+      throw new RequestError(
+        400,
+        '请检查名称、端点和模型。 / Check the name, endpoint and model fields.',
+      );
+    const input = parsed.data;
+    const existing = input.id ? mgr.getProvider(input.id) : undefined;
+    if (input.id && !existing)
+      throw new RequestError(404, 'Provider no longer exists.');
+    if (!input.id && mgr.getProvider(input.name))
+      throw new RequestError(
+        409,
+        '该名称已存在，请选择编辑已有供应商。 / This name exists; select it to edit.',
+      );
+    const apiKey = input.apiKey.trim() || existing?.apiKey || '';
+    if (pathname === '/api/provider-models') {
+      const result = await mgr.fetchModelsFromEndpoint({
+        ...input,
+        apiKey,
+        customHeaders: existing?.customHeaders,
+        timeoutMs: 7000,
+      });
+      reply(res, 200, result);
+      return;
+    }
+    if (!input.models.length)
+      throw new RequestError(
+        400,
+        '请至少填写一个模型。 / Enter at least one model.',
+      );
+    const provider = mgr.upsertProvider({
+      ...input,
+      apiKey,
+      defaultModel: input.defaultModel || input.models[0],
+      setActive: false,
+    });
+    reply(res, 200, {
+      id: provider.id,
+      message: I18nManager.getInstance().t(
+        '供应商已保存，请在模型选择器中激活。',
+        'Provider saved. Activate it with the model selector.',
+      ),
+    });
+    return;
+  }
+  if (pathname === '/api/settings') {
+    switch (body['action']) {
+      case 'language': {
+        const locale = z.enum(['zh', 'en']).safeParse(body['value']);
+        if (!locale.success) throw new RequestError(400, 'Choose zh or en.');
+        I18nManager.getInstance().setLocale(locale.data);
+        break;
+      }
+      case 'runtime': {
+        const next = z
+          .object({
+            collaboration: z.enum(['auto', 'single', 'team']),
+            maxParallel: z.number().int().min(1).max(8),
+            workflow: z.enum(['general', 'redteam']),
+          })
+          .safeParse(body['value']);
+        if (!next.success)
+          throw new RequestError(400, 'Invalid workflow configuration.');
+        if (next.data.workflow === 'redteam' && !readDrillGrant().granted)
+          throw new RequestError(
+            400,
+            '请先登记演练授权。 / Record drill authorization first.',
+          );
+        saveUltraRuntime(next.data);
+        break;
+      }
+      case 'effort': {
+        const effort = z
+          .enum(['low', 'medium', 'high', 'xhigh', 'max', 'ultra'])
+          .safeParse(body['value']);
+        if (!effort.success) throw new RequestError(400, '无效的推理强度。');
+        mgr.setReasoningEffort(effort.data);
+        break;
+      }
+      case 'bypass':
+        if (!z.boolean().safeParse(body['value']).success)
+          throw new RequestError(400, '审批设置必须是布尔值。');
+        config.setApprovalMode(
+          body['value'] ? ApprovalMode.YOLO : ApprovalMode.DEFAULT,
+        );
+        break;
+      case 'grant':
+        if (!z.boolean().safeParse(body['value']).success)
+          throw new RequestError(400, '授权设置必须是布尔值。');
+        writeDrillGrant(z.boolean().parse(body['value']));
+        break;
+      case 'model': {
+        const provider = mgr
+          .listProviders()
+          .find((p) => p.id === body['providerId']);
+        const model = z.string().safeParse(body['model']);
+        if (
+          !provider ||
+          !model.success ||
+          !provider.models.includes(model.data)
+        )
+          throw new RequestError(400, '请选择已配置的供应商和模型。');
+        mgr.setActiveSelection(provider.id, model.data);
+        config.setModel(`${provider.id}:${model.data}`);
+        break;
+      }
+      default:
+        throw new RequestError(400, '未知设置。');
+    }
+    reply(res, 200, {
+      message: I18nManager.getInstance().t('设置已更新。', 'Settings updated.'),
+    });
+    return;
+  }
+  throw new RequestError(404, '接口不存在。');
+}
+
+export function stopDrillCockpit(): void {
+  server?.close();
+  server?.closeAllConnections();
+  server = undefined;
+  address = '';
+  token = '';
+  preflight = undefined;
+}
+
+export async function startDrillCockpit(): Promise<string> {
+  if (starting) return starting;
+  if (server) return `${address}/#${token}`;
+  if (!session) throw new Error('当前交互会话尚未就绪。');
+  starting = (async () => {
+    token = randomBytes(32).toString('hex');
+    const nonce = randomBytes(16).toString('hex');
+    const next = createServer((req, res) => {
+      void handleRequest(req, res, nonce).catch((error: unknown) => {
+        if (!res.headersSent)
+          reply(res, error instanceof RequestError ? error.status : 500, {
+            error: error instanceof Error ? error.message : '控制台请求失败。',
+          });
+        else res.end();
+      });
+    });
+    await new Promise<void>((resolve, reject) => {
+      const onError = (error: NodeJS.ErrnoException) => {
+        if (error.code === 'EADDRINUSE') next.listen(0, '127.0.0.1');
+        else {
+          next.removeListener('error', onError);
+          reject(error);
+        }
+      };
+      next.on('error', onError);
+      next.listen(45678, '127.0.0.1', () => {
+        next.removeListener('error', onError);
+        resolve();
+      });
+    });
+    const bound = next.address();
+    if (!bound || typeof bound === 'string')
+      throw new Error('无法获取控制台端口。');
+    address = `http://127.0.0.1:${bound.port}`;
+    server = next;
+    next.unref();
+    return `${address}/#${token}`;
+  })();
+  try {
+    return await starting;
+  } finally {
+    starting = undefined;
+  }
+}
+
+registerCleanup(stopDrillCockpit);

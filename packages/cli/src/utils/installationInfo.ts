@@ -56,6 +56,14 @@ export function getInstallationInfo(
     // Normalize path separators to forward slashes for consistent matching.
     const realPath = fs.realpathSync(cliPath).replace(/\\/g, '/');
     const normalizedProjectRoot = projectRoot?.replace(/\\/g, '/');
+    if (realPath.includes('/node_modules/gemini-ultra-cli/')) {
+      return {
+        packageManager: PackageManager.NPM,
+        isGlobal: true,
+        updateMessage:
+          'Update Gemini Ultra CLI from https://github.com/emstudio010-hub/gemini-ultra-cli/releases',
+      };
+    }
     const isGit = isGitRepository(process.cwd());
 
     // Check for local git clone first

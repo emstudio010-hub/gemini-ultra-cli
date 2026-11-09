@@ -97,7 +97,9 @@ const cliConfig = {
   define: {
     __filename: '__chunk_filename',
     __dirname: '__chunk_dirname',
-    'process.env.CLI_VERSION': JSON.stringify(pkg.version),
+    'process.env.CLI_VERSION': JSON.stringify(
+      process.env['CLI_VERSION'] || pkg.version,
+    ),
     'process.env.GEMINI_SANDBOX_IMAGE_DEFAULT': JSON.stringify(
       pkg.config?.sandboxImageUri,
     ),
@@ -120,6 +122,7 @@ const cliConfig = {
 
 const workerConfig = {
   ...baseConfig,
+  metafile: true,
   banner: {
     js: `const require = (await import('node:module')).createRequire(import.meta.url); const __chunk_filename = (await import('node:url')).fileURLToPath(import.meta.url); const __chunk_dirname = (await import('node:path')).dirname(__chunk_filename);`,
   },
@@ -162,13 +165,11 @@ const a2aServerConfig = {
 };
 
 Promise.allSettled([
-  esbuild.build(cliConfig).then(({ metafile }) => {
-    if (process.env.DEV === 'true') {
-      writeFileSync('./bundle/esbuild.json', JSON.stringify(metafile, null, 2));
-    }
-  }),
+  esbuild.build(cliConfig),
   esbuild.build(workerConfig),
-  esbuild.build(a2aServerConfig),
+  process.env['GEMINI_ULTRA_CLI_ONLY'] === '1'
+    ? Promise.resolve()
+    : esbuild.build(a2aServerConfig),
 ]).then((results) => {
   const [cliResult, workerResult, a2aResult] = results;
   if (cliResult.status === 'rejected') {
@@ -178,6 +179,28 @@ Promise.allSettled([
   if (workerResult.status === 'rejected') {
     console.error('worker-entry.js build failed:', workerResult.reason);
     process.exit(1);
+  }
+  if (
+    process.env.DEV === 'true' ||
+    process.env['GEMINI_ULTRA_CLI_ONLY'] === '1'
+  ) {
+    writeFileSync(
+      './bundle/esbuild.json',
+      JSON.stringify(
+        {
+          inputs: {
+            ...cliResult.value.metafile.inputs,
+            ...workerResult.value.metafile.inputs,
+          },
+          outputs: {
+            ...cliResult.value.metafile.outputs,
+            ...workerResult.value.metafile.outputs,
+          },
+        },
+        null,
+        2,
+      ),
+    );
   }
   // error in a2a-server bundling will not stop gemini.js bundling process
   if (a2aResult.status === 'rejected') {

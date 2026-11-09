@@ -57,6 +57,7 @@ export async function checkForUpdates(
   settings: LoadedSettings,
 ): Promise<UpdateObject | null> {
   try {
+    if (process.env['GEMINI_ULTRA_CLI'] === '1') return null;
     if (!settings.merged.general.enableAutoUpdateNotification) {
       return null;
     }
@@ -70,6 +71,8 @@ export async function checkForUpdates(
     }
 
     const { name, version: currentVersion } = packageJson;
+    // Ultra previews are distributed by this project's releases, never the upstream npm package.
+    if (name === 'gemini-ultra-cli') return null;
     const currentChannel = getChannelFromVersion(currentVersion);
     const isNightly = currentVersion.includes('nightly');
 

@@ -103,6 +103,9 @@ import { shouldAttemptBrowserLaunch } from '../utils/browser.js';
 import type { MCPOAuthConfig } from '../mcp/oauth-provider.js';
 import { checkPathTrust } from '../utils/trust.js';
 import { WriteTodosTool } from '../tools/write-todos.js';
+import { ReadManyFilesTool } from '../tools/read-many-files.js';
+import { GetInternalDocsTool } from '../tools/get-internal-docs.js';
+import { CompleteTaskTool } from '../tools/complete-task.js';
 import {
   StandardFileSystemService,
   type FileSystemService,
@@ -133,6 +136,7 @@ import {
   VerifiedPatchTransactionTool,
   ApplyPatchTool,
 } from '../tools/reverseTools.js';
+import { BinaryInspectTool } from '../tools/binaryInspect.js';
 import {
   logRipgrepFallback,
   logFlashFallback,
@@ -4139,11 +4143,19 @@ export class Config implements McpContext, AgentLoopContext {
     maybeRegister(AskUserTool, () =>
       registry.registerTool(new AskUserTool(this.messageBus)),
     );
-    if (this.getUseWriteTodos()) {
-      maybeRegister(WriteTodosTool, () =>
-        registry.registerTool(new WriteTodosTool(this.messageBus)),
-      );
-    }
+    maybeRegister(ReadManyFilesTool, () =>
+      registry.registerTool(new ReadManyFilesTool(this, this.messageBus)),
+    );
+    maybeRegister(GetInternalDocsTool, () =>
+      registry.registerTool(new GetInternalDocsTool(this.messageBus)),
+    );
+    maybeRegister(CompleteTaskTool, () =>
+      registry.registerTool(new CompleteTaskTool(this.messageBus)),
+    );
+    maybeRegister(WriteTodosTool, () =>
+      registry.registerTool(new WriteTodosTool(this.messageBus)),
+    );
+
     if (this.isPlanEnabled()) {
       maybeRegister(ExitPlanModeTool, () =>
         registry.registerTool(new ExitPlanModeTool(this, this.messageBus)),
@@ -4153,28 +4165,26 @@ export class Config implements McpContext, AgentLoopContext {
       );
     }
 
-    if (this.isTrackerEnabled()) {
-      maybeRegister(TrackerCreateTaskTool, () =>
-        registry.registerTool(new TrackerCreateTaskTool(this, this.messageBus)),
-      );
-      maybeRegister(TrackerUpdateTaskTool, () =>
-        registry.registerTool(new TrackerUpdateTaskTool(this, this.messageBus)),
-      );
-      maybeRegister(TrackerGetTaskTool, () =>
-        registry.registerTool(new TrackerGetTaskTool(this, this.messageBus)),
-      );
-      maybeRegister(TrackerListTasksTool, () =>
-        registry.registerTool(new TrackerListTasksTool(this, this.messageBus)),
-      );
-      maybeRegister(TrackerAddDependencyTool, () =>
-        registry.registerTool(
-          new TrackerAddDependencyTool(this, this.messageBus),
-        ),
-      );
-      maybeRegister(TrackerVisualizeTool, () =>
-        registry.registerTool(new TrackerVisualizeTool(this, this.messageBus)),
-      );
-    }
+    maybeRegister(TrackerCreateTaskTool, () =>
+      registry.registerTool(new TrackerCreateTaskTool(this, this.messageBus)),
+    );
+    maybeRegister(TrackerUpdateTaskTool, () =>
+      registry.registerTool(new TrackerUpdateTaskTool(this, this.messageBus)),
+    );
+    maybeRegister(TrackerGetTaskTool, () =>
+      registry.registerTool(new TrackerGetTaskTool(this, this.messageBus)),
+    );
+    maybeRegister(TrackerListTasksTool, () =>
+      registry.registerTool(new TrackerListTasksTool(this, this.messageBus)),
+    );
+    maybeRegister(TrackerAddDependencyTool, () =>
+      registry.registerTool(
+        new TrackerAddDependencyTool(this, this.messageBus),
+      ),
+    );
+    maybeRegister(TrackerVisualizeTool, () =>
+      registry.registerTool(new TrackerVisualizeTool(this, this.messageBus)),
+    );
 
     // Register Subagent Tool
     maybeRegister(AgentTool, () =>
@@ -4217,6 +4227,9 @@ export class Config implements McpContext, AgentLoopContext {
     );
     maybeRegister(BinaryTriageTool, () =>
       registry.registerTool(new BinaryTriageTool(this, this.messageBus)),
+    );
+    maybeRegister(BinaryInspectTool, () =>
+      registry.registerTool(new BinaryInspectTool(this, this.messageBus)),
     );
     maybeRegister(VerifiedPatchTransactionTool, () =>
       registry.registerTool(

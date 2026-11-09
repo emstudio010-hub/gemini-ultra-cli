@@ -23,6 +23,7 @@ import {
   AppContext as InkAppContext,
 } from 'ink';
 import { App } from './App.js';
+import { connectDrillSession } from '../services/drillCockpit.js';
 import { AppContext } from './contexts/AppContext.js';
 import { UIStateContext, type UIState } from './contexts/UIStateContext.js';
 import { QuotaContext } from './contexts/QuotaContext.js';
@@ -1630,6 +1631,7 @@ Logging in with Google... Restarting Gemini CLI to continue.
 
   const handleFinalSubmit = useCallback(
     async (submittedValue: string) => {
+      if (submittedValue.trim() === '演练台') submittedValue = '/drill';
       reset();
       // Explicitly hide the expansion hint and clear its x-second timer when a new turn begins.
       triggerExpandHint(null);
@@ -1688,7 +1690,9 @@ Logging in with Google... Restarting Gemini CLI to continue.
             return;
           }
         }
-        void submitQuery(submittedValue);
+        addInput(submittedValue);
+        await submitQuery(submittedValue);
+        return;
       } else {
         // Check messageQueue.length === 0 to only notify on the first queued item
         if (
@@ -2154,6 +2158,29 @@ Logging in with Google... Restarting Gemini CLI to continue.
     authState === AuthState.AwaitingApiKeyInput ||
     isAwaitingLoginRestart ||
     !!newAgents;
+
+  useEffect(
+    () =>
+      connectDrillSession({
+        config,
+        isReady: () =>
+          streamingState === StreamingState.Idle &&
+          isConfigInitialized &&
+          isMcpReady &&
+          !isCompressing &&
+          !dialogsVisible,
+        submit: handleFinalSubmit,
+      }),
+    [
+      config,
+      streamingState,
+      isConfigInitialized,
+      isMcpReady,
+      isCompressing,
+      dialogsVisible,
+      handleFinalSubmit,
+    ],
+  );
 
   const handleGlobalKeypress = useCallback(
     (key: Key): boolean => {

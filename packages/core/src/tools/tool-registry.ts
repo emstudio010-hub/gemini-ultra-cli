@@ -38,8 +38,6 @@ import {
   UPDATE_TOPIC_TOOL_NAME,
   ENTER_PLAN_MODE_TOOL_NAME,
   EXIT_PLAN_MODE_TOOL_NAME,
-  READ_MCP_RESOURCE_TOOL_NAME,
-  LIST_MCP_RESOURCES_TOOL_NAME,
 } from './tool-names.js';
 
 type ToolParams = Record<string, unknown>;
@@ -620,15 +618,7 @@ export class ToolRegistry {
       }
     }
 
-    if (
-      tool.name === READ_MCP_RESOURCE_TOOL_NAME ||
-      tool.name === LIST_MCP_RESOURCES_TOOL_NAME
-    ) {
-      const mcpManager = this.config.getMcpClientManager();
-      if (!mcpManager || mcpManager.getAllResources().length === 0) {
-        return false;
-      }
-    }
+
 
     const isPlanMode = this.config.getApprovalMode() === ApprovalMode.PLAN;
     if (

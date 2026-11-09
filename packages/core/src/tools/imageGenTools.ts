@@ -40,7 +40,9 @@ export async function generateImage(params: {
   let provider = params.providerId
     ? mgr.getProvider(params.providerId)
     : activeImage.provider;
-  let chosenModel = params.model || activeImage.modelId || 'dall-e-3';
+  let chosenModel = params.model || (params.providerId
+    ? provider?.defaultImageModel || provider?.imageModels?.[0]
+    : activeImage.modelId);
 
   // Support "provider:model" syntax in params.model
   if (params.model && params.model.includes(':')) {
@@ -52,7 +54,28 @@ export async function generateImage(params: {
     }
   }
 
+  // If chosenModel is not explicitly specified, try provider's configured image models
+  if (!chosenModel) {
+    if (provider?.imageModels && provider.imageModels.length > 0) {
+      chosenModel = provider.imageModels[0];
+    } else if (provider?.defaultImageModel) {
+      chosenModel = provider.defaultImageModel;
+    } else {
+      // Check if any other provider has image models configured
+      const anyImageProv = mgr.listProviders().find((p) => p.imageModels && p.imageModels.length > 0);
+      if (anyImageProv) {
+        provider = anyImageProv;
+        chosenModel = anyImageProv.imageModels![0];
+      }
+    }
+  }
+
   const geminiApiKey = process.env['GEMINI_API_KEY'] || process.env['GOOGLE_API_KEY'];
+
+  // If still no model, fallback to imagen-3 if Google key is available, else dall-e-3
+  if (!chosenModel) {
+    chosenModel = geminiApiKey || provider?.protocol === 'gemini' ? 'imagen-3.0-generate-002' : 'dall-e-3';
+  }
 
   if ((!provider || !provider.apiKey) && !geminiApiKey) {
     return {
@@ -152,11 +175,15 @@ export async function generateImage(params: {
 
     if (!res.ok) {
       const errText = await res.text();
+      let hint = '';
+      if (res.status === 404 || res.status === 503 || errText.includes('model_not_found')) {
+        hint = `\n提示: 供应商 [${provider!.name}] 似乎未开通或不支持生图模型 "${chosenModel}"。可通过 /provider 配置支持生图的供应商（如具备 DALL-E/Flux 端点的服务商或官方 Gemini Imagen）。`;
+      }
       return {
         success: false,
         model: chosenModel,
         providerName: provider!.name,
-        error: `生图端点 [${provider!.name}] 返回错误 HTTP ${res.status}: ${errText}`,
+        error: `生图端点 [${provider!.name}] 返回错误 HTTP ${res.status}: ${errText}${hint}`,
       };
     }
 

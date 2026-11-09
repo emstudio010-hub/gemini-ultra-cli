@@ -19,11 +19,15 @@ import {
   clearCachedCredentialFile,
   type Config,
   debugLogger,
+  ProviderManager,
+  I18nManager,
 } from '@google/gemini-cli-core';
 import { useKeypress } from '../hooks/useKeypress.js';
 import { AuthState } from '../types.js';
 import { validateAuthMethodWithSettings } from './useAuth.js';
 import { relaunchApp } from '../../utils/processUtils.js';
+import { ProviderConfigDialog } from '../components/ProviderConfigDialog.js';
+import { useLocale } from '../hooks/useLocale.js';
 
 interface AuthDialogProps {
   config: Config;
@@ -43,9 +47,20 @@ export function AuthDialog({
   setAuthContext,
 }: AuthDialogProps): React.JSX.Element {
   const [exiting, setExiting] = useState(false);
+  const [showProviderForm, setShowProviderForm] = useState(false);
+  const locale = useLocale();
+  const t = (zh: string, en: string) => (locale === 'zh' ? zh : en);
   let items = [
     {
-      label: 'Sign in with Google',
+      label: t(
+        '配置外接供应商（无需 Google 登录）',
+        'Configure an external provider (no Google sign-in)',
+      ),
+      value: AuthType.GATEWAY,
+      key: AuthType.GATEWAY,
+    },
+    {
+      label: t('使用 Google 登录', 'Sign in with Google'),
       value: AuthType.LOGIN_WITH_GOOGLE,
       key: AuthType.LOGIN_WITH_GOOGLE,
     },
@@ -67,7 +82,7 @@ export function AuthDialog({
           ]
         : []),
     {
-      label: 'Use Gemini API Key',
+      label: t('使用 Gemini API 密钥', 'Use Gemini API Key'),
       value: AuthType.USE_GEMINI,
       key: AuthType.USE_GEMINI,
     },
@@ -108,7 +123,7 @@ export function AuthDialog({
       return item.value === AuthType.USE_GEMINI;
     }
 
-    return item.value === AuthType.LOGIN_WITH_GOOGLE;
+    return item.value === AuthType.GATEWAY;
   });
   if (settings.merged.security.auth.enforcedType) {
     initialAuthIndex = 0;
@@ -120,6 +135,11 @@ export function AuthDialog({
         return;
       }
       if (authType) {
+        if (
+          authType !== AuthType.GATEWAY &&
+          ProviderManager.getInstance().getActiveProvider()
+        )
+          ProviderManager.getInstance().setActiveSelection(undefined);
         const needsRestart =
           authType === AuthType.LOGIN_WITH_GOOGLE ||
           (authType === AuthType.USE_VERTEX_AI &&
@@ -179,6 +199,10 @@ export function AuthDialog({
   );
 
   const handleAuthSelect = async (authMethod: AuthType) => {
+    if (authMethod === AuthType.GATEWAY) {
+      setShowProviderForm(true);
+      return;
+    }
     const error = await validateAuthMethodWithSettings(
       authMethod,
       settings,
@@ -216,8 +240,38 @@ export function AuthDialog({
       }
       return false;
     },
-    { isActive: true },
+    { isActive: !showProviderForm },
   );
+
+  if (showProviderForm)
+    return (
+      <ProviderConfigDialog
+        onClose={() => {
+          setShowProviderForm(false);
+          const manager = ProviderManager.getInstance();
+          const provider = manager.getActiveProvider();
+          const model = manager.getActiveModel();
+          if (!provider || !model) {
+            onAuthError(
+              I18nManager.getInstance().t(
+                '请添加供应商并选择一个模型。',
+                'Add a provider and select a model.',
+              ),
+            );
+            return;
+          }
+          config.setModel(`${provider.id}:${model}`);
+          settings.setValue(
+            SettingScope.User,
+            'security.auth.selectedType',
+            AuthType.GATEWAY,
+          );
+          setAuthContext({});
+          onAuthError(null);
+          setAuthState(AuthState.Unauthenticated);
+        }}
+      />
+    );
 
   if (exiting) {
     return (
@@ -248,11 +302,14 @@ export function AuthDialog({
       <Text color={theme.text.accent}>? </Text>
       <Box flexDirection="column" flexGrow={1}>
         <Text bold color={theme.text.primary}>
-          Get started
+          {t('开始使用', 'Get started')}
         </Text>
         <Box marginTop={1}>
           <Text color={theme.text.primary}>
-            How would you like to authenticate for this project?
+            {t(
+              '选择模型接入方式：',
+              'How would you like to connect your model?',
+            )}
           </Text>
         </Box>
         <Box marginTop={1}>
@@ -271,7 +328,9 @@ export function AuthDialog({
           </Box>
         )}
         <Box marginTop={1}>
-          <Text color={theme.text.secondary}>(Use Enter to select)</Text>
+          <Text color={theme.text.secondary}>
+            {t('按 Enter 选择', 'Press Enter to select')}
+          </Text>
         </Box>
         <Box marginTop={1}>
           <Text color={theme.text.primary}>

@@ -200,6 +200,33 @@ describe('LocalSessionInvocation', () => {
       expect(display.terminateReason).toBe(AgentTerminateMode.GOAL);
     });
 
+    it.each([
+      AgentTerminateMode.TIMEOUT,
+      AgentTerminateMode.MAX_TURNS,
+      AgentTerminateMode.ERROR,
+      AgentTerminateMode.ERROR_NO_COMPLETE_TASK_CALL,
+    ])(
+      'should mark non-goal termination %s as an error and preserve partial results',
+      async (reason) => {
+        setupMockSession({
+          output: { result: 'Partial progress...', terminate_reason: reason },
+        });
+        const invocation = new LocalSessionInvocation(
+          testDefinition,
+          mockContext,
+          { query: 'Execute task' },
+          mockMessageBus,
+        );
+        const result = await invocation.execute({
+          abortSignal: new AbortController().signal,
+        });
+        const display = result.returnDisplay as SubagentProgress;
+        expect(display.state).toBe('error');
+        expect(display.result).toBe('Partial progress...');
+        expect(display.terminateReason).toBe(reason);
+      },
+    );
+
     it('should stream THOUGHT_CHUNK activity', async () => {
       const mockSession = setupMockSession({});
       const params = { query: 'think' };

@@ -20,7 +20,7 @@ import { ToolErrorType } from './tool-error.js';
 import { getErrorMessage } from '../utils/errors.js';
 import { getResponseText } from '../utils/partUtils.js';
 import { fetchWithTimeout, isPrivateIp } from '../utils/fetch.js';
-import { truncateString, wrapUntrusted } from '../utils/textUtils.js';
+import { truncateString, wrapUntrusted, cleanDsmlAndRawTokens } from '../utils/textUtils.js';
 import { convert } from 'html-to-text';
 import {
   logWebFetchFallbackAttempt,
@@ -488,7 +488,11 @@ ${aggregatedContent}
         JSON.stringify(result, null, 2),
       );
 
-      const resultText = getResponseText(result) || '';
+      let resultText = getResponseText(result) || '';
+      resultText = cleanDsmlAndRawTokens(resultText);
+      if (!resultText.trim() || resultText.includes('DSML')) {
+        resultText = aggregatedContent;
+      }
 
       debugLogger.debug(
         `[WebFetchTool] Formatted fallback tool response for prompt "${this.params.prompt}":\n\n`,
@@ -820,11 +824,15 @@ ${toFetch.join('\n')}
       );
 
       let responseText = getResponseText(response) || '';
+      responseText = cleanDsmlAndRawTokens(responseText);
       const groundingMetadata = response.candidates?.[0]?.groundingMetadata;
 
       // Simple primary success check: we need some text or grounding data
-      if (!responseText.trim() && !groundingMetadata?.groundingChunks?.length) {
-        throw new Error('Primary fetch returned no content');
+      if (
+        (!responseText.trim() && !groundingMetadata?.groundingChunks?.length) ||
+        responseText.includes('DSML')
+      ) {
+        throw new Error('Primary fetch returned invalid or empty content');
       }
 
       // 1. Apply Grounding Supports (Citations)

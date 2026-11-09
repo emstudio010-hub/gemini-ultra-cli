@@ -7,18 +7,29 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import { randomUUID } from 'node:crypto';
+import { z } from 'zod';
 
 export type UiLocale = 'zh' | 'en';
 
 function getLocaleConfigPath(): string {
-  const dir = path.join(os.homedir(), '.gemini');
-  fs.mkdirSync(dir, { recursive: true });
-  return path.join(dir, 'ultra-locale.json');
+  return (
+    process.env['GEMINI_ULTRA_LOCALE_FILE'] ||
+    path.join(os.homedir(), '.gemini', 'ultra-locale.json')
+  );
 }
 
 export class I18nManager {
   private static instance: I18nManager | null = null;
   private locale: UiLocale = 'zh';
+  private listeners = new Set<() => void>();
+  readonly subscribe = (listener: () => void): (() => void) => {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  };
+  readonly getSnapshot = (): UiLocale => this.locale;
 
   constructor() {
     this.locale = this.loadLocale();
@@ -35,12 +46,14 @@ export class I18nManager {
     try {
       const p = getLocaleConfigPath();
       if (fs.existsSync(p)) {
-        const raw = JSON.parse(fs.readFileSync(p, 'utf8'));
-        if (raw.locale === 'en' || raw.locale === 'zh') {
-          return raw.locale;
-        }
+        const parsed = z
+          .object({ locale: z.enum(['zh', 'en']) })
+          .safeParse(JSON.parse(fs.readFileSync(p, 'utf8')));
+        if (parsed.success) return parsed.data.locale;
       }
-    } catch {}
+    } catch {
+      /* Missing or invalid preference uses the default locale. */
+    }
     return 'zh';
   }
 
@@ -49,10 +62,17 @@ export class I18nManager {
   }
 
   setLocale(loc: UiLocale): void {
-    this.locale = loc;
+    const file = getLocaleConfigPath();
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const temp = `${file}.${randomUUID()}.tmp`;
     try {
-      fs.writeFileSync(getLocaleConfigPath(), JSON.stringify({ locale: loc }, null, 2), 'utf8');
-    } catch {}
+      fs.writeFileSync(temp, JSON.stringify({ locale: loc }, null, 2), 'utf8');
+      fs.renameSync(temp, file);
+    } finally {
+      if (fs.existsSync(temp)) fs.unlinkSync(temp);
+    }
+    this.locale = loc;
+    for (const listener of this.listeners) listener();
   }
 
   toggleLocale(): UiLocale {

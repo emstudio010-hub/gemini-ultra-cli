@@ -12,24 +12,79 @@ import {
   type EmbedContentParameters,
   type EmbedContentResponse,
   type Part,
-  type Content,
+  type GenerateContentResponseUsageMetadata,
+  FinishReason,
 } from '@google/genai';
 import type { ContentGenerator } from '../core/contentGenerator.js';
 import type { Config } from '../config/config.js';
-import type { LlmRole } from '../telemetry/llmRole.js';
+import { LlmRole } from '../telemetry/llmRole.js';
 import { ProviderManager } from './providerManager.js';
 import type { ExternalProviderProfile } from './providerTypes.js';
+import { withUltraPrompt } from './ultraPromptConfig.js';
+import { LoggingContentGenerator } from '../core/loggingContentGenerator.js';
+import { providerUsage } from './providerUsage.js';
+import { isRecord } from '../utils/markdownUtils.js';
+import {
+  chatSchema,
+  responsesSchema,
+  anthropicSchema,
+  geminiSchema,
+  parseProviderValue,
+  parseProviderJson,
+  providerContents,
+  type ChatMessage,
+  type ChatTool,
+  type ChatToolCall,
+} from './providerProtocol.js';
 
 const ULTRA_EFFORT_DIRECTIVE = `
 
-[ULTRA reasoning mode] Think as deeply as needed. For non-trivial tasks: decompose the problem, consider multiple approaches, and when independent sub-problems exist call the \`spawn_subagents\` tool to investigate/implement them in parallel, then cross-verify the results before answering. Always verify with real evidence (build/tests) before claiming success.`;
+[ULTRA reasoning mode] Think as deeply as needed. For non-trivial tasks: decompose the problem, consider multiple approaches, and when independent sub-problems exist and the tool is available call \`spawn_subagents\` to investigate/implement them in parallel, then cross-check the results. Verify changes using the smallest relevant checks, respect the user's requested verification scope, and report the evidence before claiming success. Avoid redundant tests.`;
 
 export class UniversalContentGenerator implements ContentGenerator {
   constructor(
     private readonly fallbackGenerator: ContentGenerator,
-    _gcConfig?: Config,
-  ) {
-    void _gcConfig;
+    private readonly gcConfig?: Config,
+  ) {}
+
+  private externalGenerator(
+    provider: ExternalProviderProfile,
+  ): ContentGenerator {
+    const adapter: ContentGenerator = {
+      generateContent: (request) => {
+        switch (provider.protocol) {
+          case 'gemini':
+            return this.generateGemini(provider, request);
+          case 'openai-chat':
+            return this.generateOpenAIChat(provider, request);
+          case 'openai-responses':
+            return this.generateOpenAIResponses(provider, request);
+          case 'anthropic':
+            return this.generateAnthropic(provider, request);
+          default:
+            throw new Error('Unsupported external provider protocol.');
+        }
+      },
+      generateContentStream: async (request) => {
+        switch (provider.protocol) {
+          case 'gemini':
+            return this.streamGemini(provider, request);
+          case 'openai-chat':
+            return this.streamOpenAIChat(provider, request);
+          case 'openai-responses':
+            return this.streamOpenAIResponses(provider, request);
+          case 'anthropic':
+            return this.streamAnthropic(provider, request);
+          default:
+            throw new Error('Unsupported external provider protocol.');
+        }
+      },
+      countTokens: (request) => this.countTokens(request),
+      embedContent: (request) => this.embedContent(request),
+    };
+    return this.gcConfig
+      ? new LoggingContentGenerator(adapter, this.gcConfig, provider.baseUrl)
+      : adapter;
   }
 
   get userTier() {
@@ -62,7 +117,9 @@ export class UniversalContentGenerator implements ContentGenerator {
     return Math.ceil(text.length / 3);
   }
 
-  async countTokens(request: CountTokensParameters): Promise<CountTokensResponse> {
+  async countTokens(
+    request: CountTokensParameters,
+  ): Promise<CountTokensResponse> {
     if (this.resolve(request.model)) {
       return { totalTokens: this.estimateTokens(request) };
     }
@@ -73,7 +130,9 @@ export class UniversalContentGenerator implements ContentGenerator {
     }
   }
 
-  async embedContent(request: EmbedContentParameters): Promise<EmbedContentResponse> {
+  async embedContent(
+    request: EmbedContentParameters,
+  ): Promise<EmbedContentResponse> {
     return this.fallbackGenerator.embedContent(request);
   }
 
@@ -82,26 +141,26 @@ export class UniversalContentGenerator implements ContentGenerator {
     userPromptId: string,
     role: LlmRole,
   ): Promise<GenerateContentResponse> {
+    if (role === LlmRole.MAIN || role === LlmRole.SUBAGENT)
+      request = withUltraPrompt(request);
     const resolution = this.resolve(request.model);
 
     if (!resolution) {
-      return this.fallbackGenerator.generateContent(request, userPromptId, role);
+      return this.fallbackGenerator.generateContent(
+        request,
+        userPromptId,
+        role,
+      );
     }
 
     const { provider, modelId } = resolution;
     const modifiedRequest = { ...request, model: modelId };
 
-    if (provider.protocol === 'gemini') {
-      return this.generateGemini(provider, modifiedRequest);
-    } else if (provider.protocol === 'openai-chat') {
-      return this.generateOpenAIChat(provider, modifiedRequest);
-    } else if (provider.protocol === 'openai-responses') {
-      return this.generateOpenAIResponses(provider, modifiedRequest);
-    } else if (provider.protocol === 'anthropic') {
-      return this.generateAnthropic(provider, modifiedRequest);
-    }
-
-    return this.fallbackGenerator.generateContent(request, userPromptId, role);
+    return this.externalGenerator(provider).generateContent(
+      modifiedRequest,
+      userPromptId,
+      role,
+    );
   }
 
   async generateContentStream(
@@ -109,45 +168,46 @@ export class UniversalContentGenerator implements ContentGenerator {
     userPromptId: string,
     role: LlmRole,
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
+    if (role === LlmRole.MAIN || role === LlmRole.SUBAGENT)
+      request = withUltraPrompt(request);
     const resolution = this.resolve(request.model);
 
     if (!resolution) {
-      return this.fallbackGenerator.generateContentStream(request, userPromptId, role);
+      return this.fallbackGenerator.generateContentStream(
+        request,
+        userPromptId,
+        role,
+      );
     }
 
     const { provider, modelId } = resolution;
     const modifiedRequest = { ...request, model: modelId };
 
-    if (provider.protocol === 'gemini') {
-      return this.streamGemini(provider, modifiedRequest);
-    } else if (provider.protocol === 'openai-chat') {
-      return this.streamOpenAIChat(provider, modifiedRequest);
-    } else if (provider.protocol === 'openai-responses') {
-      return this.streamOpenAIResponses(provider, modifiedRequest);
-    } else if (provider.protocol === 'anthropic') {
-      return this.streamAnthropic(provider, modifiedRequest);
-    }
-
-    return this.fallbackGenerator.generateContentStream(request, userPromptId, role);
+    return this.externalGenerator(provider).generateContentStream(
+      modifiedRequest,
+      userPromptId,
+      role,
+    );
   }
 
   // --- OpenAI Chat Completions Adapter (/v1/chat/completions) ---
 
-  private formatOpenAIMessages(request: GenerateContentParameters): any[] {
-    const messages: any[] = [];
+  private formatOpenAIMessages(
+    request: GenerateContentParameters,
+  ): ChatMessage[] {
+    const messages: ChatMessage[] = [];
 
     // System instruction
-    const sysInstruction = (request.config as any)?.systemInstruction;
-    const ultra = ProviderManager.getInstance().getReasoningEffort() === 'ultra';
+    const sysInstruction = request.config?.systemInstruction;
+    const ultra =
+      ProviderManager.getInstance().getReasoningEffort() === 'ultra';
     if (sysInstruction || ultra) {
       let sysText = '';
-      if (typeof sysInstruction === 'string') {
-        sysText = sysInstruction;
-      } else if (Array.isArray(sysInstruction)) {
-        sysText = sysInstruction.map((p: any) => p.text || '').join('\n');
-      } else if (sysInstruction?.parts) {
-        sysText = sysInstruction.parts.map((p: any) => p.text || '').join('\n');
-      }
+      if (sysInstruction)
+        sysText = providerContents(sysInstruction)
+          .flatMap((content) => content.parts ?? [])
+          .map((part) => part.text ?? '')
+          .join('\n');
       if (ultra) {
         sysText += ULTRA_EFFORT_DIRECTIVE;
       }
@@ -157,41 +217,59 @@ export class UniversalContentGenerator implements ContentGenerator {
     }
 
     // Contents conversion
-    const contents: Content[] = Array.isArray(request.contents)
-      ? (request.contents as Content[])
-      : request.contents
-        ? [request.contents as Content]
-        : [];
+    const contents = providerContents(request.contents);
+    const callsByName = new Map<string, string[]>();
+    let generatedCall = 0;
 
     for (const content of contents) {
       const role = content.role === 'model' ? 'assistant' : 'user';
       const parts = content.parts || [];
 
       let textBuffer = '';
-      const toolCalls: any[] = [];
-      const toolMessages: any[] = [];
+      const toolCalls: ChatToolCall[] = [];
+      const toolMessages: ChatMessage[] = [];
 
       for (const part of parts) {
-        if ((part as any).text) {
-          textBuffer += (part as any).text;
+        if (part.text && !part.thought) {
+          textBuffer += part.text;
         }
-        if ((part as any).functionCall) {
-          const fc = (part as any).functionCall;
+        if (part.functionCall) {
+          const fc = part.functionCall;
+          if (!fc.name) throw new Error('Tool calls require a function name.');
+          const callId = fc.id || `ultra_call_${generatedCall++}`;
+          callsByName.set(fc.name, [
+            ...(callsByName.get(fc.name) ?? []),
+            callId,
+          ]);
           toolCalls.push({
-            id: fc.id || `call_${Math.random().toString(36).slice(2, 10)}`,
+            id: callId,
             type: 'function',
             function: {
               name: fc.name,
-              arguments: typeof fc.args === 'string' ? fc.args : JSON.stringify(fc.args || {}),
+              arguments:
+                typeof fc.args === 'string'
+                  ? fc.args
+                  : JSON.stringify(fc.args || {}),
             },
           });
         }
-        if ((part as any).functionResponse) {
-          const fr = (part as any).functionResponse;
+        if (part.functionResponse) {
+          const fr = part.functionResponse;
+          const pending = fr.name ? callsByName.get(fr.name) : undefined;
+          const callId = fr.id || pending?.shift() || fr.name;
+          if (!callId)
+            throw new Error('Tool results require a call ID or function name.');
+          if (fr.id && pending) {
+            const index = pending.indexOf(fr.id);
+            if (index >= 0) pending.splice(index, 1);
+          }
           toolMessages.push({
             role: 'tool',
-            tool_call_id: fr.id || fr.name,
-            content: typeof fr.response === 'string' ? fr.response : JSON.stringify(fr.response || {}),
+            tool_call_id: callId,
+            content:
+              typeof fr.response === 'string'
+                ? fr.response
+                : JSON.stringify(fr.response || {}),
           });
         }
       }
@@ -200,8 +278,14 @@ export class UniversalContentGenerator implements ContentGenerator {
         for (const tm of toolMessages) {
           messages.push(tm);
         }
+        if (textBuffer || toolCalls.length)
+          messages.push({
+            role,
+            content: textBuffer,
+            ...(toolCalls.length ? { tool_calls: toolCalls } : {}),
+          });
       } else {
-        const msg: any = { role, content: textBuffer };
+        const msg: ChatMessage = { role, content: textBuffer };
         if (toolCalls.length > 0) {
           msg.tool_calls = toolCalls;
         }
@@ -212,20 +296,33 @@ export class UniversalContentGenerator implements ContentGenerator {
     return messages;
   }
 
-  private formatOpenAITools(request: GenerateContentParameters): any[] | undefined {
-    const tools = (request.config as any)?.tools;
+  private formatOpenAITools(
+    request: GenerateContentParameters,
+  ): ChatTool[] | undefined {
+    const tools = request.config?.tools;
     if (!tools || !Array.isArray(tools)) return undefined;
 
-    const formatted: any[] = [];
+    const formatted: ChatTool[] = [];
     for (const tool of tools) {
-      if (tool.functionDeclarations && Array.isArray(tool.functionDeclarations)) {
+      if (
+        'functionDeclarations' in tool &&
+        tool.functionDeclarations &&
+        Array.isArray(tool.functionDeclarations)
+      ) {
         for (const fd of tool.functionDeclarations) {
+          // Google GenAI SDK tools store schema in parametersJsonSchema rather than parameters
+          const rawSchema: unknown = fd.parametersJsonSchema ??
+            fd.parameters ?? { type: 'object', properties: {} };
+
+          const cleanSchema = this.normalizeToolSchema(rawSchema);
+          if (!fd.name) throw new Error('Tool declarations require a name.');
+
           formatted.push({
             type: 'function',
             function: {
               name: fd.name,
               description: fd.description,
-              parameters: fd.parameters || { type: 'object', properties: {} },
+              parameters: cleanSchema,
             },
           });
         }
@@ -234,20 +331,71 @@ export class UniversalContentGenerator implements ContentGenerator {
     return formatted.length > 0 ? formatted : undefined;
   }
 
-  private buildGeminiResponse(parts: Part[]): GenerateContentResponse {
-    const rawResp: any = {
-      candidates: [
-        {
-          content: {
-            role: 'model',
-            parts,
-          },
-          finishReason: 'STOP',
-        },
-      ],
+  private normalizeToolSchema(value: unknown): Record<string, unknown> {
+    const normalize = (item: unknown): unknown => {
+      if (Array.isArray(item)) return item.map(normalize);
+      if (!isRecord(item)) return item;
+      const result = Object.fromEntries(
+        Object.entries(item).map(([key, entry]) => [key, normalize(entry)]),
+      );
+      const schemaType = result['type'];
+      if (typeof schemaType === 'string')
+        result['type'] = schemaType.toLowerCase();
+      return result;
     };
-    Object.setPrototypeOf(rawResp, GenerateContentResponse.prototype);
-    return rawResp;
+    const result = normalize(value);
+    if (!isRecord(result))
+      throw new Error('Tool parameters must be a JSON Schema object.');
+    if (
+      !result['type'] &&
+      !result['$ref'] &&
+      !result['anyOf'] &&
+      !result['oneOf']
+    )
+      result['type'] = 'object';
+    if (result['type'] === 'object' && !result['properties'])
+      result['properties'] = {};
+    return result;
+  }
+
+  private buildGeminiResponse(
+    parts: Part[],
+    usageMetadata?: GenerateContentResponseUsageMetadata,
+  ): GenerateContentResponse {
+    const response = new GenerateContentResponse();
+    response.candidates = parts.length
+      ? [
+          {
+            content: {
+              role: 'model',
+              parts,
+            },
+            finishReason: FinishReason.STOP,
+          },
+        ]
+      : [];
+    if (usageMetadata) response.usageMetadata = usageMetadata;
+    return response;
+  }
+
+  private outputLimit(request: GenerateContentParameters): number | undefined {
+    const limit = request.config?.maxOutputTokens;
+    if (limit === undefined) return undefined;
+    if (!Number.isSafeInteger(limit) || limit < 1)
+      throw new Error('maxOutputTokens must be a positive integer.');
+    return limit;
+  }
+
+  private chatOutputLimit(
+    request: GenerateContentParameters,
+  ): Record<string, number> {
+    const limit = this.outputLimit(request);
+    if (limit === undefined) return {};
+    return /(?:^|\/)(?:o[134](?:[-.]|$)|gpt-[5-9](?:[-.]|$))/i.test(
+      request.model,
+    )
+      ? { max_completion_tokens: limit }
+      : { max_tokens: limit };
   }
 
   private async generateOpenAIChat(
@@ -259,13 +407,16 @@ export class UniversalContentGenerator implements ContentGenerator {
     const tools = this.formatOpenAITools(request);
     const effort = ProviderManager.getInstance().getReasoningEffort();
 
-    const payload: any = {
+    const payload = {
       model: request.model,
       messages,
       stream: false,
-      reasoning_effort: effort === 'ultra' ? 'max' : effort,
+      ...this.chatOutputLimit(request),
+      reasoning_effort: ['xhigh', 'max', 'ultra'].includes(effort)
+        ? 'high'
+        : effort,
+      ...(tools ? { tools } : {}),
     };
-    if (tools) payload.tools = tools;
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -277,22 +428,34 @@ export class UniversalContentGenerator implements ContentGenerator {
       method: 'POST',
       headers,
       body: JSON.stringify(payload),
+      signal: request.config?.abortSignal,
     });
 
     if (!res.ok) {
       const errText = await res.text();
-      throw new Error(`OpenAI Provider [${provider.name}] HTTP ${res.status}: ${errText}`);
+      throw new Error(
+        `OpenAI Provider [${provider.name}] HTTP ${res.status}: ${errText}`,
+      );
     }
 
-    const data: any = await res.json();
+    const raw: unknown = await res.json();
+    const data = parseProviderValue(raw, chatSchema, 'OpenAI');
+    if (data.error)
+      throw new Error(`OpenAI Provider error: ${JSON.stringify(data.error)}`);
     const choice = data.choices?.[0];
+    if (!choice?.message)
+      throw new Error('OpenAI: response contains no message.');
+    if (choice?.finish_reason === 'length')
+      throw new Error(
+        'OpenAI output token limit reached; response is incomplete.',
+      );
     const parts: Part[] = [];
 
     if (choice?.message?.reasoning_content) {
       parts.push({
         text: choice.message.reasoning_content,
         thought: true,
-      } as any);
+      });
     }
     if (choice?.message?.content) {
       parts.push({
@@ -301,23 +464,24 @@ export class UniversalContentGenerator implements ContentGenerator {
     }
     if (choice?.message?.tool_calls) {
       for (const tc of choice.message.tool_calls) {
-        let args = {};
-        try {
-          args = JSON.parse(tc.function.arguments || '{}');
-        } catch {
-          args = { raw: tc.function.arguments };
-        }
+        if (!tc.id || !tc.function?.name)
+          throw new Error(
+            'OpenAI: tool call requires an ID and function name.',
+          );
         parts.push({
           functionCall: {
             id: tc.id,
             name: tc.function.name,
-            args,
+            args: this.parseArgs(tc.function.arguments ?? '{}'),
           },
-        } as any);
+        });
       }
     }
 
-    return this.buildGeminiResponse(parts);
+    return this.buildGeminiResponse(
+      parts,
+      providerUsage(data.usage, 'openai-chat'),
+    );
   }
 
   private async *streamOpenAIChat(
@@ -329,13 +493,17 @@ export class UniversalContentGenerator implements ContentGenerator {
     const tools = this.formatOpenAITools(request);
     const effort = ProviderManager.getInstance().getReasoningEffort();
 
-    const payload: any = {
+    const payload = {
       model: request.model,
       messages,
       stream: true,
-      reasoning_effort: effort === 'ultra' ? 'max' : effort,
+      stream_options: { include_usage: true },
+      ...this.chatOutputLimit(request),
+      reasoning_effort: ['xhigh', 'max', 'ultra'].includes(effort)
+        ? 'high'
+        : effort,
+      ...(tools ? { tools } : {}),
     };
-    if (tools) payload.tools = tools;
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -347,148 +515,197 @@ export class UniversalContentGenerator implements ContentGenerator {
       method: 'POST',
       headers,
       body: JSON.stringify(payload),
+      signal: request.config?.abortSignal,
     });
 
     if (!res.ok) {
       const errText = await res.text();
-      throw new Error(`OpenAI Provider [${provider.name}] Stream HTTP ${res.status}: ${errText}`);
+      throw new Error(
+        `OpenAI Provider [${provider.name}] Stream HTTP ${res.status}: ${errText}`,
+      );
     }
 
-    if (!res.body) {
-      throw new Error('No response body for stream');
-    }
+    const pendingToolCalls = new Map<
+      number,
+      { id: string; name: string; argsText: string }
+    >();
+    let completed = false;
+    let usage: GenerateContentResponseUsageMetadata | undefined;
+    for await (const { data: dataStr } of this.readSse(res, () => completed)) {
+      if (dataStr === '[DONE]') {
+        completed = true;
+        break;
+      }
+      const chunk = parseProviderJson(dataStr, chatSchema, 'OpenAI stream');
+      if (chunk.error)
+        throw new Error(`OpenAI stream error: ${JSON.stringify(chunk.error)}`);
+      usage = providerUsage(chunk.usage, 'openai-chat') ?? usage;
+      if (chunk.choices?.[0]?.finish_reason === 'length')
+        throw new Error(
+          'OpenAI output token limit reached; response is incomplete.',
+        );
+      if (chunk.choices?.[0]?.finish_reason) completed = true;
+      const delta = chunk.choices?.[0]?.delta;
+      if (!delta) {
+        continue;
+      }
 
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
+      // 1. Reasoning content
+      if (delta.reasoning_content) {
+        yield this.buildGeminiResponse([
+          { text: delta.reasoning_content, thought: true },
+        ]);
+      }
 
-    const pendingToolCalls = new Map<number, { id: string; name: string; argsText: string }>();
+      // 2. Normal text content
+      if (delta.content) {
+        yield this.buildGeminiResponse([{ text: delta.content }]);
+      }
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || !trimmed.startsWith('data:')) continue;
-        const dataStr = trimmed.slice(5).trim();
-        if (dataStr === '[DONE]') continue;
-
-        try {
-          const chunk = JSON.parse(dataStr);
-          const delta = chunk.choices?.[0]?.delta;
-          if (!delta) continue;
-
-          // 1. Reasoning content
-          if (delta.reasoning_content) {
-            yield this.buildGeminiResponse([
-              { text: delta.reasoning_content, thought: true } as any,
-            ]);
-          }
-
-          // 2. Normal text content
-          if (delta.content) {
-            yield this.buildGeminiResponse([
-              { text: delta.content },
-            ]);
-          }
-
-          // 3. Tool calls delta
-          if (delta.tool_calls && Array.isArray(delta.tool_calls)) {
-            for (const tc of delta.tool_calls) {
-              const idx = tc.index ?? 0;
-              const current = pendingToolCalls.get(idx) || { id: '', name: '', argsText: '' };
-              if (tc.id) current.id = tc.id;
-              if (tc.function?.name) current.name += tc.function.name;
-              if (tc.function?.arguments) current.argsText += tc.function.arguments;
-              pendingToolCalls.set(idx, current);
-            }
-          }
-        } catch {
-          // ignore chunk parse errors
+      // 3. Tool calls delta
+      if (delta.tool_calls && Array.isArray(delta.tool_calls)) {
+        for (const [position, tc] of delta.tool_calls.entries()) {
+          const idx = tc.index ?? position;
+          const current = pendingToolCalls.get(idx) || {
+            id: '',
+            name: '',
+            argsText: '',
+          };
+          if (tc.id) current.id = tc.id;
+          if (tc.function?.name) current.name += tc.function.name;
+          if (tc.function?.arguments) current.argsText += tc.function.arguments;
+          pendingToolCalls.set(idx, current);
         }
       }
     }
+
+    if (!completed)
+      throw new Error(
+        'OpenAI stream ended before completion; response may be incomplete.',
+      );
 
     // Flush any pending tool calls
     if (pendingToolCalls.size > 0) {
       const parts: Part[] = [];
       for (const [, tc] of pendingToolCalls) {
-        let args = {};
-        try {
-          args = JSON.parse(tc.argsText || '{}');
-        } catch {
-          args = { raw: tc.argsText };
-        }
+        if (!tc.id || !tc.name)
+          throw new Error(
+            'OpenAI stream: tool call requires an ID and function name.',
+          );
         parts.push({
           functionCall: {
             id: tc.id,
             name: tc.name,
-            args,
+            args: this.parseArgs(tc.argsText),
           },
-        } as any);
+        });
       }
       yield this.buildGeminiResponse(parts);
     }
+    if (usage) yield this.buildGeminiResponse([], usage);
   }
   // --- Shared SSE reader ---
 
   private async *readSse(
     res: Response,
+    finished?: () => boolean,
   ): AsyncGenerator<{ event?: string; data: string }> {
     if (!res.body) throw new Error('No response body for stream');
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
     let event: string | undefined;
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-      for (const raw of lines) {
-        const line = raw.replace(/\r$/, '');
-        if (line.startsWith('event:')) {
-          event = line.slice(6).trim();
-        } else if (line.startsWith('data:')) {
-          const data = line.slice(5).trim();
-          if (data) yield { event, data };
-        } else if (line === '') {
-          event = undefined;
+    let data: string[] = [];
+    const configuredIdleMs = Number(process.env['GEMINI_ULTRA_STREAM_IDLE_MS']);
+    const idleMs =
+      Number.isFinite(configuredIdleMs) && configuredIdleMs >= 1000
+        ? configuredIdleMs
+        : 120000;
+    try {
+      while (true) {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const timeout = new Promise<ReadableStreamReadResult<Uint8Array>>(
+          (resolve, reject) => {
+            timer = setTimeout(
+              () => {
+                if (finished?.()) resolve({ done: true, value: undefined });
+                else
+                  reject(
+                    new Error(
+                      `Provider stream was idle for ${idleMs} ms. Retry or choose a different endpoint.`,
+                    ),
+                  );
+                void reader.cancel().catch(() => {});
+              },
+              finished?.() ? Math.min(idleMs, 2000) : idleMs,
+            );
+          },
+        );
+        const chunk = await Promise.race([reader.read(), timeout]).finally(() =>
+          clearTimeout(timer),
+        );
+        const { done, value } = chunk;
+        buffer += done
+          ? decoder.decode()
+          : decoder.decode(value, { stream: true });
+        // Flush a final event even if the endpoint omits the closing newline.
+        if (done) buffer += '\n\n';
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        for (const raw of lines) {
+          const line = raw.replace(/\r$/, '');
+          if (line.startsWith('event:')) {
+            event = line.slice(6).trim();
+          } else if (line.startsWith('data:')) {
+            data.push(line.slice(5).replace(/^ /, ''));
+          } else if (line === '') {
+            if (data.length) yield { event, data: data.join('\n') };
+            data = [];
+            event = undefined;
+          }
         }
+        if (done) break;
       }
+    } finally {
+      await reader.cancel().catch(() => {});
+      reader.releaseLock();
     }
   }
 
   private parseArgs(text: string): Record<string, unknown> {
+    let value: unknown;
     try {
-      return JSON.parse(text || '{}');
+      value = JSON.parse(text || '{}');
     } catch {
-      return { raw: text };
+      throw new Error(
+        'Provider returned malformed tool argument JSON; the tool was not executed.',
+      );
     }
+    if (!isRecord(value))
+      throw new Error('Provider tool arguments must be a JSON object.');
+    return value;
   }
 
   private async collect(
     stream: AsyncGenerator<GenerateContentResponse>,
   ): Promise<GenerateContentResponse> {
     const parts: Part[] = [];
+    let usage: GenerateContentResponseUsageMetadata | undefined;
     for await (const chunk of stream) {
+      usage = chunk.usageMetadata ?? usage;
       for (const p of chunk.candidates?.[0]?.content?.parts ?? []) {
         parts.push(p);
       }
     }
-    return this.buildGeminiResponse(parts);
+    return this.buildGeminiResponse(parts, usage);
   }
 
   // --- OpenAI Responses Adapter (/v1/responses) ---
 
-  private buildResponsesInput(request: GenerateContentParameters): any[] {
-    const input: any[] = [];
+  private buildResponsesInput(
+    request: GenerateContentParameters,
+  ): Array<Record<string, unknown>> {
+    const input: Array<Record<string, unknown>> = [];
     for (const m of this.formatOpenAIMessages(request)) {
       if (m.role === 'system') continue;
       if (m.role === 'tool') {
@@ -539,14 +756,23 @@ export class UniversalContentGenerator implements ContentGenerator {
       parameters: t.function.parameters,
     }));
 
-    const payload: any = {
+    const payload = {
       model: request.model,
       input: this.buildResponsesInput(request),
       instructions: this.getSystemText(request) || undefined,
-      reasoning: { effort: effort === 'max' || effort === 'xhigh' || effort === 'ultra' ? 'high' : effort, summary: 'auto' },
+      reasoning: {
+        effort:
+          effort === 'max' || effort === 'xhigh' || effort === 'ultra'
+            ? 'high'
+            : effort,
+        summary: 'auto',
+      },
       stream: true,
+      ...(this.outputLimit(request) !== undefined
+        ? { max_output_tokens: this.outputLimit(request) }
+        : {}),
+      ...(tools ? { tools } : {}),
     };
-    if (tools) payload.tools = tools;
 
     const res = await fetch(url, {
       method: 'POST',
@@ -556,6 +782,7 @@ export class UniversalContentGenerator implements ContentGenerator {
         ...(provider.customHeaders || {}),
       },
       body: JSON.stringify(payload),
+      signal: request.config?.abortSignal,
     });
     if (!res.ok) {
       throw new Error(
@@ -563,15 +790,19 @@ export class UniversalContentGenerator implements ContentGenerator {
       );
     }
 
-    const calls = new Map<string, { callId: string; name: string; args: string }>();
+    const calls = new Map<
+      string,
+      { callId: string; name: string; args: string }
+    >();
+    let completed = false;
+    let usage: GenerateContentResponseUsageMetadata | undefined;
     for await (const { data } of this.readSse(res)) {
       if (data === '[DONE]') continue;
-      let ev: any;
-      try {
-        ev = JSON.parse(data);
-      } catch {
-        continue;
-      }
+      const ev = parseProviderJson(
+        data,
+        responsesSchema,
+        'OpenAI Responses stream',
+      );
       switch (ev.type) {
         case 'response.output_text.delta':
           if (ev.delta) yield this.buildGeminiResponse([{ text: ev.delta }]);
@@ -579,13 +810,15 @@ export class UniversalContentGenerator implements ContentGenerator {
         case 'response.reasoning_summary_text.delta':
         case 'response.reasoning_text.delta':
           if (ev.delta) {
-            yield this.buildGeminiResponse([
-              { text: ev.delta, thought: true } as any,
-            ]);
+            yield this.buildGeminiResponse([{ text: ev.delta, thought: true }]);
           }
           break;
         case 'response.output_item.added':
           if (ev.item?.type === 'function_call') {
+            if (!ev.item.id || !ev.item.call_id || !ev.item.name)
+              throw new Error(
+                'OpenAI Responses: incomplete function call identifiers.',
+              );
             calls.set(ev.item.id, {
               callId: ev.item.call_id,
               name: ev.item.name,
@@ -594,55 +827,63 @@ export class UniversalContentGenerator implements ContentGenerator {
           }
           break;
         case 'response.function_call_arguments.delta': {
-          const c = calls.get(ev.item_id);
+          const c = ev.item_id ? calls.get(ev.item_id) : undefined;
           if (c) c.args += ev.delta ?? '';
           break;
         }
         case 'response.function_call_arguments.done': {
-          const c = calls.get(ev.item_id);
+          const c = ev.item_id ? calls.get(ev.item_id) : undefined;
           if (c) c.args = ev.arguments ?? c.args;
           break;
         }
         case 'response.failed':
+        case 'response.incomplete':
         case 'error':
           throw new Error(
-            `OpenAI Responses error: ${JSON.stringify(ev.response?.error ?? ev.error ?? ev)}`,
+            `OpenAI Responses error: ${JSON.stringify(ev.response?.error ?? ev.response?.incomplete_details ?? ev.error ?? ev)}`,
           );
+        case 'response.completed':
+          usage = providerUsage(ev.response?.usage, 'openai-responses');
+          completed = true;
+          break;
         default:
           break;
       }
+      if (completed) break;
     }
 
+    if (!completed)
+      throw new Error(
+        'OpenAI Responses stream ended before response.completed.',
+      );
     if (calls.size > 0) {
       yield this.buildGeminiResponse(
-        [...calls.values()].map(
-          (c) =>
-            ({
-              functionCall: {
-                id: c.callId,
-                name: c.name,
-                args: this.parseArgs(c.args),
-              },
-            }) as any,
-        ),
+        [...calls.values()].map((c) => ({
+          functionCall: {
+            id: c.callId,
+            name: c.name,
+            args: this.parseArgs(c.args),
+          },
+        })),
       );
     }
+    if (usage) yield this.buildGeminiResponse([], usage);
   }
 
   // --- Anthropic Messages Adapter (/v1/messages) ---
 
-  private buildAnthropicMessages(request: GenerateContentParameters): any[] {
-    const contents: Content[] = Array.isArray(request.contents)
-      ? (request.contents as Content[])
-      : request.contents
-        ? [request.contents as Content]
-        : [];
-
-    const messages: any[] = [];
+  private buildAnthropicMessages(
+    request: GenerateContentParameters,
+  ): Array<{ role: string; content: Array<Record<string, unknown>> }> {
+    const contents = providerContents(request.contents);
+    const messages: Array<{
+      role: string;
+      content: Array<Record<string, unknown>>;
+    }> = [];
     for (const c of contents) {
       const role = c.role === 'model' ? 'assistant' : 'user';
-      const blocks: any[] = [];
-      for (const p of (c.parts || []) as any[]) {
+      const blocks: Array<Record<string, unknown>> = [];
+      for (const p of c.parts ?? []) {
         if (p.thought) continue;
         if (p.text) blocks.push({ type: 'text', text: p.text });
         if (p.functionCall) {
@@ -699,23 +940,28 @@ export class UniversalContentGenerator implements ContentGenerator {
   ): AsyncGenerator<GenerateContentResponse> {
     const url = `${provider.baseUrl}/messages`;
     const effort = ProviderManager.getInstance().getReasoningEffort();
-    const budget = this.effortToBudget(effort);
+    const maxTokens =
+      this.outputLimit(request) ?? this.effortToBudget(effort) + 8192;
+    const budget = Math.min(this.effortToBudget(effort), maxTokens - 1);
     const tools = this.formatOpenAITools(request)?.map((t) => ({
       name: t.function.name,
       description: t.function.description,
       input_schema: t.function.parameters,
     }));
 
-    const payload: any = {
+    const payload = {
       model: request.model,
       messages: this.buildAnthropicMessages(request),
-      max_tokens: budget + 8192,
+      max_tokens: maxTokens,
       stream: true,
-      thinking: { type: 'enabled', budget_tokens: budget },
+      ...(budget >= 1024
+        ? { thinking: { type: 'enabled', budget_tokens: budget } }
+        : {}),
+      ...(tools ? { tools } : {}),
+      ...(this.getSystemText(request)
+        ? { system: this.getSystemText(request) }
+        : {}),
     };
-    const sys = this.getSystemText(request);
-    if (sys) payload.system = sys;
-    if (tools) payload.tools = tools;
 
     const res = await fetch(url, {
       method: 'POST',
@@ -727,6 +973,7 @@ export class UniversalContentGenerator implements ContentGenerator {
         ...(provider.customHeaders || {}),
       },
       body: JSON.stringify(payload),
+      signal: request.config?.abortSignal,
     });
     if (!res.ok) {
       throw new Error(
@@ -734,45 +981,84 @@ export class UniversalContentGenerator implements ContentGenerator {
       );
     }
 
-    const toolBlocks = new Map<number, { id: string; name: string; json: string }>();
-    for await (const { data } of this.readSse(res)) {
-      let ev: any;
-      try {
-        ev = JSON.parse(data);
-      } catch {
-        continue;
+    const toolBlocks = new Map<
+      number,
+      {
+        id: string;
+        name: string;
+        json: string;
+        initialInput?: Record<string, unknown>;
       }
-      if (ev.type === 'content_block_start' && ev.content_block?.type === 'tool_use') {
+    >();
+    let completed = false;
+    let usageData: Record<string, unknown> = {};
+    for await (const { data } of this.readSse(res)) {
+      const ev = parseProviderJson(data, anthropicSchema, 'Anthropic stream');
+      const startUsage: unknown =
+        ev.type === 'message_start' ? ev.message?.usage : undefined;
+      const deltaUsage: unknown =
+        ev.type === 'message_delta' ? ev.usage : undefined;
+      if (isRecord(startUsage)) usageData = { ...usageData, ...startUsage };
+      if (isRecord(deltaUsage)) usageData = { ...usageData, ...deltaUsage };
+      if (
+        ev.type === 'content_block_start' &&
+        ev.content_block?.type === 'tool_use'
+      ) {
+        if (
+          ev.index === undefined ||
+          !ev.content_block.id ||
+          !ev.content_block.name
+        )
+          throw new Error('Anthropic: incomplete tool block identifiers.');
         toolBlocks.set(ev.index, {
           id: ev.content_block.id,
           name: ev.content_block.name,
           json: '',
+          initialInput: ev.content_block.input,
         });
       } else if (ev.type === 'content_block_delta') {
         const d = ev.delta;
         if (d?.type === 'thinking_delta' && d.thinking) {
-          yield this.buildGeminiResponse([{ text: d.thinking, thought: true } as any]);
+          yield this.buildGeminiResponse([{ text: d.thinking, thought: true }]);
         } else if (d?.type === 'text_delta' && d.text) {
           yield this.buildGeminiResponse([{ text: d.text }]);
         } else if (d?.type === 'input_json_delta') {
-          const b = toolBlocks.get(ev.index);
+          const b =
+            ev.index !== undefined ? toolBlocks.get(ev.index) : undefined;
           if (b) b.json += d.partial_json ?? '';
         }
       } else if (ev.type === 'error') {
         throw new Error(`Anthropic stream error: ${JSON.stringify(ev.error)}`);
+      } else if (
+        ev.type === 'message_delta' &&
+        ev.delta?.stop_reason === 'max_tokens'
+      ) {
+        throw new Error(
+          'Anthropic output token limit reached; response is incomplete.',
+        );
+      } else if (ev.type === 'message_stop') {
+        completed = true;
+        break;
       }
     }
 
+    if (!completed)
+      throw new Error('Anthropic stream ended before message_stop.');
     if (toolBlocks.size > 0) {
       yield this.buildGeminiResponse(
-        [...toolBlocks.values()].map(
-          (b) =>
-            ({
-              functionCall: { id: b.id, name: b.name, args: this.parseArgs(b.json) },
-            }) as any,
-        ),
+        [...toolBlocks.values()].map((b) => ({
+          functionCall: {
+            id: b.id,
+            name: b.name,
+            args: this.parseArgs(
+              b.json || JSON.stringify(b.initialInput ?? {}),
+            ),
+          },
+        })),
       );
     }
+    const usage = providerUsage(usageData, 'anthropic');
+    if (usage) yield this.buildGeminiResponse([], usage);
   }
 
   // --- Gemini-compatible custom endpoint (baseUrl + apiKey) ---
@@ -783,22 +1069,27 @@ export class UniversalContentGenerator implements ContentGenerator {
     stream: boolean,
   ): string {
     const base = provider.baseUrl.replace(/\/+$/, '');
-    const method = stream ? 'streamGenerateContent?alt=sse&' : 'generateContent?';
+    const method = stream
+      ? 'streamGenerateContent?alt=sse&'
+      : 'generateContent?';
     return `${base}/models/${model}:${method}key=${encodeURIComponent(provider.apiKey)}`;
   }
 
-  private geminiBody(request: GenerateContentParameters): any {
-    const cfg: any = request.config ?? {};
+  private geminiBody(request: GenerateContentParameters) {
+    const cfg = request.config ?? {};
     const { abortSignal: _a, httpOptions: _h, ...rest } = cfg;
     void _a;
     void _h;
     const { systemInstruction, tools, ...generationConfig } = rest;
     return {
-      contents: request.contents,
-      systemInstruction:
-        typeof systemInstruction === 'string'
-          ? { parts: [{ text: systemInstruction }] }
-          : systemInstruction,
+      contents: providerContents(request.contents),
+      systemInstruction: systemInstruction
+        ? {
+            parts: providerContents(systemInstruction).flatMap(
+              (content) => content.parts ?? [],
+            ),
+          }
+        : undefined,
       tools,
       generationConfig,
     };
@@ -810,15 +1101,23 @@ export class UniversalContentGenerator implements ContentGenerator {
   ): Promise<GenerateContentResponse> {
     const res = await fetch(this.geminiUrl(provider, request.model, false), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...(provider.customHeaders || {}) },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(provider.customHeaders || {}),
+      },
       body: JSON.stringify(this.geminiBody(request)),
+      signal: request.config?.abortSignal,
     });
     if (!res.ok) {
-      throw new Error(`Gemini [${provider.name}] HTTP ${res.status}: ${await res.text()}`);
+      throw new Error(
+        `Gemini [${provider.name}] HTTP ${res.status}: ${await res.text()}`,
+      );
     }
-    const raw: any = await res.json();
-    Object.setPrototypeOf(raw, GenerateContentResponse.prototype);
-    return raw;
+    const value: unknown = await res.json();
+    const raw = parseProviderValue(value, geminiSchema, 'Gemini');
+    if (raw.error)
+      throw new Error(`Gemini error: ${JSON.stringify(raw.error)}`);
+    return Object.assign(new GenerateContentResponse(), raw);
   }
 
   private async *streamGemini(
@@ -827,20 +1126,28 @@ export class UniversalContentGenerator implements ContentGenerator {
   ): AsyncGenerator<GenerateContentResponse> {
     const res = await fetch(this.geminiUrl(provider, request.model, true), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...(provider.customHeaders || {}) },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(provider.customHeaders || {}),
+      },
       body: JSON.stringify(this.geminiBody(request)),
+      signal: request.config?.abortSignal,
     });
     if (!res.ok) {
-      throw new Error(`Gemini [${provider.name}] HTTP ${res.status}: ${await res.text()}`);
+      throw new Error(
+        `Gemini [${provider.name}] HTTP ${res.status}: ${await res.text()}`,
+      );
     }
+    let completed = false;
     for await (const { data } of this.readSse(res)) {
-      try {
-        const raw: any = JSON.parse(data);
-        Object.setPrototypeOf(raw, GenerateContentResponse.prototype);
-        yield raw;
-      } catch {
-        // skip malformed chunk
-      }
+      const raw = parseProviderJson(data, geminiSchema, 'Gemini stream');
+      if (raw.error)
+        throw new Error(`Gemini stream error: ${JSON.stringify(raw.error)}`);
+      if (raw.candidates?.some((candidate) => candidate.finishReason))
+        completed = true;
+      yield Object.assign(new GenerateContentResponse(), raw);
+      if (completed) break;
     }
+    if (!completed) throw new Error('Gemini stream ended before completion.');
   }
 }

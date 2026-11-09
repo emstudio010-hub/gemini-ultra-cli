@@ -50,6 +50,10 @@ import {
 import { safeJsonStringify } from '../utils/safeJsonStringify.js';
 import { isMcpToolName } from '../tools/mcp-tool.js';
 import { estimateTokenCountSync } from '../utils/tokenCalculation.js';
+import { coreEvents } from '../utils/events.js';
+import { I18nManager } from '../i18n/i18nManager.js';
+
+const missingUsageEndpoints = new Set<string>();
 
 interface StructuredError {
   status: number;
@@ -150,6 +154,7 @@ export class LoggingContentGenerator implements ContentGenerator {
   constructor(
     private readonly wrapped: ContentGenerator,
     private readonly config: Config,
+    private readonly externalEndpoint?: string,
   ) {}
 
   getWrapped(): ContentGenerator {
@@ -197,6 +202,17 @@ export class LoggingContentGenerator implements ContentGenerator {
     req: GenerateContentParameters,
     method: 'generateContent' | 'generateContentStream',
   ): ServerDetails {
+    if (this.externalEndpoint) {
+      const url = new URL(this.externalEndpoint);
+      return {
+        address: url.hostname,
+        port: url.port
+          ? Number(url.port)
+          : url.protocol === 'https:'
+            ? 443
+            : 80,
+      };
+    }
     // Case 1: Authenticated with a Google account (`gcloud auth login`).
     // Requests are routed through the internal CodeAssistServer.
     if (this.wrapped instanceof CodeAssistServer) {
@@ -239,6 +255,20 @@ export class LoggingContentGenerator implements ContentGenerator {
     generationConfig?: GenerateContentConfig,
     serverDetails?: ServerDetails,
   ): void {
+    if (
+      this.externalEndpoint &&
+      !usageMetadata &&
+      !missingUsageEndpoints.has(this.externalEndpoint)
+    ) {
+      missingUsageEndpoints.add(this.externalEndpoint);
+      coreEvents.emitFeedback(
+        'warning',
+        I18nManager.getInstance().t(
+          '当前供应商未返回 Token 用量，统计中的零值不代表实际没有消耗。请以供应商账单为准。',
+          'This provider did not report token usage. Zero counters do not mean there was no usage; consult the provider billing records.',
+        ),
+      );
+    }
     const event = new ApiResponseEvent(
       model,
       durationMs,

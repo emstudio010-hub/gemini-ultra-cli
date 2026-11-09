@@ -237,10 +237,10 @@ export function getUpdateTopicDeclaration(): FunctionDeclaration {
         [TOPIC_PARAM_STRATEGIC_INTENT]: {
           type: 'string',
           description:
-            'A mandatory one-sentence statement of your immediate intent.',
+            '(OPTIONAL) A one-sentence statement of your immediate strategic intent.',
         },
       },
-      required: [TOPIC_PARAM_STRATEGIC_INTENT],
+      required: [],
     },
   };
 }

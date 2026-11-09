@@ -7,6 +7,9 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import { randomUUID } from 'node:crypto';
+import { z } from 'zod';
+import { readLocalJsonConfig } from '../utils/localJsonConfig.js';
 import {
   type ExternalProviderProfile,
   type ProviderProtocol,
@@ -33,8 +36,16 @@ export function slugifyProviderId(name: string): string {
 }
 
 export function inferProtocolFromUrl(baseUrl: string): ProviderProtocol {
-  const lower = baseUrl.toLowerCase();
-  if (lower.includes('/anthropic') || lower.includes('anthropic.com')) {
+  const lower = baseUrl
+    .trim()
+    .toLowerCase()
+    .replace(/[?#].*$/, '')
+    .replace(/\/+$/, '');
+  if (
+    lower.includes('/anthropic') ||
+    lower.includes('anthropic.com') ||
+    lower.endsWith('/messages')
+  ) {
     return 'anthropic';
   }
   if (lower.endsWith('/responses')) {
@@ -44,6 +55,115 @@ export function inferProtocolFromUrl(baseUrl: string): ProviderProtocol {
     return 'gemini';
   }
   return 'openai-chat';
+}
+
+export function normalizeProviderUrl(value: string): string {
+  const url = new URL(value.trim());
+  if (
+    !['http:', 'https:'].includes(url.protocol) ||
+    url.username ||
+    url.password
+  )
+    throw new Error('Use an HTTP(S) endpoint without embedded credentials.');
+  url.hash = '';
+  url.search = '';
+  return url.href
+    .replace(/\/+$/, '')
+    .replace(/\/(chat\/completions|responses|messages|models)$/i, '');
+}
+
+const modelId = z.string().trim().min(1);
+const MAX_PROVIDERS_FILE_BYTES = 4 * 1024 * 1024;
+const protocolSchema = z.enum([
+  'openai-chat',
+  'openai-responses',
+  'anthropic',
+  'gemini',
+]);
+const providersSchema = z.object({
+  version: z.literal(1).default(1),
+  activeProviderId: modelId.optional(),
+  activeModel: modelId.optional(),
+  activeImageProviderId: modelId.optional(),
+  activeImageModel: modelId.optional(),
+  reasoningEffort: z
+    .enum(['low', 'medium', 'high', 'xhigh', 'max', 'ultra'])
+    .default('high'),
+  providers: z
+    .array(
+      z.object({
+        id: modelId,
+        name: modelId,
+        baseUrl: modelId,
+        apiKey: z.string().default(''),
+        protocol: protocolSchema.optional(),
+        models: z.array(modelId).default([]),
+        defaultModel: modelId.optional(),
+        imageModels: z.array(modelId).optional(),
+        defaultImageModel: modelId.optional(),
+        customHeaders: z.record(z.string()).optional(),
+        updatedAt: z.string().default(''),
+      }),
+    )
+    .default([]),
+});
+
+function validateProvidersConfig(value: unknown): ProvidersConfigFile {
+  const parsed = providersSchema.safeParse(value);
+  if (!parsed.success)
+    throw new Error(
+      'Invalid provider configuration. Check provider fields and model lists.',
+    );
+  const ids = new Set<string>();
+  const providers = parsed.data.providers.map((provider) => {
+    const id = provider.id.toLowerCase();
+    if (ids.has(id)) throw new Error('Provider IDs must be unique.');
+    ids.add(id);
+    const models = [
+      ...new Set([
+        ...provider.models,
+        ...(provider.defaultModel ? [provider.defaultModel] : []),
+      ]),
+    ];
+    const imageModels = [
+      ...new Set([
+        ...(provider.imageModels || []),
+        ...(provider.defaultImageModel ? [provider.defaultImageModel] : []),
+      ]),
+    ];
+    return {
+      ...provider,
+      baseUrl: normalizeProviderUrl(provider.baseUrl),
+      protocol: provider.protocol ?? inferProtocolFromUrl(provider.baseUrl),
+      models,
+      defaultModel: provider.defaultModel ?? models[0],
+      imageModels,
+      defaultImageModel: provider.defaultImageModel ?? imageModels[0],
+    };
+  });
+  const activeProvider = providers.find(
+    (provider) =>
+      provider.id.toLowerCase() === parsed.data.activeProviderId?.toLowerCase(),
+  );
+  const imageProvider = providers.find(
+    (provider) =>
+      provider.id.toLowerCase() ===
+      parsed.data.activeImageProviderId?.toLowerCase(),
+  );
+  return {
+    ...parsed.data,
+    providers,
+    activeProviderId: activeProvider?.id,
+    activeModel:
+      parsed.data.activeProviderId && !activeProvider
+        ? undefined
+        : parsed.data.activeModel,
+    activeImageProviderId: imageProvider?.id,
+    activeImageModel:
+      parsed.data.activeImageProviderId && !imageProvider
+        ? undefined
+        : parsed.data.activeImageModel,
+  };
 }
 
 export class ProviderManager {
@@ -71,40 +191,41 @@ export class ProviderManager {
   }
 
   private loadFromDisk(): ProvidersConfigFile {
-    try {
-      if (fs.existsSync(this.filePath)) {
-        const raw = fs.readFileSync(this.filePath, 'utf-8');
-        const parsed = JSON.parse(raw) as Partial<ProvidersConfigFile>;
-        return {
-          version: 1,
-          activeProviderId: parsed.activeProviderId,
-          activeModel: parsed.activeModel,
-          activeImageProviderId: parsed.activeImageProviderId,
-          activeImageModel: parsed.activeImageModel,
-          reasoningEffort: parsed.reasoningEffort ?? 'high',
-          providers: Array.isArray(parsed.providers) ? parsed.providers : [],
-        };
-      }
-    } catch {
-      // Fall through to default clean config
-    }
-    return {
-      version: 1,
-      reasoningEffort: 'high',
-      providers: [],
-    };
+    return readLocalJsonConfig(
+      this.filePath,
+      validateProvidersConfig,
+      () => ({
+        version: 1,
+        reasoningEffort: 'high',
+        providers: [],
+      }),
+      '/provider',
+      MAX_PROVIDERS_FILE_BYTES,
+    );
   }
 
-  saveToDisk(): void {
+  saveToDisk(next: ProvidersConfigFile = this.data): void {
+    const validated = validateProvidersConfig(next);
+    const content = JSON.stringify(validated, null, 2);
+    if (Buffer.byteLength(content) > MAX_PROVIDERS_FILE_BYTES)
+      throw new Error('Provider configuration exceeds the 4 MiB limit.');
     const dir = path.dirname(this.filePath);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
-    fs.writeFileSync(
-      this.filePath,
-      JSON.stringify(this.data, null, 2),
-      'utf-8',
-    );
+    const temp = `${this.filePath}.${randomUUID()}.tmp`;
+    try {
+      fs.writeFileSync(temp, content, {
+        encoding: 'utf8',
+        mode: 0o600,
+      });
+      if (fs.existsSync(this.filePath))
+        fs.copyFileSync(this.filePath, `${this.filePath}.bak`);
+      fs.renameSync(temp, this.filePath);
+      this.data = validated;
+    } finally {
+      if (fs.existsSync(temp)) fs.unlinkSync(temp);
+    }
   }
 
   getPresets() {
@@ -112,17 +233,19 @@ export class ProviderManager {
   }
 
   listProviders(): ExternalProviderProfile[] {
-    return [...this.data.providers];
+    return structuredClone(this.data.providers);
   }
 
   getProvider(idOrName: string): ExternalProviderProfile | undefined {
     const needle = idOrName.trim().toLowerCase();
-    return this.data.providers.find(
+    const provider = this.data.providers.find(
       (p) => p.id.toLowerCase() === needle || p.name.toLowerCase() === needle,
     );
+    return provider ? structuredClone(provider) : undefined;
   }
 
   upsertProvider(input: {
+    id?: string;
     name: string;
     baseUrl: string;
     apiKey: string;
@@ -134,20 +257,42 @@ export class ProviderManager {
     customHeaders?: Record<string, string>;
     setActive?: boolean;
   }): ExternalProviderProfile {
-    const normalizedUrl = input.baseUrl.trim().replace(/\/+$/, '');
-    const id = slugifyProviderId(input.name);
-    const existing = this.getProvider(id) ?? this.getProvider(input.name);
+    const normalizedUrl = normalizeProviderUrl(input.baseUrl);
+    let id = slugifyProviderId(input.name);
+    const existing = input.id
+      ? this.getProvider(input.id)
+      : this.data.providers.find(
+          (provider) =>
+            provider.name.toLowerCase() === input.name.trim().toLowerCase(),
+        );
+    if (input.id && !existing) throw new Error('Provider no longer exists.');
+    if (
+      this.data.providers.some(
+        (provider) =>
+          provider.id !== existing?.id &&
+          provider.name.toLowerCase() === input.name.trim().toLowerCase(),
+      )
+    ) {
+      throw new Error('A provider with this name already exists.');
+    }
+    if (
+      !existing &&
+      this.data.providers.some(
+        (provider) => provider.id.toLowerCase() === id.toLowerCase(),
+      )
+    )
+      id = `${id}-${randomUUID().slice(0, 8)}`;
     const protocol =
       input.protocol ??
       existing?.protocol ??
-      inferProtocolFromUrl(normalizedUrl);
+      inferProtocolFromUrl(input.baseUrl);
 
     const mergedModels = Array.from(
       new Set(
         [
           ...(input.models ?? []),
           ...(input.defaultModel ? [input.defaultModel] : []),
-          ...(existing?.models ?? []),
+          ...(input.models === undefined ? (existing?.models ?? []) : []),
         ]
           .map((m) => m.trim())
           .filter(Boolean),
@@ -156,7 +301,9 @@ export class ProviderManager {
 
     const defaultModel =
       input.defaultModel?.trim() ||
-      existing?.defaultModel ||
+      (existing?.defaultModel && mergedModels.includes(existing.defaultModel)
+        ? existing.defaultModel
+        : undefined) ||
       mergedModels[0] ||
       undefined;
 
@@ -165,7 +312,9 @@ export class ProviderManager {
         [
           ...(input.imageModels ?? []),
           ...(input.defaultImageModel ? [input.defaultImageModel] : []),
-          ...(existing?.imageModels ?? []),
+          ...(input.imageModels === undefined
+            ? (existing?.imageModels ?? [])
+            : []),
         ]
           .map((m) => m.trim())
           .filter(Boolean),
@@ -181,31 +330,46 @@ export class ProviderManager {
       models: mergedModels,
       defaultModel,
       imageModels: mergedImageModels,
-      defaultImageModel: input.defaultImageModel || existing?.defaultImageModel || mergedImageModels[0],
+      defaultImageModel:
+        input.defaultImageModel ||
+        (existing?.defaultImageModel &&
+        mergedImageModels.includes(existing.defaultImageModel)
+          ? existing.defaultImageModel
+          : undefined) ||
+        mergedImageModels[0],
       customHeaders: input.customHeaders ?? existing?.customHeaders,
       updatedAt: new Date().toISOString(),
     };
 
-    const idx = this.data.providers.findIndex((p) => p.id === profile.id);
+    const next = structuredClone(this.data);
+    const idx = next.providers.findIndex((p) => p.id === profile.id);
     if (idx >= 0) {
-      this.data.providers[idx] = profile;
+      next.providers[idx] = profile;
     } else {
-      this.data.providers.push(profile);
+      next.providers.push(profile);
     }
 
     if (input.setActive !== false) {
-      this.data.activeProviderId = profile.id;
-      if (defaultModel) {
-        this.data.activeModel = defaultModel;
-      }
+      next.activeProviderId = profile.id;
+      next.activeModel = defaultModel;
       if (profile.defaultImageModel) {
-        this.data.activeImageProviderId = profile.id;
-        this.data.activeImageModel = profile.defaultImageModel;
+        next.activeImageProviderId = profile.id;
+        next.activeImageModel = profile.defaultImageModel;
       }
     }
-
-    this.saveToDisk();
-    return profile;
+    if (
+      next.activeProviderId === profile.id &&
+      (!next.activeModel || !mergedModels.includes(next.activeModel))
+    )
+      next.activeModel = defaultModel;
+    if (
+      next.activeImageProviderId === profile.id &&
+      (!next.activeImageModel ||
+        !mergedImageModels.includes(next.activeImageModel))
+    )
+      next.activeImageModel = profile.defaultImageModel;
+    this.saveToDisk(next);
+    return structuredClone(profile);
   }
 
   removeProvider(idOrName: string): boolean {
@@ -213,36 +377,36 @@ export class ProviderManager {
     if (!existing) {
       return false;
     }
-    this.data.providers = this.data.providers.filter(
-      (p) => p.id !== existing.id,
-    );
-    if (this.data.activeProviderId === existing.id) {
-      this.data.activeProviderId = this.data.providers[0]?.id;
-      this.data.activeModel = this.data.providers[0]?.defaultModel;
+    const next = structuredClone(this.data);
+    next.providers = next.providers.filter((p) => p.id !== existing.id);
+    if (next.activeProviderId === existing.id) {
+      next.activeProviderId = next.providers[0]?.id;
+      next.activeModel = next.providers[0]?.defaultModel;
     }
-    if (this.data.activeImageProviderId === existing.id) {
-      this.data.activeImageProviderId = undefined;
-      this.data.activeImageModel = undefined;
+    if (next.activeImageProviderId === existing.id) {
+      next.activeImageProviderId = undefined;
+      next.activeImageModel = undefined;
     }
-    this.saveToDisk();
+    this.saveToDisk(next);
     return true;
   }
 
   setActiveSelection(providerId: string | undefined, modelName?: string): void {
-    this.data.activeProviderId = providerId;
-    if (modelName) {
-      this.data.activeModel = modelName;
-      if (providerId) {
-        const provider = this.getProvider(providerId);
-        if (provider) {
-          if (!provider.models.includes(modelName)) {
-            provider.models.unshift(modelName);
-          }
-          provider.defaultModel = modelName;
-        }
-      }
+    const next = structuredClone(this.data);
+    const provider = providerId
+      ? next.providers.find((item) => item.id === providerId)
+      : undefined;
+    if (providerId && !provider) throw new Error('Provider no longer exists.');
+    const selected =
+      modelName?.trim() || provider?.defaultModel || provider?.models[0];
+    next.activeProviderId = providerId;
+    next.activeModel = selected;
+    if (provider && selected) {
+      if (!provider.models.includes(selected))
+        provider.models.unshift(selected);
+      provider.defaultModel = selected;
     }
-    this.saveToDisk();
+    this.saveToDisk(next);
   }
 
   getActiveProvider(): ExternalProviderProfile | undefined {
@@ -256,23 +420,43 @@ export class ProviderManager {
     return this.data.activeModel ?? this.getActiveProvider()?.defaultModel;
   }
 
-  setActiveImageModel(providerId: string | undefined, modelName?: string): void {
-    this.data.activeImageProviderId = providerId;
-    this.data.activeImageModel = modelName;
-    if (providerId && modelName) {
-      const p = this.getProvider(providerId);
-      if (p) {
-        p.imageModels = Array.from(new Set([...(p.imageModels || []), modelName]));
-        p.defaultImageModel = modelName;
-      }
+  setActiveImageModel(
+    providerId: string | undefined,
+    modelName?: string,
+  ): void {
+    const next = structuredClone(this.data);
+    const provider = providerId
+      ? next.providers.find((item) => item.id === providerId)
+      : undefined;
+    if (providerId && !provider) throw new Error('Provider no longer exists.');
+    const selected =
+      modelName?.trim() ||
+      provider?.defaultImageModel ||
+      provider?.imageModels?.[0];
+    next.activeImageProviderId = providerId;
+    next.activeImageModel = selected;
+    if (provider && selected) {
+      provider.imageModels = [
+        ...new Set([...(provider.imageModels || []), selected]),
+      ];
+      provider.defaultImageModel = selected;
     }
-    this.saveToDisk();
+    this.saveToDisk(next);
   }
 
-  getActiveImageModel(): { provider?: ExternalProviderProfile; modelId: string } {
+  getActiveImageModel(): {
+    provider?: ExternalProviderProfile;
+    modelId: string;
+  } {
     const provId = this.data.activeImageProviderId;
-    const provider = provId ? this.getProvider(provId) : this.getActiveProvider();
-    const modelId = this.data.activeImageModel || provider?.defaultImageModel || 'dall-e-3';
+    const provider = provId
+      ? this.getProvider(provId)
+      : this.getActiveProvider();
+    const modelId =
+      this.data.activeImageModel ||
+      provider?.defaultImageModel ||
+      provider?.imageModels?.[0] ||
+      '';
     return { provider, modelId };
   }
 
@@ -281,8 +465,7 @@ export class ProviderManager {
   }
 
   setReasoningEffort(effort: ReasoningEffortLevel): void {
-    this.data.reasoningEffort = effort;
-    this.saveToDisk();
+    this.saveToDisk({ ...this.data, reasoningEffort: effort });
   }
 
   resolveProviderForModel(modelSpec: string): {
@@ -321,7 +504,7 @@ export class ProviderManager {
         provider.models.includes(trimmed) ||
         provider.defaultModel === trimmed
       ) {
-        return { provider, modelId: trimmed };
+        return { provider: structuredClone(provider), modelId: trimmed };
       }
     }
 
@@ -366,12 +549,16 @@ export class ProviderManager {
     protocol?: ProviderProtocol;
     customHeaders?: Record<string, string>;
     timeoutMs?: number;
+    signal?: AbortSignal;
   }): Promise<{ models: string[]; error?: string }> {
-    const cleanBase = params.baseUrl
-      .trim()
-      .replace(/\/+(chat\/completions|responses|messages|models)\/?$/i, '')
-      .replace(/\/+$/, '');
+    let cleanBase: string;
+    try {
+      cleanBase = normalizeProviderUrl(params.baseUrl);
+    } catch {
+      return { models: [], error: 'Invalid HTTP(S) endpoint URL.' };
+    }
     const modelsUrl = `${cleanBase}/models`;
+    const protocol = params.protocol ?? inferProtocolFromUrl(params.baseUrl);
 
     const headers: Record<string, string> = {
       Accept: 'application/json',
@@ -379,14 +566,18 @@ export class ProviderManager {
     };
 
     if (params.apiKey.trim()) {
-      headers['Authorization'] = `Bearer ${params.apiKey.trim()}`;
-      if (params.protocol === 'anthropic') {
+      if (protocol === 'gemini')
+        headers['x-goog-api-key'] = params.apiKey.trim();
+      else if (protocol === 'anthropic')
         headers['x-api-key'] = params.apiKey.trim();
-        headers['anthropic-version'] = '2023-06-01';
-      }
+      else headers['Authorization'] = `Bearer ${params.apiKey.trim()}`;
     }
+    if (protocol === 'anthropic') headers['anthropic-version'] ??= '2023-06-01';
 
     const controller = new AbortController();
+    const onAbort = () => controller.abort(params.signal?.reason);
+    if (params.signal?.aborted) onAbort();
+    else params.signal?.addEventListener('abort', onAbort, { once: true });
     const timer = setTimeout(
       () => controller.abort(),
       params.timeoutMs ?? 8000,
@@ -406,23 +597,28 @@ export class ProviderManager {
         };
       }
 
-      const body = (await response.json()) as {
-        data?: Array<{ id?: string; name?: string }>;
-        models?: Array<{ id?: string; name?: string } | string>;
-      };
+      const body = z
+        .object({
+          data: z.array(z.unknown()).optional(),
+          models: z.array(z.unknown()).optional(),
+        })
+        .safeParse(await response.json());
+      if (!body.success)
+        return { models: [], error: 'Invalid model catalog response.' };
 
       const extracted: string[] = [];
-      const list = Array.isArray(body.data)
-        ? body.data
-        : Array.isArray(body.models)
-          ? body.models
-          : [];
+      const list = body.data.data ?? body.data.models ?? [];
 
       for (const item of list) {
         if (typeof item === 'string') {
-          extracted.push(item);
+          extracted.push(item.trim().replace(/^models\//, ''));
         } else if (item && typeof item === 'object') {
-          const rawId = item.id || item.name;
+          const rawId =
+            'id' in item && typeof item.id === 'string'
+              ? item.id
+              : 'name' in item && typeof item.name === 'string'
+                ? item.name
+                : undefined;
           if (typeof rawId === 'string' && rawId.trim()) {
             extracted.push(rawId.trim().replace(/^models\//, ''));
           }
@@ -430,15 +626,20 @@ export class ProviderManager {
       }
 
       return {
-        models: Array.from(new Set(extracted)),
+        models: Array.from(new Set(extracted.filter(Boolean))),
       };
     } catch (err) {
       return {
         models: [],
-        error: err instanceof Error ? err.message : String(err),
+        error: controller.signal.aborted
+          ? params.signal?.aborted
+            ? 'Model discovery cancelled.'
+            : 'Model discovery timed out.'
+          : `Model discovery failed (${err instanceof Error ? err.name : 'network error'}). Check the endpoint, headers and network.`,
       };
     } finally {
       clearTimeout(timer);
+      params.signal?.removeEventListener('abort', onAbort);
     }
   }
 }

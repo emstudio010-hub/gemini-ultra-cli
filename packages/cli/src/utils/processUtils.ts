@@ -5,8 +5,6 @@
  */
 
 import type { ChildProcess } from 'node:child_process';
-import { runExitCleanup } from './cleanup.js';
-import { waitForUpdateCompletion } from './handleAutoUpdate.js';
 
 /**
  * Signals intercepted by the parent process when supervising a child process.
@@ -108,6 +106,7 @@ export async function relaunchApp(options?: {
 }): Promise<void> {
   if (isRelaunching) return;
   isRelaunching = true;
+  const { waitForUpdateCompletion } = await import('./handleAutoUpdate.js');
   await waitForUpdateCompletion();
 
   if (process.send && !process.env['VITEST'] && options?.overrideAuthType) {
@@ -138,6 +137,7 @@ export async function relaunchApp(options?: {
     });
   }
 
+  const { runExitCleanup } = await import('./cleanup.js');
   await runExitCleanup();
 
   process.exit(RELAUNCH_EXIT_CODE);

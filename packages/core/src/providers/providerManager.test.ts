@@ -4,25 +4,31 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { ProviderManager } from './providerManager.js';
+import { randomUUID } from 'node:crypto';
+import { ProviderManager, inferProtocolFromUrl } from './providerManager.js';
+import { coreEvents } from '../utils/events.js';
 
 describe('ProviderManager', () => {
-  const tmpFile = path.join(os.tmpdir(), `test-providers-${Date.now()}.json`);
+  let tmpFile: string;
 
   beforeEach(() => {
+    tmpFile = path.join(os.tmpdir(), `test-providers-${randomUUID()}.json`);
     ProviderManager.resetInstance();
   });
 
   afterEach(() => {
-    try {
-      if (fs.existsSync(tmpFile)) {
-        fs.unlinkSync(tmpFile);
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    for (const file of [tmpFile, `${tmpFile}.bak`]) {
+      if (fs.existsSync(file)) {
+        if (fs.statSync(file).isDirectory()) fs.rmdirSync(file);
+        else fs.unlinkSync(file);
       }
-    } catch {}
+    }
   });
 
   it('initializes with default empty list and presets', () => {
@@ -59,5 +65,149 @@ describe('ProviderManager', () => {
     // Change reasoning effort
     mgr.setReasoningEffort('xhigh');
     expect(mgr.getReasoningEffort()).toBe('xhigh');
+  });
+
+  it.each([
+    '{"providers":[{"apiKey":"private-fixture"}]}',
+    '{"private-fixture":',
+  ])(
+    'recovers invalid provider data without destroying it (%#)',
+    (original) => {
+      const warning = vi
+        .spyOn(coreEvents, 'emitFeedback')
+        .mockImplementation(() => {});
+      fs.writeFileSync(tmpFile, original);
+      const mgr = new ProviderManager(tmpFile);
+      expect(mgr.getAllExternalModelItems()).toEqual([]);
+      expect(mgr.getActiveProvider()).toBeUndefined();
+      expect(fs.readFileSync(tmpFile, 'utf8')).toBe(original);
+      expect(warning).toHaveBeenCalled();
+      expect(JSON.stringify(warning.mock.calls)).not.toContain(
+        'private-fixture',
+      );
+      mgr.setReasoningEffort('high');
+      expect(fs.readFileSync(`${tmpFile}.bak`, 'utf8')).toBe(original);
+    },
+  );
+
+  it('keeps model defaults and provider identities consistent after edits and switches', () => {
+    const mgr = new ProviderManager(tmpFile);
+    const first = mgr.upsertProvider({
+      name: 'Alpha',
+      baseUrl: 'https://alpha.test/v1',
+      apiKey: 'fixture',
+      models: ['old'],
+      defaultModel: 'old',
+      imageModels: ['old-image'],
+      defaultImageModel: 'old-image',
+    });
+    mgr.upsertProvider({
+      id: first.id,
+      name: first.name,
+      baseUrl: first.baseUrl,
+      apiKey: first.apiKey,
+      models: ['new'],
+      imageModels: [],
+      setActive: false,
+    });
+    expect(mgr.getActiveModel()).toBe('new');
+    expect(mgr.getProvider(first.id)?.defaultModel).toBe('new');
+    expect(mgr.getActiveImageModel().modelId).toBe('');
+    const second = mgr.upsertProvider({
+      name: 'Beta',
+      baseUrl: 'https://beta.test/v1',
+      apiKey: 'fixture',
+      models: ['beta'],
+      setActive: false,
+    });
+    mgr.setActiveSelection(second.id);
+    expect(mgr.getActiveModel()).toBe('beta');
+    expect(() => mgr.setActiveSelection('missing-provider')).toThrow(
+      'no longer exists',
+    );
+    expect(mgr.getActiveModel()).toBe('beta');
+    expect(() => mgr.upsertProvider({ ...first, name: 'Beta' })).toThrow(
+      'already exists',
+    );
+    const collisionA = mgr.upsertProvider({
+      name: 'A B',
+      baseUrl: first.baseUrl,
+      apiKey: 'a',
+      setActive: false,
+    });
+    const collisionB = mgr.upsertProvider({
+      name: 'A-B',
+      baseUrl: second.baseUrl,
+      apiKey: 'b',
+      setActive: false,
+    });
+    expect(collisionA.id).not.toBe(collisionB.id);
+    expect(mgr.getProvider(collisionA.id)?.apiKey).toBe('a');
+    const copy = mgr.listProviders();
+    copy[0].models.push('uncommitted');
+    expect(mgr.getProvider(first.id)?.models).not.toContain('uncommitted');
+    const imported = JSON.parse(fs.readFileSync(tmpFile, 'utf8'));
+    imported.activeProviderId = second.id.toUpperCase();
+    fs.writeFileSync(tmpFile, JSON.stringify(imported));
+    const reloaded = new ProviderManager(tmpFile);
+    expect(reloaded.getActiveProvider()?.id).toBe(second.id);
+    reloaded.removeProvider(second.id);
+    expect(reloaded.getActiveProvider()?.id).toBe(first.id);
+  });
+
+  it('preserves in-memory and disk configuration when saving fails', () => {
+    const mgr = new ProviderManager(tmpFile);
+    const provider = mgr.upsertProvider({
+      name: 'Original',
+      baseUrl: 'https://fixture.test/v1',
+      apiKey: 'fixture',
+      models: ['original'],
+    });
+    const original = fs.readFileSync(tmpFile, 'utf8');
+    fs.mkdirSync(`${tmpFile}.bak`);
+    expect(() => mgr.setReasoningEffort('ultra')).toThrow();
+    expect(() => mgr.setActiveSelection(undefined)).toThrow();
+    expect(() => mgr.removeProvider(provider.id)).toThrow();
+    expect(() =>
+      mgr.upsertProvider({ ...provider, name: 'Changed' }),
+    ).toThrow();
+    expect(mgr.getReasoningEffort()).toBe('high');
+    expect(mgr.getActiveModel()).toBe('original');
+    expect(mgr.listProviders()[0].name).toBe('Original');
+    expect(fs.readFileSync(tmpFile, 'utf8')).toBe(original);
+  });
+
+  it('infers model discovery authentication and does not echo private request errors', async () => {
+    const mgr = new ProviderManager(tmpFile);
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ data: [{ id: 'fixture' }] }), {
+        status: 200,
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    expect(
+      inferProtocolFromUrl('https://gateway.test/v1/responses/?token=ignored'),
+    ).toBe('openai-responses');
+    const discovered = await mgr.fetchModelsFromEndpoint({
+      baseUrl: 'https://gateway.test/v1/messages/',
+      apiKey: 'private-fixture',
+    });
+    expect(discovered.models).toEqual(['fixture']);
+    expect(fetchMock.mock.calls[0][0]).toBe('https://gateway.test/v1/models');
+    expect(fetchMock.mock.calls[0][1].headers['x-api-key']).toBe(
+      'private-fixture',
+    );
+    expect(fetchMock.mock.calls[0][1].headers['Authorization']).toBeUndefined();
+    expect(fetchMock.mock.calls[0][1].headers['anthropic-version']).toBe(
+      '2023-06-01',
+    );
+    fetchMock.mockRejectedValue(
+      new Error('Invalid header containing private-fixture'),
+    );
+    const failed = await mgr.fetchModelsFromEndpoint({
+      baseUrl: 'https://gateway.test/v1',
+      apiKey: 'private-fixture',
+    });
+    expect(failed.error).not.toContain('private-fixture');
   });
 });

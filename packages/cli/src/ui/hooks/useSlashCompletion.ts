@@ -13,6 +13,7 @@ import {
   type SlashCommand,
 } from '../commands/types.js';
 import { debugLogger } from '@google/gemini-cli-core';
+import { useLocale } from './useLocale.js';
 
 // Type alias for improved type safety based on actual fzf result structure
 type FzfCommandResult = {
@@ -155,6 +156,7 @@ function useCommandSuggestions(
   ) => SlashCommand[],
 ): SuggestionsResult {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const locale = useLocale();
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -316,7 +318,7 @@ function useCommandSuggestions(
           const finalSuggestions = sortedSuggestions.map((cmd) => {
             const zhAlias = cmd.altNames?.find((a) => /[\u4e00-\u9fa5]/.test(a));
             const suggestion: Suggestion = {
-              label: zhAlias ? `${cmd.name} (${zhAlias})` : cmd.name,
+              label: locale === 'zh' && zhAlias ? zhAlias : cmd.name,
               value: cmd.name,
               description: cmd.description,
               commandKind: cmd.kind,
@@ -375,6 +377,7 @@ function useCommandSuggestions(
     setSuggestions([]);
     return () => abortController.abort();
   }, [
+    locale,
     query,
     parserResult,
     commandContext,

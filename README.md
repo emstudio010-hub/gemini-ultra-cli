@@ -1,4 +1,26 @@
-# Gemini CLI
+# Gemini Ultra CLI
+
+基于 Gemini
+CLI 的增强版，提供外接模型供应商、中英文界面、六档推理强度、多 Agent 协作和本地逆向演练台。当前为预览版，需要 Node.js
+**22.19+**。
+
+下载此仓库发布的安装包后执行：
+
+```sh
+npm install -g ./gemini-ultra-cli-1.0.0-preview.8.tgz
+gemini-ultra
+```
+
+首次使用：`/language` 选择语言，`/provider` 配置模型，`/effort`
+设置强度，`/team` 管理协作，`/drill setup` 检查逆向工具，`/演练台`
+打开控制中心。
+
+[安装与跨电脑使用](docs/ultra-install.md) ·
+[持续目标与验收范围](docs/ultra-goals.md)。源码构建：`npm ci --ignore-scripts`
+后运行
+`npm run package:ultra`。安装包不依赖开发机目录；每台电脑独立配置模型和逆向工具。外接供应商无需 Google 登录，下方保留的上游说明适用于原生 Google 通道。
+
+## 上游 Gemini CLI 文档
 
 [![Gemini CLI CI](https://github.com/google-gemini/gemini-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/google-gemini/gemini-cli/actions/workflows/ci.yml)
 [![Gemini CLI E2E (Chained)](https://github.com/google-gemini/gemini-cli/actions/workflows/chained_e2e.yml/badge.svg)](https://github.com/google-gemini/gemini-cli/actions/workflows/chained_e2e.yml)

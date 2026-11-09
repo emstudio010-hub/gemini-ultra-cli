@@ -2,8 +2,10 @@ import esbuild from 'esbuild';
 import fs from 'node:fs'; // Import the full fs module
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const coreRequire = createRequire(new URL('../package.json', import.meta.url));
 
 const manifestPath = path.resolve(
   __dirname,
@@ -56,12 +58,18 @@ async function bundle() {
       ),
       format: 'esm',
       platform: 'node',
-      plugins: [emptyModulePlugin],
-      external: [
-        'puppeteer-core',
-        '/bundled/*',
-        '../../../node_modules/puppeteer-core/*',
-      ],
+      plugins: [emptyModulePlugin, {
+        name: 'portable-puppeteer-resolution',
+        setup(build) {
+          build.onResolve({ filter: /puppeteer-core\// }, (args) => {
+            const suffix = args.path.split('puppeteer-core/')[1];
+            if (!suffix || suffix.includes('..')) return null;
+            const packageDir = path.dirname(coreRequire.resolve('puppeteer-core/package.json'));
+            return { path: path.join(packageDir, suffix) };
+          });
+        },
+      }],
+      external: ['/bundled/*'],
       banner: {
         js: 'import { createRequire as __createRequire } from "module"; const require = __createRequire(import.meta.url);',
       },

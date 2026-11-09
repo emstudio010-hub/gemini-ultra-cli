@@ -1,0 +1,283 @@
+{
+  "name": "morphicons",
+  "version": "2.0.2",
+  "description": "Universal morphing for SVG icons, stroked or filled, with spring physics and zero runtime dependencies",
+  "license": "MIT",
+  "author": "Guillermo (https://guillermolg.com)",
+  "homepage": "https://www.morphicons.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/guillermolg00/morphicons.git"
+  },
+  "bugs": "https://github.com/guillermolg00/morphicons/issues",
+  "keywords": [
+    "icons",
+    "svg",
+    "morphing",
+    "morph",
+    "morph-animation",
+    "animation",
+    "animated-icons",
+    "icon-morphing",
+    "svg-morph",
+    "spring",
+    "lucide",
+    "lucide-react",
+    "tabler",
+    "heroicons",
+    "iconoir",
+    "shadcn",
+    "feather",
+    "react",
+    "react-native",
+    "lucide-react-native",
+    "vue",
+    "lucide-vue-next",
+    "svelte",
+    "lucide-svelte",
+    "astro",
+    "astro-component",
+    "web-component",
+    "custom-element",
+    "icon-animation"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./dom": {
+      "types": "./dist/dom.d.ts",
+      "default": "./dist/dom.js"
+    },
+    "./adapters": {
+      "types": "./dist/adapters.d.ts",
+      "default": "./dist/adapters.js"
+    },
+    "./region": {
+      "types": "./dist/region.d.ts",
+      "default": "./dist/region.js"
+    },
+    "./react": {
+      "types": "./dist/react.d.ts",
+      "default": "./dist/react.js"
+    },
+    "./react-native": {
+      "types": "./dist/react-native.d.ts",
+      "default": "./dist/react-native.js"
+    },
+    "./vue": {
+      "types": "./dist/vue.d.ts",
+      "default": "./dist/vue.js"
+    },
+    "./svelte": {
+      "types": "./dist/svelte.d.ts",
+      "svelte": "./dist/svelte.js",
+      "default": "./dist/svelte.js"
+    },
+    "./element": {
+      "types": "./dist/element.d.ts",
+      "default": "./dist/element.js"
+    },
+    "./astro": {
+      "types": "./dist/astro.d.ts",
+      "default": "./dist/MorphIcon.astro"
+    }
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "react-native": ">=0.71",
+    "react-native-svg": ">=14",
+    "svelte": ">=5",
+    "vue": ">=3.3"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "react-native": {
+      "optional": true
+    },
+    "react-native-svg": {
+      "optional": true
+    },
+    "svelte": {
+      "optional": true
+    },
+    "vue": {
+      "optional": true
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit && tsc -p playground --noEmit && tsc -p tsconfig.react.json --noEmit && tsc -p tsconfig.react-native.json --noEmit && tsc -p tsconfig.vue.json --noEmit && tsc -p tsconfig.svelte.json --noEmit && tsc -p tsconfig.element.json --noEmit",
+    "play": "bun ./playground/index.html",
+    "play:regions": "bun scripts/serve-regions.ts",
+    "bench:regions": "bun bench/region.bench.ts",
+    "bench:topology": "bun bench/region-topology.ts",
+    "bench:wide": "bun bench/region-wide.ts",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "build": "tsdown && bun scripts/build-svelte.ts && bun scripts/build-astro.ts",
+    "size": "size-limit",
+    "prepublishOnly": "bun run build"
+  },
+  "size-limit": [
+    {
+      "name": "core (gzip — anti-regression tripwire, see README)",
+      "path": "dist/index.js",
+      "import": "*",
+      "limit": "7 KB",
+      "gzip": true
+    },
+    {
+      "name": "core + dom (createMorph + scheduler)",
+      "path": "dist/dom.js",
+      "import": "*",
+      "limit": "9.3 KB",
+      "gzip": true,
+      "ignore": [
+        "./region.js"
+      ]
+    },
+    {
+      "name": "region normalizer (morphicons/region standalone; lazy chunk of every binding)",
+      "path": "dist/region.js",
+      "import": "*",
+      "limit": "11.2 KB",
+      "gzip": true
+    },
+    {
+      "name": "adapters (aggregate — grows by design, see per-export gates)",
+      "path": "dist/adapters.js",
+      "import": "*",
+      "limit": "5.7 KB",
+      "gzip": true
+    },
+    {
+      "name": "adapters › svgToIcon (per-export shakeability gate)",
+      "path": "dist/adapters.js",
+      "import": "{ svgToIcon }",
+      "limit": "4.7 KB",
+      "gzip": true
+    },
+    {
+      "name": "adapters › maskTarget (per-export shakeability gate)",
+      "path": "dist/adapters.js",
+      "import": "{ maskTarget }",
+      "limit": "0.8 KB",
+      "gzip": true
+    },
+    {
+      "name": "adapters › canvasTarget (per-export shakeability gate)",
+      "path": "dist/adapters.js",
+      "import": "{ canvasTarget }",
+      "limit": "0.55 KB",
+      "gzip": true
+    },
+    {
+      "name": "core + dom + react (MorphIcon, react external)",
+      "path": "dist/react.js",
+      "import": "*",
+      "ignore": [
+        "./region.js"
+      ],
+      "limit": "10.3 KB",
+      "gzip": true
+    },
+    {
+      "name": "core + dom + react-native (MorphIcon, react/rn/rnsvg external; Metro inlines the region chunk)",
+      "path": "dist/react-native.js",
+      "import": "*",
+      "limit": "16 KB",
+      "gzip": true
+    },
+    {
+      "name": "core + dom + vue (MorphIcon, vue external)",
+      "path": "dist/vue.js",
+      "import": "*",
+      "ignore": [
+        "./region.js"
+      ],
+      "limit": "10.3 KB",
+      "gzip": true
+    },
+    {
+      "name": "core + dom + svelte TS half (svelte external)",
+      "path": "dist/svelte-shared.js",
+      "import": "*",
+      "ignore": [
+        "./region.js"
+      ],
+      "limit": "9.9 KB",
+      "gzip": true
+    },
+    {
+      "name": "svelte component (ships as source, consumer-compiled)",
+      "path": "dist/MorphIcon.svelte",
+      "disablePlugins": [
+        "@size-limit/rolldown"
+      ],
+      "limit": "1.4 KB",
+      "gzip": true
+    },
+    {
+      "name": "core + dom + element (<morph-icon> custom element)",
+      "path": "dist/element.js",
+      "import": "*",
+      "limit": "11.2 KB",
+      "gzip": true,
+      "ignore": [
+        "./region.js"
+      ]
+    },
+    {
+      "name": "astro shell (ships as source, consumer-compiled)",
+      "path": "dist/MorphIcon.astro",
+      "disablePlugins": [
+        "@size-limit/rolldown"
+      ],
+      "limit": "1.75 KB",
+      "gzip": true
+    }
+  ],
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.15",
+    "@happy-dom/global-registrator": "^21.0.1",
+    "@iconify-json/bi": "^1.2.7",
+    "@iconify-json/heroicons": "^1.2.3",
+    "@iconify-json/iconoir": "^1.2.12",
+    "@iconify-json/lucide": "^1.2.144",
+    "@iconify-json/material-symbols": "^1.2.95",
+    "@iconify-json/mdi": "^1.2.3",
+    "@iconify-json/mingcute": "^1.2.8",
+    "@iconify-json/ph": "^1.2.2",
+    "@iconify-json/ri": "^1.2.10",
+    "@iconify-json/tabler": "^1.2.42",
+    "@size-limit/preset-small-lib": "^14.2.0",
+    "@tabler/icons": "^3.49.0",
+    "@types/bun": "^1.4.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "feather-icons": "^4.29.2",
+    "happy-dom": "^21.0.1",
+    "lucide": "^1.57.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-native": "^0.87.1",
+    "react-native-svg": "^15.15.5",
+    "size-limit": "^14.2.0",
+    "svelte": "^5.57.2",
+    "tsdown": "^0.23.1",
+    "typescript": "^7.0.2",
+    "vue": "^3.5.44"
+  }
+}

@@ -138,7 +138,14 @@ export const providerCommand: SlashCommand = {
       return {
         type: 'custom_dialog',
         component: React.createElement(ProviderConfigDialog, {
-          onClose: () => context.ui.removeComponent(),
+          onClose: () => {
+            const mgr = ProviderManager.getInstance();
+            const provider = mgr.getActiveProvider();
+            const model = mgr.getActiveModel();
+            if (provider && model) context.services.agentContext?.config.setModel(`${provider.id}:${model}`);
+            context.ui.reloadCommands();
+            context.ui.removeComponent();
+          },
         }),
       };
     }

@@ -38,9 +38,9 @@ export interface LSToolParams {
   dir_path: string;
 
   /**
-   * Array of glob patterns to ignore (optional)
+   * Array of glob patterns or single glob pattern string to ignore (optional)
    */
-  ignore?: string[];
+  ignore?: string[] | string;
 
   /**
    * Whether to respect .gitignore and .geminiignore patterns (optional, defaults to true)
@@ -98,11 +98,19 @@ class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
    * @param patterns Array of glob patterns to check against
    * @returns True if the filename should be ignored
    */
-  private shouldIgnore(filename: string, patterns?: string[]): boolean {
-    if (!patterns || patterns.length === 0) {
+  private shouldIgnore(
+    filename: string,
+    patterns?: string[] | string,
+  ): boolean {
+    if (!patterns) {
       return false;
     }
-    for (const pattern of patterns) {
+    const patternList = Array.isArray(patterns) ? patterns : [patterns];
+    if (patternList.length === 0) {
+      return false;
+    }
+    for (const pattern of patternList) {
+      if (typeof pattern !== 'string') continue;
       // Convert glob pattern to RegExp
       const regexPattern = pattern
         .replace(/[.+^${}()|[\]\\]/g, '\\$&')

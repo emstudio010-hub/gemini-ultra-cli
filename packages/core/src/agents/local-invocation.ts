@@ -302,7 +302,10 @@ export class LocalSubagentInvocation extends BaseToolInvocation<
         isSubagentProgress: true,
         agentName: this.definition.name,
         recentActivity: [...recentActivity],
-        state: SubagentState.COMPLETED,
+        state:
+          output.terminate_reason === AgentTerminateMode.GOAL
+            ? SubagentState.COMPLETED
+            : SubagentState.ERROR,
         result: output.result,
         terminateReason: output.terminate_reason,
       };

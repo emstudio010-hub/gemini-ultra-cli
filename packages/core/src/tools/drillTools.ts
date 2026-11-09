@@ -4,9 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { execSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
+import { promisify } from 'node:util';
+import * as fs from 'node:fs';
 import { DrillStore } from '../drill/drillStore.js';
 import { readDrillGrant } from '../drill/drillGrant.js';
+import { ToolErrorType } from './tool-error.js';
 import type { Config } from '../config/config.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import {
@@ -20,16 +23,52 @@ import {
 export interface DrillPreflightResult {
   granted: boolean;
   allowedNetScope: string[];
-  tools: Record<string, { available: boolean; pathOrStatus?: string; version?: string }>;
+  tools: Record<
+    string,
+    { available: boolean; pathOrStatus?: string; version?: string }
+  >;
 }
 
-export function checkBinary(cmd: string): { available: boolean; pathOrStatus?: string } {
+const executeFile = promisify(execFile);
+export function toolPathEnv(name: string): string {
+  return `GEMINI_ULTRA_TOOL_${name.replace(/[^a-z0-9]/gi, '_').toUpperCase()}`;
+}
+function configuredTool(
+  name: string,
+): { available: boolean; pathOrStatus: string } | undefined {
+  const configured = process.env[toolPathEnv(name)];
+  if (!configured) return undefined;
+  try {
+    if (!fs.statSync(configured).isFile())
+      throw new Error('not a regular file');
+    fs.accessSync(
+      configured,
+      process.platform === 'win32' ? fs.constants.F_OK : fs.constants.X_OK,
+    );
+    return { available: true, pathOrStatus: configured };
+  } catch {
+    return {
+      available: false,
+      pathOrStatus: `${configured} (unavailable or not executable; check ${toolPathEnv(name)})`,
+    };
+  }
+}
+
+export function checkBinary(cmd: string): {
+  available: boolean;
+  pathOrStatus?: string;
+} {
+  if (!/^[a-zA-Z0-9._-]+$/.test(cmd))
+    return { available: false, pathOrStatus: 'invalid tool name' };
+  const configured = configuredTool(cmd);
+  if (configured) return configured;
   try {
     const isWin = process.platform === 'win32';
-    const checkCmd = isWin ? `where ${cmd}` : `which ${cmd}`;
-    const out = execSync(checkCmd, {
+    const out = execFileSync(isWin ? 'where.exe' : 'which', [cmd], {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 1500,
+      windowsHide: true,
     }).trim();
     return { available: true, pathOrStatus: out.split('\n')[0].trim() };
   } catch {
@@ -37,30 +76,53 @@ export function checkBinary(cmd: string): { available: boolean; pathOrStatus?: s
   }
 }
 
+async function checkBinaryAsync(
+  name: string,
+): Promise<{ available: boolean; pathOrStatus: string }> {
+  const configured = configuredTool(name);
+  if (configured) return configured;
+  try {
+    const { stdout } = await executeFile(
+      process.platform === 'win32' ? 'where.exe' : 'which',
+      [name],
+      { timeout: 1500, windowsHide: true },
+    );
+    return { available: true, pathOrStatus: stdout.trim().split(/\r?\n/)[0] };
+  } catch {
+    return {
+      available: false,
+      pathOrStatus: `not found; add to PATH or set ${toolPathEnv(name)}`,
+    };
+  }
+}
+
 export async function checkIdaMcp(
   port = 8745,
 ): Promise<{ available: boolean; pathOrStatus: string }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 1000);
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 1000);
     const res = await fetch(`http://127.0.0.1:${port}/status`, {
       signal: controller.signal,
     });
-    clearTimeout(timer);
     return { available: res.ok, pathOrStatus: `HTTP ${res.status}` };
   } catch {
     return { available: false, pathOrStatus: 'connection refused / inactive' };
+  } finally {
+    clearTimeout(timer);
   }
 }
 
 export async function runDrillPreflight(): Promise<DrillPreflightResult> {
   const grant = readDrillGrant();
-  const ida = await checkIdaMcp();
 
   const toolNames = [
     'ghidra',
+    'analyzeHeadless',
+    'java',
     'radare2',
     'r2',
+    'rabin2',
     'jadx',
     'frida',
     'nuclei',
@@ -68,14 +130,21 @@ export async function runDrillPreflight(): Promise<DrillPreflightResult> {
     'gogo',
     'python3',
     'python',
+    'gdb',
+    'lldb',
   ];
-  const tools: Record<string, { available: boolean; pathOrStatus?: string }> = {
+  const [ida, discovered] = await Promise.all([
+    checkIdaMcp(Number(process.env['GEMINI_ULTRA_IDA_MCP_PORT']) || 8745),
+    Promise.all(
+      toolNames.map(
+        async (name) => [name, await checkBinaryAsync(name)] as const,
+      ),
+    ),
+  ]);
+  const tools: DrillPreflightResult['tools'] = {
     'ida-pro-mcp': ida,
+    ...Object.fromEntries(discovered),
   };
-
-  for (const name of toolNames) {
-    tools[name] = checkBinary(name);
-  }
 
   return {
     granted: grant.granted,
@@ -110,7 +179,15 @@ export function recordFactTool(
         poc: params.poc,
       });
       return { success: true, id };
-    } else {
+    } else if (params.category === 'note') {
+      const id = store.recordNote({
+        sessionId,
+        title: params.title,
+        content: params.notes,
+        evidence: params.evidence,
+      });
+      return { success: true, id };
+    } else if (params.category === 'binary') {
       const id = store.recordBinaryArtifact({
         sessionId,
         samplePath: params.samplePath || params.title,
@@ -121,13 +198,17 @@ export function recordFactTool(
       });
       return { success: true, id };
     }
+    return { success: false, error: 'Invalid category: use vuln, binary or note.' };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     return { success: false, error: msg };
   }
 }
 
-export function queryFactsTool(sessionId?: string, keyword?: string): unknown[] {
+export function queryFactsTool(
+  sessionId?: string,
+  keyword?: string,
+): unknown[] {
   const store = DrillStore.getInstance();
   return store.queryFacts(sessionId, keyword);
 }
@@ -150,7 +231,9 @@ class DrillPreflightInvocation extends BaseToolInvocation<
 
   override async execute(_options: ExecuteOptions): Promise<ToolResult> {
     const res = await runDrillPreflight();
-    const availableCount = Object.values(res.tools).filter((t) => t.available).length;
+    const availableCount = Object.values(res.tools).filter(
+      (t) => t.available,
+    ).length;
     return {
       llmContent: JSON.stringify(res, null, 2),
       returnDisplay: `✓ 工具链探针完成 (授权: ${res.granted ? '已开启' : '未开启'}, 就绪工具: ${availableCount}/${Object.keys(res.tools).length})`,
@@ -219,6 +302,18 @@ class DrillRecordFactInvocation extends BaseToolInvocation<
   }
 
   override async execute(_options: ExecuteOptions): Promise<ToolResult> {
+    const validCategories = ['vuln', 'binary', 'note'];
+    if (
+      !this.params.category ||
+      !validCategories.includes(this.params.category)
+    ) {
+      const msg = `Invalid category "${this.params.category}". Category must be one of: 'vuln', 'binary', 'note'.`;
+      return {
+        llmContent: msg,
+        returnDisplay: `归档失败: ${msg}`,
+        error: { message: msg, type: ToolErrorType.INVALID_TOOL_PARAMS },
+      };
+    }
     const res = recordFactTool(this.config.getSessionId(), this.params);
     return {
       llmContent: JSON.stringify(res),
@@ -250,7 +345,8 @@ export class DrillRecordFactTool extends BaseDeclarativeTool<
           category: {
             type: 'string',
             enum: ['vuln', 'binary', 'note'],
-            description: 'Fact category.',
+            description:
+              'Fact category. MUST be one of: "vuln" (vulnerability finding), "binary" (executable/sample artifact), "note" (technical observation).',
           },
           title: {
             type: 'string',
@@ -261,10 +357,22 @@ export class DrillRecordFactTool extends BaseDeclarativeTool<
             type: 'string',
             description: 'Severity level (CRITICAL, HIGH, MEDIUM, LOW, INFO).',
           },
-          evidence: { type: 'string', description: 'Key technical evidence or log snippet.' },
-          poc: { type: 'string', description: 'Verification PoC or reproduction steps.' },
-          samplePath: { type: 'string', description: 'Path to binary sample if applicable.' },
-          sha256: { type: 'string', description: 'SHA-256 hash of binary sample.' },
+          evidence: {
+            type: 'string',
+            description: 'Key technical evidence or log snippet.',
+          },
+          poc: {
+            type: 'string',
+            description: 'Verification PoC or reproduction steps.',
+          },
+          samplePath: {
+            type: 'string',
+            description: 'Path to binary sample if applicable.',
+          },
+          sha256: {
+            type: 'string',
+            description: 'SHA-256 hash of binary sample.',
+          },
           notes: { type: 'string', description: 'Additional analysis notes.' },
         },
         required: ['category', 'title'],
@@ -275,12 +383,32 @@ export class DrillRecordFactTool extends BaseDeclarativeTool<
     );
   }
 
+  protected override validateToolParamValues(
+    params: DrillRecordFactParams,
+  ): string | null {
+    if (
+      !params.category ||
+      !['vuln', 'binary', 'note'].includes(params.category)
+    ) {
+      return `Invalid or missing required property 'category'. Allowed values are: 'vuln', 'binary', 'note'.`;
+    }
+    if (!params.title || typeof params.title !== 'string') {
+      return `Missing required property 'title'.`;
+    }
+    return null;
+  }
+
   protected createInvocation(
     params: DrillRecordFactParams,
     messageBus: MessageBus,
     toolName?: string,
   ) {
-    return new DrillRecordFactInvocation(this.config, params, messageBus, toolName);
+    return new DrillRecordFactInvocation(
+      this.config,
+      params,
+      messageBus,
+      toolName,
+    );
   }
 }
 
@@ -357,6 +485,11 @@ export class DrillQueryFactsTool extends BaseDeclarativeTool<
     messageBus: MessageBus,
     toolName?: string,
   ) {
-    return new DrillQueryFactsInvocation(this.config, params, messageBus, toolName);
+    return new DrillQueryFactsInvocation(
+      this.config,
+      params,
+      messageBus,
+      toolName,
+    );
   }
 }

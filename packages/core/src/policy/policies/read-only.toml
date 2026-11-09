@@ -33,6 +33,12 @@ toolName = [
   "grep_search",
   "list_directory",
   "read_file",
+  "read_many_files",
+  "binary_triage",
+  "binary_inspect",
+  "drill_preflight",
+  "drill_query_facts",
+  "memory_search_graph",
   "google_web_search",
   "codebase_investigator",
   "cli_help",
@@ -44,6 +50,8 @@ toolName = [
   "tracker_list_tasks",
   "tracker_add_dependency",
   "tracker_visualize",
+  "write_todos",
+  "drill_record_fact",
   # Topic grouping tool is innocuous and used for UI organization.
   "update_topic",
   # Core agent lifecycle tool

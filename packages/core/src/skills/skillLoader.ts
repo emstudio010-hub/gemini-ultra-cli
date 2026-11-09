@@ -11,6 +11,7 @@ import { load } from 'js-yaml';
 import { debugLogger } from '../utils/debugLogger.js';
 import { coreEvents } from '../utils/events.js';
 import { readFileWithEncoding } from '../utils/fileUtils.js';
+import { mapWithConcurrency } from '../utils/asyncPool.js';
 
 /**
  * Represents the definition of an Agent Skill.
@@ -159,8 +160,7 @@ export async function loadSkillsFromDir(
       ignore: ['**/node_modules/**', '**/.git/**'],
     });
 
-    for (const skillFile of skillFiles) {
-      const metadata = await loadSkillFromFile(skillFile);
+    for (const metadata of await mapWithConcurrency(skillFiles, 8, loadSkillFromFile)) {
       if (metadata) {
         discoveredSkills.push(metadata);
       }
