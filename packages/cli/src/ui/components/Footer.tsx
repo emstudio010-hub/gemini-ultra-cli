@@ -330,7 +330,13 @@ export const Footer: React.FC = () => {
         const effort = mgr.getReasoningEffort();
         const drillGrant = readDrillGrant();
 
-        const modelDisplay = getDisplayString(model);
+        let cleanModel = model;
+        if (cleanModel.startsWith(`${activeProv?.id}:`)) {
+          cleanModel = cleanModel.slice(activeProv!.id.length + 1);
+        } else if (cleanModel.startsWith(`${activeProv?.name}:`)) {
+          cleanModel = cleanModel.slice(activeProv!.name.length + 1);
+        }
+        const modelDisplay = getDisplayString(cleanModel);
         const provPrefix = activeProv ? `${activeProv.name}:` : '';
         const drillIcon = drillGrant.granted ? '🟢' : '⚪';
         const str = `✦ ${provPrefix}${modelDisplay} [${effort}] │ 演练:${drillIcon}`;

@@ -345,6 +345,7 @@ export * from './tools/hybridMemoryTools.js';
 
 // Export Skill Orchestrator
 export * from './skills/skillOrchestrator.js';
+export * from './i18n/i18nManager.js';
 
 // Export Image Generation, Diagrams & Deep Web
 export * from './tools/imageGenTools.js';

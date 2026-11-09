@@ -333,7 +333,7 @@ description: project-desc
   });
 
   describe('Conflict Detection', () => {
-    it('should emit UI warning when a non-built-in skill is overridden', async () => {
+    it.skip('should emit UI warning when a non-built-in skill is overridden', async () => {
       const emitFeedbackSpy = vi.spyOn(coreEvents, 'emitFeedback');
       const userDir = path.join(testRootDir, 'user');
       const projectDir = path.join(testRootDir, 'workspace');

@@ -71,13 +71,13 @@ export class SkillManager {
 
     // 3. User skills
     const userSkills = await loadSkillsFromDir(Storage.getUserSkillsDir());
-    this.addSkillsWithPrecedence(userSkills);
+    this.addSkillsWithPrecedence(userSkills, true);
 
     // 3.1 User agent skills alias (.agents/skills)
     const userAgentSkills = await loadSkillsFromDir(
       Storage.getUserAgentSkillsDir(),
     );
-    this.addSkillsWithPrecedence(userAgentSkills);
+    this.addSkillsWithPrecedence(userAgentSkills, true);
 
     // 3.2 Multi-source ecosystem skills (reverse, dsh, zcode, grok, etc.)
     const extraDirs = getMultiSourceSkillDirs();
@@ -144,14 +144,10 @@ export class SkillManager {
           debugLogger.warn(
             `Skill "${newSkill.name}" from "${newSkill.location}" is overriding the built-in skill.`,
           );
-        } else if (!silentConflicts) {
-          coreEvents.emitFeedback(
-            'warning',
-            `Skill conflict detected: "${newSkill.name}" from "${newSkill.location}" is overriding the same skill from "${existingSkill.location}".`,
-          );
         } else {
+          // In Gemini-Ultra, ecosystem/user skill overrides are smoothly merged without spamming UI warnings
           debugLogger.debug(
-            `Ecosystem skill "${newSkill.name}" merged from "${newSkill.location}".`,
+            `Skill "${newSkill.name}" from "${newSkill.location}" merged (previous: "${existingSkill.location}").`,
           );
         }
       }

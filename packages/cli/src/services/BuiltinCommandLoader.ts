@@ -76,6 +76,7 @@ import { diagramCommand } from '../ui/commands/diagramCommand.js';
 import { fetchCommand } from '../ui/commands/fetchCommand.js';
 import { goalCommand } from '../ui/commands/goalCommand.js';
 import { fullAccessCommand } from '../ui/commands/fullAccessCommand.js';
+import { langCommand } from '../ui/commands/langCommand.js';
 
 /**
  * Loads the core, hard-coded slash commands that are an integral part
@@ -211,6 +212,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       fetchCommand,
       goalCommand,
       fullAccessCommand,
+      langCommand,
       ...(this.config?.getFolderTrust() ? [permissionsCommand] : []),
       ...(this.config?.isPlanEnabled() ? [planCommand] : []),
       policiesCommand,

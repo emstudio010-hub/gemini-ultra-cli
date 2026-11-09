@@ -4,12 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Box, Text } from 'ink';
 import {
   ProviderManager,
   type ProviderProtocol,
   type ExternalProviderProfile,
+  I18nManager,
 } from '@google/gemini-cli-core';
 import { useKeypress } from '../hooks/useKeypress.js';
 import { theme } from '../semantic-colors.js';
@@ -28,256 +29,380 @@ interface ProviderConfigDialogProps {
   onClose: () => void;
 }
 
-type Step = 'list' | 'input-name' | 'input-url' | 'input-key' | 'select-protocol' | 'select-model' | 'input-image-model';
+type Page =
+  | 'overview'       // Claude Code style dashboard: provider cards, active status, shortcuts
+  | 'edit-basics'    // Edit Name, Base URL, API Key
+  | 'edit-protocol'  // Select/switch wire protocol
+  | 'select-models'  // Multi-select / select-all / custom models
+  | 'edit-image';    // Configure optional image generation model
+
+const PROTOCOL_OPTIONS: Array<{ id: ProviderProtocol; label: string; descZh: string; descEn: string }> = [
+  {
+    id: 'openai-chat',
+    label: 'Chat (OpenAI /v1/chat/completions)',
+    descZh: '通用 Chat 接口 (OpenAI, DeepSeek, Grok, GLM, vLLM, OneAPI 等)',
+    descEn: 'Standard chat completions (OpenAI, DeepSeek, Grok, GLM, OneAPI)',
+  },
+  {
+    id: 'openai-responses',
+    label: 'Responses (OpenAI /v1/responses)',
+    descZh: '原生 Responses 与 Codex 协议端点',
+    descEn: 'OpenAI Responses API & Codex-compatible endpoints',
+  },
+  {
+    id: 'anthropic',
+    label: 'Messages (Anthropic /v1/messages)',
+    descZh: 'Claude 原生端点或兼容的反代服务',
+    descEn: 'Native Anthropic Claude API or compatible proxies',
+  },
+  {
+    id: 'gemini',
+    label: 'Gemini (Google GenAI 原生/镜像)',
+    descZh: 'Google 官方 / 第三方 Gemini Gateway 兼容镜像',
+    descEn: 'Google GenAI official endpoint or third-party mirror',
+  },
+];
 
 export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({ onClose }) => {
   const mgr = ProviderManager.getInstance();
+  const i18n = I18nManager.getInstance();
+  const [locale, setLocale] = useState(i18n.getLocale());
+
+  const t = (zh: string, en: string) => (locale === 'zh' ? zh : en);
+
   const [providers, setProviders] = useState<ExternalProviderProfile[]>(() => mgr.listProviders());
   const [selectedProviderIdx, setSelectedProviderIdx] = useState(0);
 
-  const [step, setStep] = useState<Step>(() => (providers.length === 0 ? 'input-name' : 'list'));
+  const [page, setPage] = useState<Page>(() => (providers.length === 0 ? 'edit-basics' : 'overview'));
 
-  // Form states for adding/editing
+  // Edit form state
+  const [editProviderId, setEditProviderId] = useState<string | null>(null);
   const [formName, setFormName] = useState('');
   const [formUrl, setFormUrl] = useState('');
   const [formKey, setFormKey] = useState('');
+  const [formField, setFormField] = useState<'name' | 'url' | 'key'>('name');
+
   const [formProtocol, setFormProtocol] = useState<ProviderProtocol>('openai-chat');
-  const [fetchedModels, setFetchedModels] = useState<string[]>([]);
-  const [selectedModelIdx, setSelectedModelIdx] = useState(0);
+  const [protocolCursor, setProtocolCursor] = useState(0);
+
+  // Model selection state
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [selectedModelsSet, setSelectedModelsSet] = useState<Set<string>>(new Set());
+  const [modelCursor, setModelCursor] = useState(0);
   const [customModelInput, setCustomModelInput] = useState('');
-  const [statusMessage, setStatusMessage] = useState('');
-  const [pendingModel, setPendingModel] = useState('');
+  const [isFetchingModels, setIsFetchingModels] = useState(false);
+
+  // Image model state
   const [imageModelInput, setImageModelInput] = useState('');
 
-  const protocols: Array<{ id: ProviderProtocol; label: string; desc: string }> = [
-    {
-      id: 'openai-chat',
-      label: 'Chat (OpenAI /v1/chat/completions 兼容)',
-      desc: '支持 OpenAI, DeepSeek, Grok, GLM/ZCode, vLLM, OneAPI',
-    },
-    {
-      id: 'openai-responses',
-      label: 'Responses (OpenAI /v1/responses 兼容)',
-      desc: '支持 OpenAI Responses 与最新 Codex 协议端点',
-    },
-    {
-      id: 'anthropic',
-      label: 'Messages (Anthropic /v1/messages 兼容)',
-      desc: '支持 Claude 原生端点或兼容代理',
-    },
-    {
-      id: 'gemini',
-      label: 'Gemini (Google GenAI 兼容)',
-      desc: '支持 Google 官方端点或第三方 Gemini Gateway 镜像',
-    },
-  ];
+  const [statusMessage, setStatusMessage] = useState('');
 
-  const [protocolIdx, setProtocolIdx] = useState(0);
+  const currentSelectedProvider = providers[selectedProviderIdx];
 
-  const handleFetchModels = async (baseUrl: string, apiKey: string, protocol: ProviderProtocol) => {
-    setStatusMessage('正在连接端点探测可用模型列表...');
-    try {
-      const res = await mgr.fetchModelsFromEndpoint({ baseUrl, apiKey, protocol, timeoutMs: 6000 });
-      if (res.models && res.models.length > 0) {
-        setFetchedModels(res.models);
-        setStatusMessage(`成功拉取到 ${res.models.length} 个模型，可直接选择或在下方手填`);
-      } else {
-        setFetchedModels(['default-model']);
-        setStatusMessage(res.error ? `提示: ${res.error} (请直接手动输入模型名)` : '未检测到公共模型列表，请手动输入模型名');
-      }
-    } catch (err: any) {
-      setFetchedModels(['default-model']);
-      setStatusMessage(`连接完成，请手动输入模型名 (${err.message})`);
+  // Load a provider into editing buffer
+  const startEditing = (provider?: ExternalProviderProfile) => {
+    if (provider) {
+      setEditProviderId(provider.id);
+      setFormName(provider.name);
+      setFormUrl(provider.baseUrl);
+      setFormKey(provider.apiKey);
+      setFormProtocol(provider.protocol);
+      setProtocolCursor(Math.max(0, PROTOCOL_OPTIONS.findIndex((p) => p.id === provider.protocol)));
+      setAvailableModels(provider.models || []);
+      setSelectedModelsSet(new Set(provider.models || []));
+      setImageModelInput(provider.defaultImageModel || '');
+    } else {
+      setEditProviderId(null);
+      setFormName('');
+      setFormUrl('');
+      setFormKey('');
+      setFormProtocol('openai-chat');
+      setProtocolCursor(0);
+      setAvailableModels([]);
+      setSelectedModelsSet(new Set());
+      setImageModelInput('');
     }
-    setStep('select-model');
+    setFormField('name');
+    setCustomModelInput('');
+    setPage('edit-basics');
   };
 
-  const handleSaveProvider = (chosenModel?: string, imageModel?: string) => {
-    const finalModel = (chosenModel || customModelInput.trim() || fetchedModels[selectedModelIdx] || 'default-model').trim();
-    const finalModels = Array.from(new Set([finalModel, ...fetchedModels].filter(Boolean)));
+  const handleFetchEndpointModels = async (baseUrl: string, apiKey: string, proto: ProviderProtocol) => {
+    setIsFetchingModels(true);
+    setStatusMessage(t('正在连接端点拉取模型列表...', 'Fetching models from endpoint...'));
+    try {
+      const res = await mgr.fetchModelsFromEndpoint({ baseUrl, apiKey, protocol: proto, timeoutMs: 7000 });
+      if (res.models && res.models.length > 0) {
+        // deduplicate and clean
+        const unique = Array.from(new Set(res.models));
+        setAvailableModels(unique);
+        setSelectedModelsSet(new Set(unique)); // default all selected, user can uncheck with Space or A
+        setStatusMessage(
+          t(`拉取到 ${unique.length} 个模型！[Space] 勾选/反选，[A] 全选/全消`, `Fetched ${unique.length} models. [Space] toggle, [A] select all`)
+        );
+      } else {
+        setStatusMessage(res.error ? `提示: ${res.error}` : t('未返回模型列表，请手动输入', 'No models found, enter manually'));
+      }
+    } catch (e: any) {
+      setStatusMessage(`拉取失败: ${e.message}`);
+    } finally {
+      setIsFetchingModels(false);
+    }
+  };
 
-    const profile = mgr.upsertProvider({
+  const commitSaveProvider = () => {
+    const finalModelsList = Array.from(selectedModelsSet);
+    if (customModelInput.trim()) {
+      finalModelsList.unshift(customModelInput.trim());
+    }
+    const cleanModels = Array.from(new Set(finalModelsList.filter(Boolean)));
+    const defModel = cleanModels[0] || 'default-model';
+
+    const p = mgr.upsertProvider({
       name: formName.trim() || 'CustomProvider',
       baseUrl: formUrl.trim(),
       apiKey: formKey.trim(),
       protocol: formProtocol,
-      models: finalModels,
-      defaultModel: finalModel,
-      imageModels: imageModel ? [imageModel] : undefined,
-      defaultImageModel: imageModel || undefined,
+      models: cleanModels,
+      defaultModel: defModel,
+      imageModels: imageModelInput.trim() ? [imageModelInput.trim()] : undefined,
+      defaultImageModel: imageModelInput.trim() || undefined,
       setActive: true,
     });
 
+    const updated = mgr.listProviders();
+    setProviders(updated);
+    setStatusMessage(
+      t(`✓ 供应商 [${p.name}] 已保存并激活 (协议: ${p.protocol}, 模型: ${cleanModels.length} 个)`,
+        `✓ Provider [${p.name}] saved & activated (Protocol: ${p.protocol}, ${cleanModels.length} models)`)
+    );
+    setPage('overview');
+  };
+
+  // Quick switch protocol on existing provider without opening wizard
+  const cycleProviderProtocol = (prov: ExternalProviderProfile) => {
+    const currentIdx = PROTOCOL_OPTIONS.findIndex((p) => p.id === prov.protocol);
+    const nextIdx = (currentIdx + 1) % PROTOCOL_OPTIONS.length;
+    const nextProto = PROTOCOL_OPTIONS[nextIdx].id;
+
+    mgr.upsertProvider({
+      name: prov.name,
+      baseUrl: prov.baseUrl,
+      apiKey: prov.apiKey,
+      protocol: nextProto,
+      models: prov.models,
+      defaultModel: prov.defaultModel,
+      imageModels: prov.imageModels,
+      defaultImageModel: prov.defaultImageModel,
+      setActive: mgr.getActiveProvider()?.id === prov.id,
+    });
+
     setProviders(mgr.listProviders());
-    setStatusMessage(`✓ 供应商 [${profile.name}] 已成功保存并设为当前活跃接口！`);
-    setStep('list');
+    setStatusMessage(t(`✓ 已将 [${prov.name}] 协议切换为: ${nextProto}`, `✓ Switched [${prov.name}] protocol to: ${nextProto}`));
   };
 
   useKeypress(
     (key) => {
+      // Global language toggle with [L] when not in text input
+      if ((key.name === 'l' || key.sequence === 'l') && page === 'overview') {
+        const next = i18n.toggleLocale();
+        setLocale(next);
+        return true;
+      }
+
+      // Escape navigation
       if (key.name === 'escape') {
-        if (step !== 'list' && providers.length > 0) {
-          setStep('list');
+        if (page !== 'overview' && providers.length > 0) {
+          setPage('overview');
           return true;
         }
         onClose();
         return true;
       }
 
-      // --- 1. LIST VIEW ---
-      if (step === 'list') {
+      // ========================================================
+      // 1. OVERVIEW DASHBOARD (Claude Code Style)
+      // ========================================================
+      if (page === 'overview') {
         if (key.name === 'up') {
-          setSelectedProviderIdx((prev) => (prev > 0 ? prev - 1 : providers.length - 1));
+          setSelectedProviderIdx((prev) => (prev > 0 ? prev - 1 : Math.max(0, providers.length - 1)));
           return true;
         }
         if (key.name === 'down') {
           setSelectedProviderIdx((prev) => (prev < providers.length - 1 ? prev + 1 : 0));
           return true;
         }
+        // Activate default
         if (isEnter(key)) {
-          const chosen = providers[selectedProviderIdx];
-          if (chosen) {
-            mgr.setActiveSelection(chosen.id, chosen.defaultModel);
+          if (currentSelectedProvider) {
+            mgr.setActiveSelection(currentSelectedProvider.id, currentSelectedProvider.defaultModel);
             onClose();
           }
           return true;
         }
-        if (key.name === 'a' || key.name === 'n') {
-          setFormName('');
-          setFormUrl('');
-          setFormKey('');
-          setStep('input-name');
+        // [e] Edit
+        if (key.name === 'e' || key.sequence === 'e') {
+          if (currentSelectedProvider) {
+            startEditing(currentSelectedProvider);
+          }
           return true;
         }
-        if (key.name === 'd') {
-          const chosen = providers[selectedProviderIdx];
-          if (chosen) {
-            mgr.removeProvider(chosen.id);
-            const updated = mgr.listProviders();
-            setProviders(updated);
-            if (selectedProviderIdx >= updated.length) {
-              setSelectedProviderIdx(Math.max(0, updated.length - 1));
-            }
+        // [p] Quick cycle protocol (Chat <-> Responses <-> Anthropic <-> Gemini)
+        if (key.name === 'p' || key.sequence === 'p') {
+          if (currentSelectedProvider) {
+            cycleProviderProtocol(currentSelectedProvider);
+          }
+          return true;
+        }
+        // [a] / [n] Add new provider
+        if (key.name === 'a' || key.name === 'n' || key.sequence === 'a') {
+          startEditing();
+          return true;
+        }
+        // [m] Manage/Filter models
+        if (key.name === 'm' || key.sequence === 'm') {
+          if (currentSelectedProvider) {
+            startEditing(currentSelectedProvider);
+            setPage('select-models');
+          }
+          return true;
+        }
+        // [d] Delete provider
+        if (key.name === 'd' || key.sequence === 'd') {
+          if (currentSelectedProvider) {
+            mgr.removeProvider(currentSelectedProvider.id);
+            const upd = mgr.listProviders();
+            setProviders(upd);
+            setSelectedProviderIdx(Math.max(0, upd.length - 1));
           }
           return true;
         }
         return false;
       }
 
-      // --- 2. INPUT NAME ---
-      if (step === 'input-name') {
+      // ========================================================
+      // 2. EDIT BASICS: NAME, URL, API KEY
+      // ========================================================
+      if (page === 'edit-basics') {
+        if (key.name === 'tab') {
+          setFormField((prev) => (prev === 'name' ? 'url' : prev === 'url' ? 'key' : 'name'));
+          return true;
+        }
         if (isEnter(key)) {
-          if (formName.trim()) setStep('input-url');
+          if (formField === 'name') {
+            if (formName.trim()) setFormField('url');
+          } else if (formField === 'url') {
+            if (formUrl.trim()) setFormField('key');
+          } else {
+            // go to protocol
+            setPage('edit-protocol');
+          }
           return true;
         }
         if (key.name === 'backspace') {
-          setFormName((prev) => prev.slice(0, -1));
+          if (formField === 'name') setFormName((p) => p.slice(0, -1));
+          else if (formField === 'url') setFormUrl((p) => p.slice(0, -1));
+          else setFormKey((p) => p.slice(0, -1));
           return true;
         }
         if (key.sequence && !key.ctrl) {
           const pasted = key.sequence.replace(/[\r\n\x1b]/g, '').replace(/\[20[01]~/g, '');
-          if (pasted) setFormName((prev) => prev + pasted);
+          if (pasted) {
+            if (formField === 'name') setFormName((p) => p + pasted);
+            else if (formField === 'url') setFormUrl((p) => p + pasted);
+            else setFormKey((p) => p + pasted);
+          }
           return true;
         }
       }
 
-      // --- 3. INPUT URL ---
-      if (step === 'input-url') {
-        if (isEnter(key)) {
-          if (formUrl.trim()) setStep('input-key');
-          return true;
-        }
-        if (key.name === 'backspace') {
-          setFormUrl((prev) => prev.slice(0, -1));
-          return true;
-        }
-        if (key.sequence && !key.ctrl) {
-          const pasted = key.sequence.replace(/[\r\n\x1b]/g, '').replace(/\[20[01]~/g, '');
-          if (pasted) setFormUrl((prev) => prev + pasted);
-          return true;
-        }
-      }
-
-      // --- 4. INPUT KEY ---
-      if (step === 'input-key') {
-        if (isEnter(key)) {
-          setStep('select-protocol');
-          return true;
-        }
-        if (key.name === 'backspace') {
-          setFormKey((prev) => prev.slice(0, -1));
-          return true;
-        }
-        if (key.sequence && !key.ctrl) {
-          const pasted = key.sequence.replace(/[\r\n\x1b]/g, '').replace(/\[20[01]~/g, '');
-          if (pasted) setFormKey((prev) => prev + pasted);
-          return true;
-        }
-      }
-
-      // --- 5. SELECT PROTOCOL ---
-      if (step === 'select-protocol') {
+      // ========================================================
+      // 3. EDIT PROTOCOL SELECTION
+      // ========================================================
+      if (page === 'edit-protocol') {
         if (key.name === 'up') {
-          setProtocolIdx((prev) => (prev > 0 ? prev - 1 : protocols.length - 1));
+          setProtocolCursor((p) => (p > 0 ? p - 1 : PROTOCOL_OPTIONS.length - 1));
           return true;
         }
         if (key.name === 'down') {
-          setProtocolIdx((prev) => (prev < protocols.length - 1 ? prev + 1 : 0));
+          setProtocolCursor((p) => (p < PROTOCOL_OPTIONS.length - 1 ? p + 1 : 0));
           return true;
         }
         if (isEnter(key)) {
-          const chosenProto = protocols[protocolIdx].id;
-          setFormProtocol(chosenProto);
-          void handleFetchModels(formUrl, formKey, chosenProto);
+          const chosen = PROTOCOL_OPTIONS[protocolCursor].id;
+          setFormProtocol(chosen);
+          setPage('select-models');
+          void handleFetchEndpointModels(formUrl, formKey, chosen);
           return true;
         }
       }
 
-      // --- 6. SELECT / INPUT MODEL ---
-      if (step === 'select-model') {
+      // ========================================================
+      // 4. SELECT MODELS (Multi-select, Select-all, Custom)
+      // ========================================================
+      if (page === 'select-models') {
         if (key.name === 'up') {
-          setSelectedModelIdx((prev) => (prev > 0 ? prev - 1 : fetchedModels.length - 1));
+          setModelCursor((p) => (p > 0 ? p - 1 : Math.max(0, availableModels.length - 1)));
           return true;
         }
         if (key.name === 'down') {
-          setSelectedModelIdx((prev) => (prev < fetchedModels.length - 1 ? prev + 1 : 0));
+          setModelCursor((p) => (p < availableModels.length - 1 ? p + 1 : 0));
           return true;
         }
-        if (isEnter(key)) {
-          setPendingModel(
-            customModelInput.trim() ||
-              fetchedModels[selectedModelIdx] ||
-              'default-model',
-          );
-          setImageModelInput('');
-          setStep('input-image-model');
+        // [Space] Toggle single item selection
+        if (key.name === 'space' || key.sequence === ' ') {
+          const curModel = availableModels[modelCursor];
+          if (curModel) {
+            setSelectedModelsSet((prev) => {
+              const next = new Set(prev);
+              if (next.has(curModel)) next.delete(curModel);
+              else next.add(curModel);
+              return next;
+            });
+          }
           return true;
         }
+        // [a] Toggle select all / unselect all
+        if (key.name === 'a' || key.sequence === 'a') {
+          if (selectedModelsSet.size === availableModels.length && availableModels.length > 0) {
+            setSelectedModelsSet(new Set());
+          } else {
+            setSelectedModelsSet(new Set(availableModels));
+          }
+          return true;
+        }
+        // Custom model typing
         if (key.name === 'backspace') {
-          setCustomModelInput((prev) => prev.slice(0, -1));
+          setCustomModelInput((p) => p.slice(0, -1));
           return true;
         }
-        if (key.sequence && !key.ctrl) {
+        // Enter -> Save or go to Image model
+        if (isEnter(key)) {
+          setPage('edit-image');
+          return true;
+        }
+        if (key.sequence && !key.ctrl && key.sequence !== ' ') {
           const pasted = key.sequence.replace(/[\r\n\x1b]/g, '').replace(/\[20[01]~/g, '');
-          if (pasted) setCustomModelInput((prev) => prev + pasted);
+          if (pasted) setCustomModelInput((p) => p + pasted);
           return true;
         }
       }
 
-      // --- 7. OPTIONAL IMAGE MODEL ---
-      if (step === 'input-image-model') {
+      // ========================================================
+      // 5. OPTIONAL IMAGE MODEL
+      // ========================================================
+      if (page === 'edit-image') {
         if (isEnter(key)) {
-          handleSaveProvider(pendingModel, imageModelInput.trim() || undefined);
-          setCustomModelInput('');
+          commitSaveProvider();
           return true;
         }
         if (key.name === 'backspace') {
-          setImageModelInput((prev) => prev.slice(0, -1));
+          setImageModelInput((p) => p.slice(0, -1));
           return true;
         }
         if (key.sequence && !key.ctrl) {
           const pasted = key.sequence.replace(/[\r\n\x1b]/g, '').replace(/\[20[01]~/g, '');
-          if (pasted) setImageModelInput((prev) => prev + pasted);
+          if (pasted) setImageModelInput((p) => p + pasted);
           return true;
         }
       }
@@ -288,10 +413,10 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({ onCl
   );
 
   const activeProvider = mgr.getActiveProvider();
-  const windowStart = Math.max(
-    0,
-    Math.min(selectedModelIdx - 3, fetchedModels.length - 7),
-  );
+
+  // Windowed model list for large catalogs
+  const windowStart = Math.max(0, Math.min(modelCursor - 4, availableModels.length - 9));
+  const windowedModels = availableModels.slice(windowStart, windowStart + 9);
 
   return (
     <Box
@@ -301,164 +426,235 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({ onCl
       padding={1}
       width="100%"
     >
-      <Box flexDirection="row" justifyContent="space-between">
-        <Text bold color={theme.text.accent}>
-          ✦ 外接供应商管理 (Provider Setup)
-        </Text>
-        <Text color={theme.text.secondary}>[Esc 退出/返回]</Text>
+      {/* --- HEADER & BREADCRUMB --- */}
+      <Box flexDirection="row" justifyContent="space-between" borderBottom={false} marginBottom={1}>
+        <Box flexDirection="row">
+          <Text bold color={theme.text.accent}>✦ Gemini-Cli-Ultra </Text>
+          <Text color={theme.text.secondary}>
+            {page === 'overview' && t('› 供应商管理中心', '› Provider Dashboard')}
+            {page === 'edit-basics' && t('› 基础配置与端点', '› Endpoint & Key')}
+            {page === 'edit-protocol' && t('› 通信协议切换', '› Wire Protocol')}
+            {page === 'select-models' && t('› 模型清单勾选', '› Model Selection')}
+            {page === 'edit-image' && t('› 生图模型配置', '› Image Generation')}
+          </Text>
+        </Box>
+        <Box flexDirection="row">
+          <Text color={theme.ui.comment}>[L: {locale.toUpperCase()}] </Text>
+          <Text color={theme.text.secondary}>[Esc: {t('返回/退出', 'Back/Exit')}]</Text>
+        </Box>
       </Box>
 
-      {statusMessage && (
-        <Box marginTop={1}>
+      {statusMessage ? (
+        <Box marginBottom={1} paddingX={1} borderStyle="single" borderColor={theme.border.default}>
           <Text color={theme.status.success}>{statusMessage}</Text>
         </Box>
-      )}
+      ) : null}
 
-      {/* --- LIST VIEW --- */}
-      {step === 'list' && (
-        <Box marginTop={1} flexDirection="column">
-          <Text color={theme.text.primary} bold>
-            当前配置的供应商列表 (上下移动选择激活，按 A/N 新增，按 D 删除):
+      {/* ========================================================
+          PAGE 1: OVERVIEW DASHBOARD
+         ======================================================== */}
+      {page === 'overview' && (
+        <Box flexDirection="column">
+          <Text color={theme.text.secondary} marginBottom={1}>
+            {t('已登记的外接模型供应商 (上下键高亮，按 Enter 激活生效):', 'Configured External Providers (Up/Down to navigate, Enter to activate):')}
           </Text>
-          <Box marginTop={1} flexDirection="column">
-            {providers.map((p, idx) => {
+
+          {providers.length === 0 ? (
+            <Box paddingY={1}>
+              <Text color={theme.ui.comment}>{t('尚未配置任何外接供应商。按 [a] 或 [n] 即可添加！', 'No providers configured yet. Press [a] to create one!')}</Text>
+            </Box>
+          ) : (
+            providers.map((p, idx) => {
               const isSelected = idx === selectedProviderIdx;
-              const isActive = p.id === activeProvider?.id;
+              const isActive = activeProvider?.id === p.id;
               return (
-                <Box key={p.id} flexDirection="column">
-                  <Text color={isSelected ? theme.status.success : theme.text.primary}>
-                    {isSelected ? ' ▶ ' : '   '}
-                    <Text bold>{p.name}</Text> ({p.protocol})
-                    {isActive ? ' ★ [当前激活]' : ''}
-                  </Text>
-                  <Box marginLeft={5}>
+                <Box
+                  key={p.id}
+                  flexDirection="column"
+                  paddingX={1}
+                  paddingY={0}
+                  borderStyle={isSelected ? 'round' : undefined}
+                  borderColor={isSelected ? theme.text.accent : undefined}
+                >
+                  <Box flexDirection="row" justifyContent="space-between">
+                    <Box flexDirection="row">
+                      <Text bold color={isSelected ? theme.text.accent : theme.text.primary}>
+                        {isSelected ? '▶ ' : '  '}
+                        {p.name}
+                      </Text>
+                      <Text color={theme.ui.comment}> ({p.protocol})</Text>
+                      {isActive && <Text bold color={theme.status.success}> [{t('当前生效中', 'Active')}]</Text>}
+                    </Box>
                     <Text color={theme.text.secondary}>
-                      端点: {p.baseUrl} │ 默认模型: {p.defaultModel || '未设定'} │ 共 {p.models.length} 个模型
+                      {p.models.length} {t('个模型', 'models')}
+                    </Text>
+                  </Box>
+                  <Box paddingLeft={2}>
+                    <Text color={theme.text.secondary} dimColor>
+                      URL: {p.baseUrl} | Key: {p.apiKey ? `${p.apiKey.slice(0, 4)}***${p.apiKey.slice(-4)}` : 'none'}
                     </Text>
                   </Box>
                 </Box>
               );
-            })}
+            })
+          )}
+
+          {/* Claude Code Style Action Bar */}
+          <Box marginTop={1} flexDirection="column" borderStyle="single" borderColor={theme.border.default} paddingX={1}>
+            <Text bold color={theme.text.primary}>{t('快捷指令操作栏:', 'Action Shortcuts:')}</Text>
+            <Box flexDirection="row" justifyContent="space-between">
+              <Text color={theme.text.accent}>[Enter] {t('激活选中', 'Activate')}</Text>
+              <Text color={theme.status.success}>[e] {t('编辑配置', 'Edit')}</Text>
+              <Text color="#f59e0b">[p] {t('就地切换协议', 'Switch Protocol')}</Text>
+              <Text color="#38bdf8">[m] {t('多选模型', 'Pick Models')}</Text>
+              <Text color={theme.text.accent}>[a] {t('新建', 'Add New')}</Text>
+              <Text color={theme.status.error}>[d] {t('删除', 'Delete')}</Text>
+            </Box>
           </Box>
-          <Box marginTop={1} flexDirection="column">
+        </Box>
+      )}
+
+      {/* ========================================================
+          PAGE 2: EDIT BASICS
+         ======================================================== */}
+      {page === 'edit-basics' && (
+        <Box flexDirection="column">
+          <Text bold color={theme.text.primary} marginBottom={1}>
+            {editProviderId ? t(`编辑供应商: ${formName}`, `Edit Provider: ${formName}`) : t('新建外接供应商', 'New Provider Setup')}
+          </Text>
+
+          {/* Name Field */}
+          <Box flexDirection="column" marginY={0}>
+            <Text color={formField === 'name' ? theme.text.accent : theme.text.secondary}>
+              1. {t('供应商代号 / 名称 (Name):', 'Provider Name:')}
+            </Text>
+            <Box paddingLeft={2}>
+              <Text color={formField === 'name' ? theme.status.success : theme.text.primary}>
+                {formField === 'name' ? '▶ ' : '  '}
+                {formName}
+                {formField === 'name' ? '_' : ''}
+              </Text>
+            </Box>
+          </Box>
+
+          {/* URL Field */}
+          <Box flexDirection="column" marginY={1}>
+            <Text color={formField === 'url' ? theme.text.accent : theme.text.secondary}>
+              2. {t('API Base URL (端点，如 https://api.openai.com/v1):', 'API Base URL (e.g. https://api.openai.com/v1):')}
+            </Text>
+            <Box paddingLeft={2}>
+              <Text color={formField === 'url' ? theme.status.success : theme.text.primary}>
+                {formField === 'url' ? '▶ ' : '  '}
+                {formUrl}
+                {formField === 'url' ? '_' : ''}
+              </Text>
+            </Box>
+          </Box>
+
+          {/* Key Field */}
+          <Box flexDirection="column" marginY={0}>
+            <Text color={formField === 'key' ? theme.text.accent : theme.text.secondary}>
+              3. {t('API Key (密钥，支持右键直接粘贴):', 'API Key (paste supported):')}
+            </Text>
+            <Box paddingLeft={2}>
+              <Text color={formField === 'key' ? theme.status.success : theme.text.primary}>
+                {formField === 'key' ? '▶ ' : '  '}
+                {formKey ? `${formKey.slice(0, 6)}***${formKey.slice(-4)}` : ''}
+                {formField === 'key' ? '_' : ''}
+              </Text>
+            </Box>
+          </Box>
+
+          <Box marginTop={1}>
             <Text color={theme.ui.comment}>
-              提示: 按回车即激活所选供应商；按 A 或 N 增加新的 BaseURL / API Key。
+              {t('[Tab] 切换输入栏 | [Enter] 下一步选择通信协议 | [Esc] 取消返回', '[Tab] Switch field | [Enter] Next: Protocol | [Esc] Cancel')}
             </Text>
           </Box>
         </Box>
       )}
 
-      {/* --- STEP 1: NAME --- */}
-      {step === 'input-name' && (
-        <Box marginTop={1} flexDirection="column">
-          <Text bold color={theme.text.primary}>
-            步骤 1/4: 输入供应商名称 (Provider Name)
+      {/* ========================================================
+          PAGE 3: EDIT PROTOCOL
+         ======================================================== */}
+      {page === 'edit-protocol' && (
+        <Box flexDirection="column">
+          <Text bold color={theme.text.primary} marginBottom={1}>
+            {t('选择通信协议 (Wire Protocol):', 'Select Wire Protocol:')}
           </Text>
-          <Text color={theme.text.secondary}>例如: DeepSeek, GrokBuild, ZCode, OpenRouter 等</Text>
-          <Box marginTop={1}>
-            <Text color={theme.text.accent}>&gt; </Text>
-            <Text color={theme.text.primary}>{formName}</Text>
-            <Text color={theme.text.secondary}>_</Text>
-          </Box>
-          <Box marginTop={1}>
-            <Text color={theme.ui.comment}>(输入完毕后按 Enter 进入下一步)</Text>
-          </Box>
-        </Box>
-      )}
 
-      {/* --- STEP 2: URL --- */}
-      {step === 'input-url' && (
-        <Box marginTop={1} flexDirection="column">
-          <Text bold color={theme.text.primary}>
-            步骤 2/4: 输入 API 端点 Base URL
-          </Text>
-          <Text color={theme.text.secondary}>例如: https://api.openai.com/v1 或 https://api.deepseek.com/v1</Text>
-          <Box marginTop={1}>
-            <Text color={theme.text.accent}>&gt; </Text>
-            <Text color={theme.text.primary}>{formUrl}</Text>
-            <Text color={theme.text.secondary}>_</Text>
-          </Box>
-          <Box marginTop={1}>
-            <Text color={theme.ui.comment}>(输入完毕后按 Enter 进入下一步)</Text>
-          </Box>
-        </Box>
-      )}
-
-      {/* --- STEP 3: API KEY --- */}
-      {step === 'input-key' && (
-        <Box marginTop={1} flexDirection="column">
-          <Text bold color={theme.text.primary}>
-            步骤 3/4: 输入 API Key (密钥将安全保存在本机 ~/.gemini/ultra-providers.json)
-          </Text>
-          <Box marginTop={1}>
-            <Text color={theme.text.accent}>&gt; </Text>
-            <Text color={theme.text.primary}>
-              {formKey.length > 6 ? `${formKey.slice(0, 4)}...${formKey.slice(-3)}` : formKey}
-            </Text>
-            <Text color={theme.text.secondary}>_</Text>
-          </Box>
-          <Box marginTop={1}>
-            <Text color={theme.ui.comment}>(输入完毕后按 Enter 选择协议)</Text>
-          </Box>
-        </Box>
-      )}
-
-      {/* --- STEP 4: PROTOCOL --- */}
-      {step === 'select-protocol' && (
-        <Box marginTop={1} flexDirection="column">
-          <Text bold color={theme.text.primary}>
-            步骤 4/4: 选择下发请求所使用的协议规范 (Protocol)
-          </Text>
-          <Box marginTop={1} flexDirection="column">
-            {protocols.map((proto, idx) => {
-              const isSelected = idx === protocolIdx;
-              return (
-                <Box key={proto.id} flexDirection="column">
-                  <Text color={isSelected ? theme.status.success : theme.text.primary}>
-                    {isSelected ? ' ● ' : ' ○ '}
-                    <Text bold>{proto.label}</Text>
+          {PROTOCOL_OPTIONS.map((opt, idx) => {
+            const isCursor = idx === protocolCursor;
+            const isCurrent = formProtocol === opt.id;
+            return (
+              <Box key={opt.id} flexDirection="column" marginY={0} paddingLeft={1}>
+                <Text bold={isCursor} color={isCursor ? theme.text.accent : theme.text.primary}>
+                  {isCursor ? '▶ ' : '  '}
+                  {opt.label}
+                  {isCurrent ? <Text color={theme.status.success}> ({t('当前', 'Selected')})</Text> : null}
+                </Text>
+                <Box paddingLeft={4}>
+                  <Text color={theme.text.secondary} dimColor>
+                    {locale === 'zh' ? opt.descZh : opt.descEn}
                   </Text>
-                  <Box marginLeft={4}>
-                    <Text color={theme.text.secondary}>{proto.desc}</Text>
-                  </Box>
                 </Box>
-              );
-            })}
-          </Box>
+              </Box>
+            );
+          })}
+
           <Box marginTop={1}>
-            <Text color={theme.ui.comment}>(方向键选择，按 Enter 探测端点模型)</Text>
+            <Text color={theme.ui.comment}>
+              {t('[↑/↓] 移动选择 | [Enter] 确认协议并探测拉取模型列表', '[Up/Down] Navigate | [Enter] Confirm & fetch model catalog')}
+            </Text>
           </Box>
         </Box>
       )}
 
-      {/* --- STEP 5: SELECT / ENTER MODEL --- */}
-      {step === 'select-model' && (
-        <Box marginTop={1} flexDirection="column">
-          <Text bold color={theme.text.primary}>
-            完成配置: 选择或手动指定默认模型 (Default Model)
-          </Text>
-          {fetchedModels.length > 0 && (
-            <Box marginTop={1} flexDirection="column">
-              <Text color={theme.text.secondary}>端点模型列表 (上下键选择):</Text>
-              {fetchedModels
-                .map((m, idx) => ({ m, idx }))
-                .slice(windowStart, windowStart + 7)
-                .map(({ m, idx }) => {
-                const isSelected = idx === selectedModelIdx && !customModelInput;
-                return (
-                  <Box key={m}>
-                    <Text color={isSelected ? theme.status.success : theme.text.primary}>
-                      {isSelected ? ' ▶ ' : '   '}
-                      {m}
-                    </Text>
-                  </Box>
-                );
-              })}
+      {/* ========================================================
+          PAGE 4: MULTI-SELECT MODELS
+         ======================================================== */}
+      {page === 'select-models' && (
+        <Box flexDirection="column">
+          <Box flexDirection="row" justifyContent="space-between">
+            <Text bold color={theme.text.primary}>
+              {t('模型库多选清单 (Model Checklist):', 'Model Catalog Checklist:')}
+            </Text>
+            <Text color={theme.status.success}>
+              {selectedModelsSet.size}/{availableModels.length} {t('已勾选', 'selected')}
+            </Text>
+          </Box>
+
+          {isFetchingModels ? (
+            <Box paddingY={1}>
+              <Text color={theme.text.accent}>{t('正在探测端点可用模型...', 'Fetching models...')}</Text>
+            </Box>
+          ) : (
+            <Box flexDirection="column" marginTop={1}>
+              {availableModels.length === 0 ? (
+                <Text color={theme.ui.comment}>{t('未获取到模型列表，可在下方手动输入', 'No remote models detected, enter below:')}</Text>
+              ) : (
+                windowedModels.map((m) => {
+                  const isChecked = selectedModelsSet.has(m);
+                  const isCursor = availableModels[modelCursor] === m;
+                  return (
+                    <Box key={m} flexDirection="row">
+                      <Text color={isCursor ? theme.text.accent : theme.text.primary}>
+                        {isCursor ? '▶ ' : '  '}
+                      </Text>
+                      <Text bold={isChecked} color={isChecked ? theme.status.success : theme.text.secondary}>
+                        [{isChecked ? '✓' : ' '}] {m}
+                      </Text>
+                    </Box>
+                  );
+                })
+              )}
             </Box>
           )}
 
+          {/* Custom model input */}
           <Box marginTop={1} flexDirection="column">
-            <Text color={theme.text.secondary}>或手动输入自定义模型名:</Text>
+            <Text color={theme.text.secondary}>
+              {t('或手填追加自定义模型 (Custom Model):', 'Or type to append custom model:')}
+            </Text>
             <Box>
               <Text color={theme.text.accent}>&gt; </Text>
               <Text color={theme.text.primary}>{customModelInput}</Text>
@@ -466,19 +662,26 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({ onCl
             </Box>
           </Box>
 
-          <Box marginTop={1}>
-            <Text color={theme.status.success} bold>
-              (按 Enter 进入下一步：可选生图模型)
-            </Text>
+          <Box marginTop={1} borderStyle="single" borderColor={theme.border.default} paddingX={1} flexDirection="row" justifyContent="space-between">
+            <Text color={theme.text.accent}>[Space] {t('单个勾选/反选', 'Toggle')}</Text>
+            <Text color="#f59e0b">[A] {t('全选 / 全消', 'All / None')}</Text>
+            <Text color={theme.status.success}>[Enter] {t('下一步 (配置生图)', 'Next: Image Model')}</Text>
+            <Text color={theme.text.secondary}>[Esc] {t('返回', 'Back')}</Text>
           </Box>
         </Box>
       )}
 
-      {/* --- STEP 6: OPTIONAL IMAGE MODEL --- */}
-      {step === 'input-image-model' && (
-        <Box marginTop={1} flexDirection="column">
-          <Text bold color={theme.text.primary}>
-            可选: 为该供应商配置生图模型 (如 dall-e-3 / flux-1 / imagen-3.0-generate-002)
+      {/* ========================================================
+          PAGE 5: OPTIONAL IMAGE MODEL
+         ======================================================== */}
+      {page === 'edit-image' && (
+        <Box flexDirection="column">
+          <Text bold color={theme.text.primary} marginBottom={1}>
+            {t('生图模型配置 (可选):', 'Image Model Configuration (Optional):')}
+          </Text>
+          <Text color={theme.text.secondary}>
+            {t('指定该端点的生图模型 (如 dall-e-3 / flux-1 / recraft-v3 / imagen-3.0-generate-002):',
+               'Specify image generation model (e.g. dall-e-3, flux-1, recraft-v3):')}
           </Text>
           <Box marginTop={1}>
             <Text color={theme.text.accent}>&gt; </Text>
@@ -487,7 +690,7 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({ onCl
           </Box>
           <Box marginTop={1}>
             <Text color={theme.status.success} bold>
-              (留空直接 Enter 跳过并保存；填写后 Enter 保存并启用生图)
+              {t('(按 Enter 完成保存并立即应用生效！)', '(Press Enter to save and activate now!)')}
             </Text>
           </Box>
         </Box>
