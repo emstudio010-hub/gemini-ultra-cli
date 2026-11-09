@@ -11,8 +11,7 @@ import { type SkillDefinition, loadSkillsFromDir } from './skillLoader.js';
 import { getMultiSourceSkillDirs } from './skillOrchestrator.js';
 import type { GeminiCLIExtension } from '../config/config.js';
 import { debugLogger } from '../utils/debugLogger.js';
-import { coreEvents } from '../utils/events.js';
-
+// coreEvents removed to eliminate UI skill conflict warnings
 export { type SkillDefinition };
 
 export class SkillManager {
