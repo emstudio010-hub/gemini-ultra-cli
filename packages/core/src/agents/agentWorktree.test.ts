@@ -64,7 +64,11 @@ it('snapshots staged, unstaged and untracked files without changing source HEAD/
   const head = git(source, ['rev-parse', 'HEAD']);
   const index = fs.readFileSync(path.join(source, '.git/index'));
   const id = randomUUID();
-  const state = prepareAgentWorktree(root, id, source);
+  const sourceForTask =
+    process.platform === 'win32'
+      ? source.replace(/^[A-Z]:/, (drive) => drive.toLowerCase())
+      : source;
+  const state = prepareAgentWorktree(root, id, sourceForTask);
   expect(fs.readFileSync(path.join(state.directory, 'seed.txt'), 'utf8')).toBe(
     'unstaged\n',
   );

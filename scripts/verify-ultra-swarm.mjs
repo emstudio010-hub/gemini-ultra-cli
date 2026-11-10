@@ -567,14 +567,18 @@ try {
   clearTimeout(timer);
   let isolatedBeforeApply;
   let actualShellCwd;
+  let canonicalWorktreeDirectory;
   let ignoredFilesPreserved;
   if (worktreeMode) {
     isolatedBeforeApply =
       !fs.existsSync(path.join(workspace, 'deliverable.txt')) &&
       fs.existsSync(artifact);
-    actualShellCwd = fs.readFileSync(
-      path.join(worktreeState.directory, 'shell-cwd.txt'),
-      'utf8',
+    canonicalWorktreeDirectory = fs.realpathSync(worktreeState.directory);
+    actualShellCwd = fs.realpathSync(
+      fs.readFileSync(
+        path.join(worktreeState.directory, 'shell-cwd.txt'),
+        'utf8',
+      ),
     );
     await localCommand('/swarm workspace export');
     await localCommand('/swarm workspace apply');
@@ -780,7 +784,11 @@ try {
             ...(worktreeMode
               ? {
                   isolatedBeforeApply,
-                  actualShellCwd: actualShellCwd === worktreeState.directory,
+                  actualShellCwd:
+                    path.relative(
+                      actualShellCwd,
+                      canonicalWorktreeDirectory,
+                    ) === '',
                   ignoredFilesPreserved,
                   sourceIndexUnchanged:
                     originalIndexHash ===
@@ -859,7 +867,14 @@ try {
     failures,
     state,
     board,
-    ...(worktreeMode ? { localRuns, worktree: worktreeState } : {}),
+    ...(worktreeMode
+      ? {
+          localRuns,
+          worktree: worktreeState,
+          actualShellDirectory: actualShellCwd,
+          canonicalWorktreeDirectory,
+        }
+      : {}),
     ...(recoveryMode ? { owner, recoveryRuns } : {}),
     actualDeliveryHex: fs.existsSync(artifact)
       ? fs.readFileSync(artifact).toString('hex')

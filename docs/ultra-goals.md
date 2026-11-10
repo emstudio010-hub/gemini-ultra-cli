@@ -656,3 +656,7 @@
   active，仅codex分支，不合并master/正式Release。
 
 - E-150/F-040收尾：Git原生remove无force仍删除ignored文件，临时仓库实证退出0；新增显式ignored预检拒绝清理，保留内容和HEAD，用户自行处理后重试。已并入既有工作树6项且通过，严格lint通过；同一21请求CLI链增加一次本地拒绝清理，无新增模型调用。取消旧run42906998485，最终同源包另跑，不把取消当完成。证据worktree-ignored-cleanup-probe.json及agent-worktree-ignore.log/junit。
+
+- E-150/F-041：最终CI42907564263 Linux成功，Windows workspace
+  on根目录大小写身份误判，macOS仅shell
+  cwd原始路径字符串断言false。改为realpath+平台path.relative身份比较，脚本预先保存规范目录和实际cwd；Windows混合盘符输入并入既有快照用例。原失败日志保留，不称交付；准备修复后的同源三平台包。

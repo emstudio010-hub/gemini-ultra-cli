@@ -64,6 +64,12 @@ does not apply 来自冲突拒绝用例。
 
 ## 接续目标池
 
+首次最终CI运行42907564263：Linux全部通过；Windows在workspace
+on的仓库身份比较失败，macOS工作树链仅原始shell
+cwd字符串比较为false，其余检查通过。F-041修复真实路径比较：resolve
+realpath后用平台path.relative规则处理Windows盘符/目录大小写；验证脚本在清理前记录规范目录与实际shell目录，避免macOS
+/var与/private/var别名误判。Windows混合盘符大小写并入既有快照用例；只重查受影响工作树6项和lint，其他原通过用例不重复。首个失败原日志保留github-preview39-failed.log；不得将失败运行当交付。
+
 收尾复核 F-040：实际临时 Git 仓库中，原生 `git worktree remove`
 无 force 仍删除 ignored 文件，退出0。产品已在清理前显式列出 ignored 未跟踪文件并拒绝自动清理，保留内容和 HEAD；用户自行保留/清除后可重试。原三平台运行42906998485因此取消，不将其当最终交付。新增保护并入现有工作树用例及同一21请求CLI链，无新增付费调用；证据 worktree-ignored-cleanup-probe.json、agent-worktree-ignore.log/junit、agent-worktree-ignore-lint.log。
 

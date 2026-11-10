@@ -82,7 +82,8 @@ function text(cwd: string, args: string[]): string {
   return git(cwd, args).toString('utf8').trim();
 }
 function same(a: string, b: string): boolean {
-  return fs.realpathSync(a) === fs.realpathSync(b);
+  // Resolve aliases on Unix and compare drive/path casing using Windows rules.
+  return path.relative(fs.realpathSync(a), fs.realpathSync(b)) === '';
 }
 function assertOwned(root: string, state: AgentWorktree): void {
   if (
