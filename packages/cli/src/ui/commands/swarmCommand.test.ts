@@ -47,3 +47,27 @@ it('changes only cumulative limits locally, rejects malformed input and never su
   expect(readSwarm(root, swarm.id).budget.maxRequests).toBe(24);
   expect(budget.autoExecute).toBe(false);
 });
+
+it('cancels by an explicit ID before reading a damaged latest binding, without a submitted prompt', async () => {
+  const swarm = createSwarm(root, 'Keep the damaged state');
+  fs.writeFileSync(path.join(root, 'swarms/latest.json'), '{broken-binding');
+  fs.writeFileSync(
+    path.join(root, 'swarms', swarm.id, 'members.json'),
+    '{broken-members',
+  );
+  const config = {
+    storage: { getProjectTempDir: () => root },
+  } as unknown as Config;
+  const context = createMockCommandContext({
+    services: { agentContext: { config } },
+  });
+  const cancel = swarmCommand.subCommands!.find(
+    (command) => command.name === 'cancel',
+  )!;
+  expect(await cancel.action!(context, swarm.id)).toBeUndefined();
+  expect(readSwarm(root, swarm.id)).toMatchObject({
+    phase: 'cancelled',
+    accountingUnknown: true,
+  });
+  expect(cancel.autoExecute).toBe(false);
+});

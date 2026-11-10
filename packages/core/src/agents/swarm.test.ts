@@ -84,6 +84,8 @@ it('counts successful turns task-wide and migrates legacy spent turns without re
 
   const file = path.join(root, 'swarms', swarm.id, 'members.json');
   const legacy = { ...readSwarm(root, swarm.id), budget: undefined };
+  legacy.budgetVersion = undefined;
+  fs.rmSync(path.join(root, 'swarms', swarm.id, 'owner.json'));
   fs.writeFileSync(file, JSON.stringify(legacy));
   expect(readSwarm(root, swarm.id).budget.turns).toBe(1);
 });

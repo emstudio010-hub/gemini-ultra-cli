@@ -13,6 +13,8 @@ import { spawn } from 'node:child_process';
 const entry = path.resolve(process.argv[2]);
 const reportPath = path.resolve(process.argv[3]);
 const budgetMode = process.argv[4] === 'budget';
+const recoveryMode = process.argv[4] === 'recovery';
+let recoveryReady = false;
 const diagnosticMode = process.argv[4] === 'diagnostic' || budgetMode;
 const metadata = JSON.parse(
   fs.readFileSync(
@@ -89,7 +91,9 @@ const server = createServer(async (req, res) => {
       return call('complete_task', { [schema.required[0]]: value });
     };
     let message;
-    if (role === 'main') {
+    if (recoveryMode && recoveryReady) {
+      message = { content: 'SWARM_RECOVERY_CONTINUED' };
+    } else if (role === 'main') {
       assert.ok(tools.includes('manage_swarm'));
       if (!swarmDirectory) {
         const temporaryRoot = path.join(profile, '.gemini/tmp');
@@ -111,7 +115,16 @@ const server = createServer(async (req, res) => {
             ownerPid: child.pid,
             members: [],
             ...(budgetMode
-              ? { budget: { maxRequests: 2, maxFailedTurns: 2, maxTurns: 10 } }
+              ? {
+                  budget: {
+                    maxRequests: 2,
+                    maxFailedTurns: 2,
+                    maxTurns: 10,
+                    requests: 0,
+                    failedTurns: 0,
+                    turns: 0,
+                  },
+                }
               : {}),
           }),
         );
@@ -119,6 +132,25 @@ const server = createServer(async (req, res) => {
           path.join(swarmsRoot, 'latest.json'),
           JSON.stringify({ id }),
         );
+        if (recoveryMode) {
+          fs.writeFileSync(
+            path.join(swarmDirectory, 'owner.json'),
+            JSON.stringify({
+              id,
+              ownerPid: child.pid,
+              budgetVersion: 1,
+              accountingUnknown: false,
+            }),
+          );
+          fs.writeFileSync(
+            path.join(swarmDirectory, 'members.json'),
+            '{broken-swarm-members',
+          );
+          fs.writeFileSync(
+            path.join(swarmsRoot, 'latest.json'),
+            '{broken-swarm-binding',
+          );
+        }
       }
       const steps = diagnosticMode
         ? [
@@ -378,6 +410,68 @@ try {
     reportPath.replace(/\.json$/, '') + '-output.txt',
     stdout + '\nSTDERR\n' + stderr,
   );
+  const recoveryRuns = [];
+  if (recoveryMode && swarmDirectory) {
+    const runCommand = async (input) => {
+      child = spawn(
+        process.execPath,
+        [
+          entry,
+          '-y',
+          '-m',
+          'fixture-model',
+          '-p',
+          input,
+          '--output-format',
+          'json',
+        ],
+        {
+          cwd: workspace,
+          env,
+          windowsHide: true,
+          stdio: ['ignore', 'pipe', 'pipe'],
+        },
+      );
+      let output = '';
+      child.stdout.on('data', (chunk) => {
+        output += chunk;
+        if (output.length > 4 * 1024 * 1024) child.kill();
+      });
+      child.stderr.on('data', (chunk) => {
+        output += chunk;
+        if (output.length > 4 * 1024 * 1024) child.kill();
+      });
+      const commandTimer = setTimeout(() => {
+        timedOut = true;
+        child.kill();
+      }, 60000);
+      let commandExit;
+      try {
+        commandExit = await new Promise((resolve, reject) => {
+          child.once('error', reject);
+          child.once('close', resolve);
+        });
+      } finally {
+        clearTimeout(commandTimer);
+      }
+      recoveryRuns.push({
+        input,
+        exitCode: commandExit,
+        output,
+        requestCount: requests.length,
+      });
+    };
+    await runCommand(`/swarm cancel ${id}`);
+    await runCommand('/swarm resume');
+    recoveryReady = true;
+    await runCommand(
+      'Continue ordinary conversation after the cancelled swarm fixture.',
+    );
+    fs.appendFileSync(
+      reportPath.replace(/\.json$/, '') + '-output.txt',
+      '\nLOCAL RECOVERY\n' + JSON.stringify(recoveryRuns, null, 2),
+    );
+  }
   const state =
     swarmDirectory && fs.existsSync(path.join(swarmDirectory, 'members.json'))
       ? JSON.parse(
@@ -392,71 +486,119 @@ try {
         .filter(Boolean)
         .map((line) => JSON.parse(line))
     : [];
-  const checks = budgetMode
+  const owner =
+    recoveryMode && swarmDirectory
+      ? JSON.parse(
+          fs.readFileSync(path.join(swarmDirectory, 'owner.json'), 'utf8'),
+        )
+      : undefined;
+  const checks = recoveryMode
     ? {
-        boundedExit: exitCode !== 0 && !timedOut,
+        initialFailureBounded: exitCode === 1 && !timedOut,
         noFixtureMismatch: failures.length === 0,
-        nativeBudgetBlock:
-          state?.phase === 'blocked' &&
-          state.stopReason.includes('model dispatch budget exhausted'),
-        cumulativeDispatches: state?.budget?.requests === 2,
-        noExtraProviderCall: requests.length === 3, // Initial coordinator response creates the isolated seed before accounting starts.
-        singleMemberTurn:
-          state?.members[0]?.turns === 1 && state.members[0].state === 'paused',
-        errorReported: (stdout + stderr).includes(
-          'model dispatch budget exhausted',
-        ),
-        neverCompleted: !stdout.includes('NATIVE_SWARM_DELIVERED'),
-      }
-    : diagnosticMode
-      ? {
-          normalExit: exitCode === 0 && !timedOut,
-          noFixtureMismatch: failures.length === 0,
-          pausedWithConcreteDiagnostic:
-            state?.members[0]?.state === 'paused' &&
-            state.members[0].result.includes(
-              'OpenAI output token limit reached; response is incomplete.',
-            ),
-          notMisreportedAsComplete: state?.phase === 'active',
-          singlePausedTurn:
-            requests.length === 4 && state?.members[0]?.turns === 1,
-          finalText: stdout.includes('NATIVE_SWARM_DIAGNOSTIC_RETAINED'),
-        }
-      : {
-          normalExit: exitCode === 0 && !timedOut,
-          noFixtureMismatch: failures.length === 0,
-          nativeCompletion: state?.phase === 'completed',
-          exactDelivery:
-            fs.existsSync(artifact) &&
-            /^answer=42\r?\n$/.test(fs.readFileSync(artifact, 'utf8')),
-          seedUnchanged:
-            fs.readFileSync(source, 'utf8') ===
-            'Required deliverable: answer=42\n',
-          mentionsWakeIdleMember:
-            state?.members.find((member) => member.name === 'analyst')
-              ?.turns === 2,
-          noIdlePolling: requests.length === 20,
-          assignedPublicIdentity:
-            board.some(
-              (post) =>
-                post.sender === 'analyst' &&
-                post.text.startsWith('@coordinator'),
-            ) &&
-            board.some(
-              (post) =>
-                post.sender === 'builder' &&
-                post.text.startsWith('@coordinator'),
-            ),
-          monotonicBoard: board.every((post, index) => post.seq === index + 1),
-          currentIndependentVerdict: state?.members.some(
-            (member) =>
-              member.agent === 'workflow-auditor' &&
-              member.verifiedRevision === state.revision,
+        explicitLocalCancel:
+          recoveryRuns[0]?.exitCode === 0 &&
+          recoveryRuns[0]?.requestCount === 1,
+        oldResumeRejected:
+          recoveryRuns[1]?.exitCode === 42 &&
+          recoveryRuns[1]?.requestCount === 1 &&
+          recoveryRuns[1].output.includes(
+            'Historical swarm usage is unavailable',
           ),
-          finalText: stdout.includes('NATIVE_SWARM_DELIVERED'),
-        };
+        cancelledWithUnknownUsage:
+          state?.phase === 'cancelled' &&
+          state.accountingUnknown === true &&
+          owner?.accountingUnknown === true,
+        membersPreserved:
+          !!owner?.recoveryPath &&
+          fs.readFileSync(owner.recoveryPath, 'utf8') ===
+            '{broken-swarm-members',
+        bindingPreserved:
+          !!owner?.bindingRecoveryPath &&
+          fs.readFileSync(owner.bindingRecoveryPath, 'utf8') ===
+            '{broken-swarm-binding',
+        originalBoardUnchanged: board.length === 0,
+        ordinaryConversationRestored:
+          recoveryRuns[2]?.exitCode === 0 &&
+          recoveryRuns[2].output.includes('SWARM_RECOVERY_CONTINUED'),
+        onlyExplicitConversationUsesModel:
+          requests.length === 2 && recoveryRuns[2]?.requestCount === 2,
+        noArtifact: !fs.existsSync(artifact),
+      }
+    : budgetMode
+      ? {
+          boundedExit: exitCode !== 0 && !timedOut,
+          noFixtureMismatch: failures.length === 0,
+          nativeBudgetBlock:
+            state?.phase === 'blocked' &&
+            state.stopReason.includes('model dispatch budget exhausted'),
+          cumulativeDispatches: state?.budget?.requests === 2,
+          noExtraProviderCall: requests.length === 3, // Initial coordinator response creates the isolated seed before accounting starts.
+          singleMemberTurn:
+            state?.members[0]?.turns === 1 &&
+            state.members[0].state === 'paused',
+          errorReported: (stdout + stderr).includes(
+            'model dispatch budget exhausted',
+          ),
+          neverCompleted: !stdout.includes('NATIVE_SWARM_DELIVERED'),
+        }
+      : diagnosticMode
+        ? {
+            normalExit: exitCode === 0 && !timedOut,
+            noFixtureMismatch: failures.length === 0,
+            pausedWithConcreteDiagnostic:
+              state?.members[0]?.state === 'paused' &&
+              state.members[0].result.includes(
+                'OpenAI output token limit reached; response is incomplete.',
+              ),
+            notMisreportedAsComplete: state?.phase === 'active',
+            singlePausedTurn:
+              requests.length === 4 && state?.members[0]?.turns === 1,
+            finalText: stdout.includes('NATIVE_SWARM_DIAGNOSTIC_RETAINED'),
+          }
+        : {
+            normalExit: exitCode === 0 && !timedOut,
+            noFixtureMismatch: failures.length === 0,
+            nativeCompletion: state?.phase === 'completed',
+            exactDelivery:
+              fs.existsSync(artifact) &&
+              /^answer=42\r?\n$/.test(fs.readFileSync(artifact, 'utf8')),
+            seedUnchanged:
+              fs.readFileSync(source, 'utf8') ===
+              'Required deliverable: answer=42\n',
+            mentionsWakeIdleMember:
+              state?.members.find((member) => member.name === 'analyst')
+                ?.turns === 2,
+            noIdlePolling: requests.length === 20,
+            assignedPublicIdentity:
+              board.some(
+                (post) =>
+                  post.sender === 'analyst' &&
+                  post.text.startsWith('@coordinator'),
+              ) &&
+              board.some(
+                (post) =>
+                  post.sender === 'builder' &&
+                  post.text.startsWith('@coordinator'),
+              ),
+            monotonicBoard: board.every(
+              (post, index) => post.seq === index + 1,
+            ),
+            currentIndependentVerdict: state?.members.some(
+              (member) =>
+                member.agent === 'workflow-auditor' &&
+                member.verifiedRevision === state.revision,
+            ),
+            finalText: stdout.includes('NATIVE_SWARM_DELIVERED'),
+          };
   const report = {
-    mode: budgetMode ? 'budget' : diagnosticMode ? 'diagnostic' : 'delivery',
+    mode: recoveryMode
+      ? 'recovery'
+      : budgetMode
+        ? 'budget'
+        : diagnosticMode
+          ? 'diagnostic'
+          : 'delivery',
     passed: Object.values(checks).every(Boolean),
     version: metadata.version,
     platform: process.platform,
@@ -470,14 +612,17 @@ try {
     failures,
     state,
     board,
+    ...(recoveryMode ? { owner, recoveryRuns } : {}),
     actualDeliveryHex: fs.existsSync(artifact)
       ? fs.readFileSync(artifact).toString('hex')
       : null,
-    scope: budgetMode
-      ? 'Native main/member executor budget with a loopback output-limit response: the initial coordinator request creates the isolated seed, then two cumulative dispatches are allowed and the next is blocked before the provider. CLI exits nonzero, member stays paused and the task stays blocked. Not a live-provider delivery or HTTP retry billing counter.'
-      : diagnosticMode
-        ? 'Installed CLI and real local executor receiving a loopback provider output-limit response. Checks the concrete error reaches the paused member, board and coordinator, without marking completion. Not a live-provider task or proof the model respects retry budgets.'
-        : 'Installed CLI, actual native swarm service, real local child executors, public board and member identity, mention-triggered wake, actual file writes/reads and current independent verifier gate. Model responses are loopback fixtures. Not live-provider autonomy, terminal keyboard/visual acceptance or complex reverse engineering.',
+    scope: recoveryMode
+      ? 'Generated corrupt Swarm members and binding: initial bounded CLI failure, actual local /swarm cancel <id> with no model request, old resume rejected with exit 42 and no model request, then ordinary conversation restored. Both bad files retained byte for byte and board unchanged. Two loopback requests total; no real provider task or delivery success.'
+      : budgetMode
+        ? 'Native main/member executor budget with a loopback output-limit response: the initial coordinator request creates the isolated seed, then two cumulative dispatches are allowed and the next is blocked before the provider. CLI exits nonzero, member stays paused and the task stays blocked. Not a live-provider delivery or HTTP retry billing counter.'
+        : diagnosticMode
+          ? 'Installed CLI and real local executor receiving a loopback provider output-limit response. Checks the concrete error reaches the paused member, board and coordinator, without marking completion. Not a live-provider task or proof the model respects retry budgets.'
+          : 'Installed CLI, actual native swarm service, real local child executors, public board and member identity, mention-triggered wake, actual file writes/reads and current independent verifier gate. Model responses are loopback fixtures. Not live-provider autonomy, terminal keyboard/visual acceptance or complex reverse engineering.',
   };
   fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));

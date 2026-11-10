@@ -39,7 +39,83 @@ const swarmSchema = z.object({
   revision: z.number().int().nonnegative().default(0),
   ownerPid: z.number().int().positive(),
   members: z.array(memberSchema).max(12).default([]),
+  budgetVersion: z.literal(1).optional(),
+  accountingUnknown: z.boolean().default(false),
+  recoveryPath: z.string().optional(),
 });
+const ownerSchema = z.object({
+  id: z.string().uuid(),
+  ownerPid: z.number().int().positive(),
+  budgetVersion: z.literal(1),
+  accountingUnknown: z.boolean().default(false),
+  recoveryPath: z.string().optional(),
+  bindingRecoveryPath: z.string().optional(),
+  ownerRecoveryPath: z.string().optional(),
+});
+const unavailable =
+  'Historical swarm usage is unavailable. This cancelled swarm cannot resume or receive a new budget; create a scoped successor.';
+class DamagedSwarmError extends Error {}
+function missing(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === 'ENOENT'
+  );
+}
+function recoverable(error: unknown): boolean {
+  return error instanceof DamagedSwarmError || missing(error);
+}
+function readJson(file: string, limit: number): unknown {
+  if (fs.statSync(file).size > limit)
+    throw new DamagedSwarmError(
+      'Swarm state exceeds its size limit; use /swarm cancel <id> to preserve and cancel it.',
+    );
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (error) {
+    if (error instanceof SyntaxError)
+      throw new DamagedSwarmError(
+        'Swarm state is damaged; use /swarm cancel <id> to preserve and cancel it.',
+      );
+    throw error;
+  }
+}
+function readOwner(root: string, id: string) {
+  const file = path.join(directory(root, id), 'owner.json');
+  if (!fs.existsSync(file)) return undefined;
+  const result = ownerSchema.safeParse(readJson(file, 16384));
+  if (!result.success || result.data.id !== id)
+    throw new DamagedSwarmError(
+      'Swarm owner state is damaged; cancellation requires a valid owner record.',
+    );
+  return result.data;
+}
+function owns(ownerPid: number): void {
+  if (ownerPid === process.pid) return;
+  try {
+    process.kill(ownerPid, 0);
+  } catch (error) {
+    if (isProcessMissing(error)) return;
+    throw error;
+  }
+  throw new Error('Cancel or resume this swarm from its owning CLI session.');
+}
+function readPointer(root: string) {
+  const file = path.join(root, 'swarms', 'latest.json');
+  if (!fs.existsSync(file)) return undefined;
+  const result = z
+    .object({
+      id: z.string().uuid(),
+      ownerPid: z.number().int().positive().optional(),
+    })
+    .safeParse(readJson(file, 4096));
+  if (!result.success)
+    throw new DamagedSwarmError(
+      'Swarm binding is damaged; use /swarm cancel <id> with the saved swarm ID.',
+    );
+  return result.data;
+}
 export type Swarm = z.infer<typeof swarmSchema>;
 export type SwarmMember = z.infer<typeof memberSchema>;
 export type SwarmBudgetLimits = Pick<
@@ -86,12 +162,38 @@ function writeJson(file: string, value: unknown): void {
 export function readSwarm(root: string, id: string): Swarm {
   const file = path.join(directory(root, id), 'members.json');
   // Twelve schema-valid UTF-8 member briefs and results can exceed 256 KiB.
-  if (fs.statSync(file).size > 2 * 1024 * 1024)
-    throw new Error('Swarm state is too large.');
-  const raw: unknown = JSON.parse(fs.readFileSync(file, 'utf8'));
-  const swarm = swarmSchema.parse(raw);
+  const raw = readJson(file, 2 * 1024 * 1024);
+  const parsed = swarmSchema.safeParse(raw);
+  if (!parsed.success || parsed.data.id !== id)
+    throw new DamagedSwarmError(
+      'Swarm member state is damaged; use /swarm cancel <id> to preserve it.',
+    );
+  const swarm = parsed.data;
+  if (typeof raw === 'object' && raw !== null && 'budget' in raw) {
+    const value = raw.budget;
+    const fields = [
+      'maxRequests',
+      'maxFailedTurns',
+      'maxTurns',
+      'requests',
+      'failedTurns',
+      'turns',
+    ];
+    if (
+      typeof value !== 'object' ||
+      value === null ||
+      !fields.every((field) => Object.hasOwn(value, field))
+    )
+      throw new DamagedSwarmError(
+        'Tracked swarm budget has missing counters; use /swarm cancel <id> rather than resetting usage.',
+      );
+  }
   // Existing records already spent these turns. Migration must not grant them again.
   if (typeof raw === 'object' && raw !== null && !('budget' in raw)) {
+    if (swarm.budgetVersion || readOwner(root, id)?.budgetVersion)
+      throw new DamagedSwarmError(
+        'Tracked swarm budget is missing; cancel locally instead of resetting old usage.',
+      );
     swarm.budget.turns = swarm.members.reduce(
       (sum, member) => sum + member.turns,
       0,
@@ -100,21 +202,36 @@ export function readSwarm(root: string, id: string): Swarm {
       (member) => member.state === 'paused' && member.result,
     ).length;
   }
+  const owner = readOwner(root, id);
+  if (owner?.accountingUnknown) {
+    swarm.accountingUnknown = true;
+    swarm.recoveryPath = owner.recoveryPath;
+    swarm.phase = 'cancelled';
+    swarm.stopReason = unavailable;
+  }
   return swarm;
 }
 function saveSwarm(root: string, value: Swarm): void {
+  value.budgetVersion = 1;
+  writeJson(
+    path.join(directory(root, value.id), 'owner.json'),
+    ownerSchema.parse({
+      ...readOwner(root, value.id),
+      id: value.id,
+      ownerPid: value.ownerPid,
+      budgetVersion: 1,
+      accountingUnknown: value.accountingUnknown,
+      recoveryPath: value.recoveryPath,
+    }),
+  );
   writeJson(
     path.join(directory(root, value.id), 'members.json'),
     swarmSchema.parse(value),
   );
 }
 export function latestSwarm(root: string): Swarm | undefined {
-  const pointer = path.join(root, 'swarms', 'latest.json');
-  if (!fs.existsSync(pointer)) return undefined;
-  const id = z
-    .object({ id: z.string().uuid() })
-    .parse(JSON.parse(fs.readFileSync(pointer, 'utf8'))).id;
-  return readSwarm(root, id);
+  const pointer = readPointer(root);
+  return pointer ? readSwarm(root, pointer.id) : undefined;
 }
 export function readSwarmBoard(root: string, id: string): SwarmPost[] {
   const file = path.join(directory(root, id), 'board.jsonl');
@@ -184,7 +301,10 @@ export function createSwarm(root: string, objective: string): Swarm {
     mode: 0o600,
   });
   saveSwarm(root, swarm);
-  writeJson(path.join(root, 'swarms/latest.json'), { id: swarm.id });
+  writeJson(path.join(root, 'swarms/latest.json'), {
+    id: swarm.id,
+    ownerPid: swarm.ownerPid,
+  });
   appendPost(root, swarm.id, 'coordinator', objective.slice(0, 4000));
   return swarm;
 }
@@ -192,6 +312,9 @@ export function swarmSnapshot(root: string, id: string) {
   const swarm = readSwarm(root, id);
   return {
     ...swarm,
+    budget: swarm.accountingUnknown
+      ? { ...swarm.budget, requests: null, failedTurns: null, turns: null }
+      : swarm.budget,
     members: swarm.members.map((member) => ({
       ...member,
       result: member.result.slice(0, 2000),
@@ -269,6 +392,7 @@ export function setSwarmBudget(
   limits: SwarmBudgetLimits,
 ): void {
   const swarm = readSwarm(root, id);
+  if (swarm.accountingUnknown) throw new Error(unavailable);
   if (swarm.ownerPid !== process.pid) {
     try {
       process.kill(swarm.ownerPid, 0);
@@ -399,6 +523,9 @@ export class SwarmEngine {
   }
   stopMembers(): void {
     for (const run of this.running.values()) run.controller.abort();
+  }
+  hasRunningMembers(): boolean {
+    return this.running.size > 0;
   }
   async wait(signal: AbortSignal): Promise<void> {
     const cancel = () => this.cancel();
@@ -638,32 +765,152 @@ export function postSwarmMessage(
     throw new Error('Resume the swarm in this CLI session before posting.');
   engine.post(sender, text);
 }
-export function cancelSwarm(root: string, id: string): void {
+export function cancelSwarm(root: string, id: string): Swarm {
   const engine = engines.get(engineKey(root, id));
-  if (engine) {
-    engine.cancel();
-    return;
+  let swarm: Swarm;
+  try {
+    swarm = readSwarm(root, id);
+  } catch (error) {
+    if (!recoverable(error)) throw error;
+    engine?.stopMembers();
+    if (engine?.hasRunningMembers())
+      throw new Error(
+        'Cancellation requested; retry /swarm cancel after native members settle. Damaged state remains untouched.',
+      );
+    return recoverSwarm(root, id);
   }
-  const swarm = readSwarm(root, id);
-  if (swarm.phase === 'completed') return;
-  if (swarm.ownerPid !== process.pid) {
+  owns(swarm.ownerPid);
+  if (swarm.phase !== 'completed') {
+    swarm.phase = 'cancelled';
+    for (const member of swarm.members)
+      if (member.state !== 'killed') member.state = 'paused';
+  }
+  saveSwarm(root, swarm);
+  engine?.stopMembers();
+  repairPointer(root, swarm);
+  return swarm;
+}
+
+function repairPointer(root: string, swarm: Swarm): void {
+  let pointer: ReturnType<typeof readPointer>;
+  try {
+    pointer = readPointer(root);
+  } catch (error) {
+    if (!recoverable(error)) throw error;
+    const file = path.join(root, 'swarms/latest.json');
+    const backup = `${file}.corrupt-${randomUUID()}`;
+    fs.renameSync(file, backup);
+    const owner = readOwner(root, swarm.id)!;
+    writeJson(path.join(directory(root, swarm.id), 'owner.json'), {
+      ...owner,
+      bindingRecoveryPath: backup,
+    });
+    writeJson(file, { id: swarm.id, ownerPid: process.pid });
+  }
+  if (!pointer || pointer.id === swarm.id)
+    writeJson(path.join(root, 'swarms/latest.json'), {
+      id: swarm.id,
+      ownerPid: process.pid,
+    });
+}
+
+function recoverSwarm(root: string, id: string): Swarm {
+  let owner: ReturnType<typeof readOwner>;
+  let ownerDamaged = false;
+  try {
+    owner = readOwner(root, id);
+  } catch (error) {
+    if (!recoverable(error)) throw error;
+    ownerDamaged = true;
+  }
+  let pointer: ReturnType<typeof readPointer>;
+  try {
+    pointer = readPointer(root);
+  } catch (error) {
+    if (!recoverable(error)) throw error;
+  }
+  let ownerPid =
+    owner?.ownerPid ?? (pointer?.id === id ? pointer.ownerPid : undefined);
+  // Older releases stored ownership only in members.json. Recover its validated
+  // owner field when the JSON is intact but the member/budget schema is damaged.
+  if (!ownerPid) {
     try {
-      process.kill(swarm.ownerPid, 0);
-      throw new Error('Cancel this swarm from its owning CLI session.');
+      const prior = z
+        .object({ id: z.literal(id), ownerPid: z.number().int().positive() })
+        .safeParse(
+          readJson(
+            path.join(directory(root, id), 'members.json'),
+            2 * 1024 * 1024,
+          ),
+        );
+      if (prior.success) ownerPid = prior.data.ownerPid;
     } catch (error) {
-      if (!isProcessMissing(error)) throw error;
+      if (!recoverable(error)) throw error;
     }
   }
-  swarm.phase = 'cancelled';
-  for (const member of swarm.members)
-    if (member.state !== 'killed') member.state = 'paused';
+  if (!ownerPid)
+    throw new Error(
+      'Cannot verify the owner of this damaged swarm. Restore its owner.json or binding before cancelling.',
+    );
+  owns(ownerPid);
+  const file = path.join(directory(root, id), 'members.json');
+  const recoveryPath = fs.existsSync(file)
+    ? `${file}.corrupt-${randomUUID()}`
+    : owner?.recoveryPath;
+  let ownerRecoveryPath = owner?.ownerRecoveryPath;
+  if (ownerDamaged) {
+    const ownerFile = path.join(directory(root, id), 'owner.json');
+    ownerRecoveryPath = `${ownerFile}.corrupt-${randomUUID()}`;
+    fs.renameSync(ownerFile, ownerRecoveryPath);
+  }
+  ownerPid = process.pid;
+  // Persist the unknown-usage marker before moving the damaged member record.
+  writeJson(
+    path.join(directory(root, id), 'owner.json'),
+    ownerSchema.parse({
+      ...owner,
+      id,
+      ownerPid,
+      budgetVersion: 1,
+      accountingUnknown: true,
+      recoveryPath,
+      ownerRecoveryPath,
+    }),
+  );
+  if (recoveryPath && fs.existsSync(file)) fs.renameSync(file, recoveryPath);
+  const swarm = swarmSchema.parse({
+    id,
+    objective:
+      'Cancelled swarm with damaged state; original evidence is retained.',
+    ownerPid,
+    phase: 'cancelled',
+    budgetVersion: 1,
+    accountingUnknown: true,
+    recoveryPath,
+    stopReason: unavailable,
+  });
   saveSwarm(root, swarm);
+  repairPointer(root, swarm);
+  return swarm;
+}
+
+/** Explicit local recovery path. A damaged binding never selects an arbitrary old task. */
+export function cancelSavedSwarm(root: string, requestedId?: string): Swarm {
+  if (requestedId)
+    return cancelSwarm(root, z.string().uuid().parse(requestedId));
+  const pointer = readPointer(root);
+  if (!pointer)
+    throw new Error(
+      'No saved swarm. Use /swarm cancel <id> if its binding is missing.',
+    );
+  return cancelSwarm(root, pointer.id);
 }
 
 export async function resumeSwarm(root: string, id: string): Promise<void> {
   const engine = engines.get(engineKey(root, id));
   if (engine) await engine.wait(new AbortController().signal);
   const swarm = readSwarm(root, id);
+  if (swarm.accountingUnknown) throw new Error(unavailable);
   if (swarm.phase === 'completed') return;
   if (swarm.ownerPid !== process.pid) {
     try {

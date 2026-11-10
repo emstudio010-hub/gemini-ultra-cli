@@ -95,15 +95,24 @@ export function SwarmBoard({
       ) : (
         <>
           <Text wrap="truncate-end">{safe(view.swarm?.objective || '')}</Text>
-          {view.swarm && (
-            <Text color={theme.text.secondary}>
+          {view.swarm?.accountingUnknown ? (
+            <Text color={theme.status.error}>
               {locale === 'zh'
-                ? '模型调度 / 失败轮数 / 唤醒轮数'
-                : 'Model dispatches / Failed turns / Member turns'}
-              : {view.swarm.budget.requests}/{view.swarm.budget.maxRequests} ·{' '}
-              {view.swarm.budget.failedTurns}/{view.swarm.budget.maxFailedTurns}{' '}
-              · {view.swarm.budget.turns}/{view.swarm.budget.maxTurns}
+                ? '旧用量不可确认 · 原始状态已保留 · 请创建新任务'
+                : 'Historical usage unavailable · Original state retained · Create a new task'}
             </Text>
+          ) : (
+            view.swarm && (
+              <Text color={theme.text.secondary}>
+                {locale === 'zh'
+                  ? '模型调度 / 失败轮数 / 唤醒轮数'
+                  : 'Model dispatches / Failed turns / Member turns'}
+                : {view.swarm.budget.requests}/{view.swarm.budget.maxRequests} ·{' '}
+                {view.swarm.budget.failedTurns}/
+                {view.swarm.budget.maxFailedTurns} · {view.swarm.budget.turns}/
+                {view.swarm.budget.maxTurns}
+              </Text>
+            )
           )}
           {view.swarm?.stopReason && (
             <Text color={theme.status.error}>

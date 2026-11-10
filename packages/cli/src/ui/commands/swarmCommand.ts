@@ -11,7 +11,7 @@ import {
   latestSwarm,
   swarmSnapshot,
   postSwarmMessage,
-  cancelSwarm,
+  cancelSavedSwarm,
   resumeSwarm,
   setSwarmBudget,
 } from '@google/gemini-cli-core';
@@ -37,6 +37,22 @@ async function action(
         i18n.t('当前配置尚未就绪。', 'Configuration is not ready.'),
       );
     const root = config.storage.getProjectTempDir();
+    if (operation === 'cancel') {
+      const cancelled = cancelSavedSwarm(root, args.trim() || undefined);
+      context.ui.addItem({
+        type: MessageType.INFO,
+        text: cancelled.accountingUnknown
+          ? i18n.t(
+              `蜂群已取消。旧用量不可确认，原始状态保留：${cancelled.recoveryPath || '状态文件缺失'}。请创建新任务；此旧蜂群不能恢复。`,
+              `Swarm cancelled. Historical usage is unavailable; original state retained: ${cancelled.recoveryPath || 'state missing'}. Create a new task; this swarm cannot resume.`,
+            )
+          : i18n.t(
+              '蜂群已停止，留言与成员结果保留。',
+              'Swarm stopped; its board and member results are retained.',
+            ),
+      });
+      return;
+    }
     let swarm = latestSwarm(root);
     if (operation) {
       if (!swarm)
@@ -86,17 +102,6 @@ async function action(
           text: i18n.t(
             '预算已保存；累计用量保留。受阻蜂群可用 /swarm resume 恢复。',
             'Budget saved; cumulative usage retained. Use /swarm resume to continue a blocked swarm.',
-          ),
-        });
-        return;
-      }
-      if (operation === 'cancel') {
-        cancelSwarm(root, swarm.id);
-        context.ui.addItem({
-          type: MessageType.INFO,
-          text: i18n.t(
-            '蜂群已停止，留言与成员结果保留。',
-            'Swarm stopped; its board and member results are retained.',
           ),
         });
         return;
@@ -167,7 +172,11 @@ const operations: Array<[string, string, string]> = [
     'Post a public message and mention members',
   ],
   ['resume', '恢复已保存的蜂群', 'Resume the saved swarm'],
-  ['cancel', '停止成员并保留留言', 'Stop members and retain the board'],
+  [
+    'cancel',
+    '停止并保留状态，可指定蜂群 ID',
+    'Stop and preserve state; optional swarm ID',
+  ],
 ];
 export const swarmCommand: SlashCommand = {
   name: 'swarm',
@@ -182,7 +191,7 @@ export const swarmCommand: SlashCommand = {
     },
     kind: CommandKind.BUILT_IN,
     isSafeConcurrent: ['board', 'status', 'message', 'cancel'].includes(name),
-    autoExecute: !['message', 'budget'].includes(name),
+    autoExecute: !['message', 'budget', 'cancel'].includes(name),
     action: (context, args) => action(context, args, name),
   })),
 };

@@ -584,3 +584,9 @@
 - E-137：preview.35源510c8657ffe80082f041ec3d1739a03604aaf6d1/run42894747215三平台completed/success；工件版本/SHA/安装和六rg身份/权限核对，原生Swarm/工作流正常及预算链通过，新增坏状态恢复链每平台2个loopback请求，取消0/恢复42/普通会话0，坏文件字节保留，旧用量未知且任务cancelled。
 - E-138：offline缓存安装7039ms/退出0；两个命令preview.35，424文件逐一匹配Windows CI包，旧包保留，未重复fixture/付费任务。WI-065交付，goal active。
 - E-139/F-038：Swarm隔离状态2次预留后缺requests字段会读成0，非法字段使取消被拒绝，0模型请求，原坏字节未变。证据swarm-state-corruption-before.json。WI-066继续Swarm坏状态/绑定取消和计数严格读取，再处理workflow记录本体损坏；真实自主交付/引用、复杂逆向、工作树/独立模型仍未完成。
+
+## 2026-11-11 Swarm计数与损坏状态恢复
+
+- E-140/F-038：budget存在必须有六个合法字段，缺计数/错误UUID/超大或非法状态拒绝分发；独立owner与budgetVersion防止跟踪预算消失时按旧格式补0。明确/swarm cancel ID绕过坏索引，保存未知标记后备份原状态与索引，原板不改；未知旧任务不能resume/调大预算，摘要null/看板未知。
+- 活拥有者拒绝，本进程活成员先请求中止并收尾后再取消恢复；健康成员仅索引坏时保留已知计数。旧版JSON可提取合法ownerPid，所有拥有者信息丢失则拒绝猜测。21相关core+3 CLI、lint/type通过；实际CLI恢复链7227ms/2个loopback请求，cancel0/resume42/普通会话0，无真实调用/交付工件。
+- WI-066本地完成，preview.36准备分发安装；WI-067继续workflow记录本体损坏恢复。真实自主交付/引用、复杂逆向、隔离工作树/成员模型仍待完成，goal active。

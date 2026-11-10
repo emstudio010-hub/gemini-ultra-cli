@@ -48,6 +48,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node scripts/verify-ultra-swarm.mjs $entry artifacts/ultra-release/swarm-budget-verification.json budget
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/verify-ultra-swarm.mjs $entry artifacts/ultra-release/swarm-recovery-verification.json recovery
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Verify native workflow budgets
         shell: pwsh
         run: |
@@ -69,6 +71,8 @@ jobs:
             artifacts/ultra-release/swarm-verification-output.txt
             artifacts/ultra-release/swarm-budget-verification.json
             artifacts/ultra-release/swarm-budget-verification-output.txt
+            artifacts/ultra-release/swarm-recovery-verification.json
+            artifacts/ultra-release/swarm-recovery-verification-output.txt
             artifacts/ultra-release/workflow-verification.json
             artifacts/ultra-release/workflow-verification-output.txt
             artifacts/ultra-release/workflow-budget-verification.json
