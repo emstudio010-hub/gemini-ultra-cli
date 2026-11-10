@@ -15,7 +15,7 @@ v24.22.2；校验场景使用本地模型fixture，真实逆向工具需另行�
 Release 下载），执行：
 
 ```sh
-npm install -g ./gemini-ultra-cli-1.0.0-preview.27.tgz
+npm install -g ./gemini-ultra-cli-1.0.0-preview.28.tgz
 gemini-ultra --version
 gemini-ultra
 ```
@@ -111,13 +111,13 @@ Release。每个安装包附带 `.sha256` 文件，便于传输后核对。
 Windows PowerShell 校验安装包：
 
 ```powershell
-Get-FileHash ./gemini-ultra-cli-1.0.0-preview.27.tgz -Algorithm SHA256
-Get-Content ./gemini-ultra-cli-1.0.0-preview.27.tgz.sha256
+Get-FileHash ./gemini-ultra-cli-1.0.0-preview.28.tgz -Algorithm SHA256
+Get-Content ./gemini-ultra-cli-1.0.0-preview.28.tgz.sha256
 ```
 
 macOS 使用
-`shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.27.tgz.sha256`；Linux 使用
-`sha256sum -c gemini-ultra-cli-1.0.0-preview.27.tgz.sha256`。
+`shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.28.tgz.sha256`；Linux 使用
+`sha256sum -c gemini-ultra-cli-1.0.0-preview.28.tgz.sha256`。
 
 ## 自定义逆向工具路径
 
@@ -159,6 +159,27 @@ MiB。缺工具、异常JSON、超时或溢出均返回错误，不伪装成分�
 
 `binary_triage` 的 `highRiskApis` 仅为字符串候选；应使用 `binary_inspect`
 的实际导入表复核。该工具也可供只读子代理和计划模式调用；静态元数据不等于完整反编译或行为验证。
+
+## 函数、指令与调用引用
+
+模型可调用 `binary_analyze`，使用本机 radare2 的原生 `r2` 读取静态分析结果：
+
+- `view=functions`：用 `aa` 分析入口与符号并列出识别到的函数。
+- `view=instructions`：读取一个指令窗口，默认从入口开始；可传此前返回的数值虚拟地址。
+- `view=xrefs`：用 `aaa` 分析调用和引用，必须指定目标数值虚拟地址。
+
+工具已提供给只读子 Agent 和计划模式。先通过 `binary_triage` / `binary_inspect`
+确认文件格式和架构，再按需查看函数与引用；本地指令窗口不等于完整函数覆盖，空引用不证明没有调用者。这是反汇编分析，反编译仍需 Ghidra、JADX 或已连接的 IDA。
+
+每次调用最多 30 秒、4 MiB 输出、64
+MiB 样本；可取消。超时或 JSON 不完整时明确报错，不将部分输出当作完成。地址只接受整数、十进制字符串或
+`0x`
+十六进制字符串，不接受命令和表达式。返回项默认 100、最多 500，并明确报告截断。分析进程忽略用户启动脚本和外部插件，只读打开，不执行或修改样本。
+
+在新电脑安装 radare2 后，把原生 `r2` 加入 PATH，或设置
+`GEMINI_ULTRA_TOOL_R2`。Windows 指向 `r2.exe`，不要指向 `.bat` 或 `.cmd`
+包装器；缺失时工具会显示该配置方法，可用 `/drill setup`
+查看实际发现路径。CLI 包不捆绑 radare2，也不依赖开发机目录。
 
 ## 已核对的原生工具安装
 

@@ -339,6 +339,7 @@ export * from './drill/drillStore.js';
 export * from './tools/drillTools.js';
 export * from './tools/reverseTools.js';
 export * from './tools/binaryInspect.js';
+export * from './tools/binaryAnalyze.js';
 
 // Export Hybrid Memory & Knowledge Graph
 export * from './memory/hybridMemoryEngine.js';

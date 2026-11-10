@@ -70,6 +70,7 @@ const readTools = new Set([
   'memory_search_graph',
   'binary_triage',
   'binary_inspect',
+  'binary_analyze',
   'drill_preflight',
   'complete_task',
 ]);

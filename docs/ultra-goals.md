@@ -462,3 +462,11 @@
   CI包，offline已有缓存安装6秒，双命令preview.27，424包内文件逐一匹配，入口c819ba34679ccab7e7d8d5f0c9c7466d8c8fa5ec599f6bd2f0edf2f748e3f86b。local包与CI包来源分别保留。
 - 目标池维护至E-105；复杂逆向、当前源码完整无人介入协作和自动引用可靠性未完成，goal
   active。后续不再反复续接已交付的旧任务，聚焦实际工作中的剩余能力。
+
+## 2026-11-11 原生函数与指令分析
+
+- E-106：新增binary_analyze静态工具，使用当前电脑PATH或GEMINI_ULTRA_TOOL_R2原生radare2，functions(aa/aflj)、instructions(pdj窗口)、xrefs(aaa/axtj)三个视图；只读/无shell/忽略用户启动脚本和外部插件/不执行样本。数值地址规范化，拒绝命令表达式，30秒/4MiB输出/64MiB样本上限，结果项严格校验/计数/截断，空结果不推断不存在。接入真实注册表、只读子Agent、计划模式和随包local-reverse技能。
+- 新增5项必要选择用例通过，受影响文件严格lint及核心/CLI类型构建通过；首次lint三处one-var已格式修正，无实现语义变动。真实r2
+  6.2.2读取生成ELF得到两个函数和helper的CALL引用，样本未执行；安装后的完整工具链待preview.28工件核对。静态反汇编不等于反编译或复杂逆向验收。
+- preview.28准备三平台构建与安装；本阶段不新增付费模型调用，使用隔离HTTP模型fixture验证真实本机r2与SQLite归档链。整体goal
+  active。

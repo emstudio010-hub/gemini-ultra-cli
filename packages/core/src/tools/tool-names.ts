@@ -285,6 +285,7 @@ export const ALL_BUILTIN_TOOL_NAMES = [
   'drill_query_facts',
   'binary_triage',
   'binary_inspect',
+  'binary_analyze',
   'verified_patch_transaction',
   'apply_patch',
 ] as const;
@@ -314,6 +315,7 @@ export const PLAN_MODE_TOOLS = [
   'deep_web_fetch',
   'binary_triage',
   'binary_inspect',
+  'binary_analyze',
 ] as const;
 
 /**
