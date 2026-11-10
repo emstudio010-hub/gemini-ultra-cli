@@ -39,6 +39,12 @@ jobs:
           gh release download Ghidra_12.1.4_build --repo NationalSecurityAgency/ghidra --pattern ghidra_12.1.4_PUBLIC_20260921.zip --dir "$RUNNER_TEMP/ghidra"
           printf '%s  %s\n' ddac49f903da9d5bac833e5cc79395098b9c33cfd3279be5f31bd00387d2d4db "$RUNNER_TEMP/ghidra/ghidra_12.1.4_PUBLIC_20260921.zip" | shasum -a 256 -c -
           unzip -q "$RUNNER_TEMP/ghidra/ghidra_12.1.4_PUBLIC_20260921.zip" -d "$RUNNER_TEMP/ghidra"
+      - name: Build official macOS decompiler components
+        run: |
+          mkdir -p diagnosis
+          cd "$RUNNER_TEMP/ghidra/ghidra_12.1.4_PUBLIC/support/gradle"
+          ./gradlew :Decompiler:buildNatives --max-workers=2 --no-daemon > "$GITHUB_WORKSPACE/diagnosis/native-build.log" 2>&1
+          test -x "$RUNNER_TEMP/ghidra/ghidra_12.1.4_PUBLIC/Ghidra/Features/Decompiler/build/os/mac_arm_64/decompile"
       - name: Preserve native failure diagnostics
         run: node scripts/verify-ultra-decompile.mjs "$RUNNER_TEMP/ultra-diagnostic/node_modules/gemini-ultra-cli/bundle/gemini.js" diagnosis/decompile.json "$RUNNER_TEMP/ghidra/ghidra_12.1.4_PUBLIC"
       - uses: actions/upload-artifact@v4
