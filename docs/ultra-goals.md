@@ -14,10 +14,10 @@
 | P1     | 多 Agent 有界排队、取消与结果可见           | 基础链通过，长任务待修 | E-063真实三角色2完成1超时，状态准确；父模型INVALID_STREAM未交付报告，不能算完整任务通过                          |
 | P1     | 内置红队工作流                              | 本地分析闭环通过     | 临时授权下redteam-analyst真实分析生成样本并归档，E-016；复杂逆向与外部目标未验收                                   |
 | P2     | 演练台 Morphicons 交互图标与强度动效        | 本地完成             | 使用 Morphicons 2.0.2；浏览器确认六档、图标、移动布局、减少动态效果与隐藏暂停                                      |
-| P0     | 安装到 CLI 本身并生成可分发安装包           | 本地完成             | 当前preview.17，GitHub Windows工件与本机入口匹配；E-065；实际fetch超时发起总结并保留TIMEOUT/FAILED与部分结果          |
+| P0     | 安装到 CLI 本身并生成可分发安装包           | 本地完成             | 当前preview.18，GitHub Windows工件与本机入口匹配；E-069；无正文失败退出1，重试恢复后实际落盘并退出0                   |
 | P1     | 其他电脑可以开展本地逆向                    | 三平台原生基础链通过 | preview.8的Windows/Linux x64、macOS arm64真实rabin2读取/归档/查询通过E-022/027/029；复杂反编译与其他工具仍待补     |
-| P1     | GitHub 三平台分发验收                       | 已通过               | 最新preview.17 run42756282770三平台success，独立构建/打包/安装与工件核对；E-064                                    |
-| P1     | 真实供应商与长会话上线验收                  | 未完成               | E-063自行结束但返回INVALID_STREAM、空正文、无报告，进程错误地退出0；下一阶段修复失败状态与核对恢复重试             |
+| P1     | GitHub 三平台分发验收                       | 已通过               | 最新preview.18 run42758828025三平台success，独立构建/打包/安装与工件核对；E-068                                    |
+| P1     | 真实供应商与长会话上线验收                  | 未完成               | E-063完整任务失败保留；F-022错误退出已修，现有有界重试/nudge在HTTP fixture恢复落盘通过，未重跑完整真实任务           |
 
 ## 证据记录
 
@@ -293,4 +293,6 @@
 - E-066/F-022：两个非交互路径的InvalidStream原先只输出错误；主入口又无条件将exitCode重置为0。现错误分支设置非零退出状态，主入口仅在未设置状态时默认成功，保留现有错误输出及异步清理。八个既有TEXT/JSON/stream-json与自定义错误用例新增退出状态断言后，修前8失败、修后8通过；五文件严格ESLint、格式和核心/CLI TypeScript通过。
 - E-067：开发bundle七个实际CLI/HTTP场景完成定向核对：三格式持续thinking-only、ADK持续失败、默认监督入口失败均退出1；普通与ADK恢复场景均在既有重试/nudge后真实write_file落盘并退出0。请求次数分别2与3（general.maxAttempts=2），证明本地有界重试，不是实际供应商长任务验收。
 - 首次七场景里5通过，两个在连接本地端口前ETIMEDOUT、0请求；仅这两项改用固定空闲端口45679复核通过，原false记录保留，不宣称修复本机网络根因。preview.17基线另有一次重试前TypeError及Windows CRLF被脚本误按LF匹配，原记录亦保留，未用其推断产品没有重试。
-- preview.18准备三平台分发；本阶段没有重跑E-063整套付费任务。真实完整交付与复杂逆向仍未完成，整体目标active。
+- E-068：[preview.18运行42758828025](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/42758828025)三平台completed/success，功能提交9a4c4628767afcc7dd6d1f9c225699f4b713a702。三个包的版本、安装报告、SHA-256及六个rg文件hash/0755核对通过。
+- E-069：本机双命令preview.18、入口与Windows CI包一致。安装后两个重点实际CLI/HTTP场景通过：持续无正文2请求/3,036ms、JSON明确INVALID_STREAM、退出1且无伪造产物；首次无正文后既有nudge重试到write_file，3请求/2,590ms、实际文件落盘、最终正文正确且退出0。general.maxAttempts=2为隔离验证配置，不是修改产品默认重试策略。
+- Windows包SHA-256 `9348630f2b3cf8eed640bb2002b8932599bd42733831a69d68f83e807370347e`；Linux `249d47afcb5b810a21ce28db990f237e371f2a985b9f34242e261118e8e0caae`；macOS `7252e931a07ff66d2061d870b7219be913c5b179d1e57495cc79b7dff2675e7b`。本机已有缓存offline安装14秒，不代表无缓存新电脑离线安装。本阶段没有重跑E-063整套付费任务；真实完整交付与复杂逆向仍未完成，整体目标active。
