@@ -1,0 +1,51 @@
+name: Ultra native macOS inspection
+
+on:
+  push:
+    branches: ['codex/ultra-agent-native-macos']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  native:
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 64ef758852ae2cfe06b679e35e0b15525e3c76a9
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          name: gemini-ultra-cli-macos-latest
+          run-id: 42724176448
+          github-token: ${{ github.token }}
+          path: release
+      - name: Install verified native radare2 release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/radare2-release"
+          gh release download 6.2.2 --repo radareorg/radare2 --pattern radare2-arm64-6.2.2.pkg --dir "$RUNNER_TEMP/radare2-release"
+          printf '%s  %s\n' '6d674844aacb3c72de0fd1e01353d6dd03d4235a3629b607d1fe74c98e2a5f24' "$RUNNER_TEMP/radare2-release/radare2-arm64-6.2.2.pkg" | shasum -a 256 -c -
+          sudo installer -pkg "$RUNNER_TEMP/radare2-release/radare2-arm64-6.2.2.pkg" -target /
+          command -v rabin2
+          rabin2 -v
+      - name: Verify installed CLI with actual native parser
+        run: |
+          cd release
+          shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.8.tgz.sha256
+          cd "$GITHUB_WORKSPACE"
+          npm install --prefix "$RUNNER_TEMP/ultra-native" --ignore-scripts --no-audit --no-fund "$GITHUB_WORKSPACE/release/gemini-ultra-cli-1.0.0-preview.8.tgz"
+          node scripts/verify-ultra-install.mjs "$RUNNER_TEMP/ultra-native/node_modules/gemini-ultra-cli/bundle/gemini.js" "$GITHUB_WORKSPACE/native-install-verification.json" "$(command -v rabin2)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gemini-ultra-native-macos-result
+          path: native-install-verification.json
+          if-no-files-found: error
