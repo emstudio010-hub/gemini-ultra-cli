@@ -506,18 +506,15 @@ export async function main() {
     worktreeHandle?.end();
   }
 
-  const cleanupOpsHandle = startupProfiler.start('cleanup_ops');
+  // Housekeeping runs independently of startup and may finish after startup
+  // metrics have been flushed. Do not track it as an awaited startup phase.
   Promise.all([
     cleanupCheckpoints(),
     cleanupToolOutputFiles(settings.merged),
     cleanupBackgroundLogs(),
-  ])
-    .catch((e) => {
-      debugLogger.error('Early cleanup failed:', e);
-    })
-    .finally(() => {
-      cleanupOpsHandle?.end();
-    });
+  ]).catch((e) => {
+    debugLogger.error('Early cleanup failed:', e);
+  });
 
   const parseArgsHandle = startupProfiler.start('parse_arguments');
   const argvPromise = parseArguments(settings.merged).finally(() => {
