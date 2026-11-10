@@ -1,6 +1,7 @@
 # Gemini Ultra CLI 工作流累计预算交接
 
-日期：2026-11-11。候选 preview.34；本机此刻仍为 preview.33。
+日期：2026-11-11。本机双命令已安装 preview.34，产品源提交
+`5f37e00a2de5f303b03e3909b44200bf56d95af1`。
 
 ## E-131 / F-035
 
@@ -59,3 +60,30 @@ E-131 独立累计账本、生成入口预留、原生轮数/失败上限和本�
 WI-064 累计预算本地实现完成，准备 preview.34 分发与安装。WI-065 继续处理预算状态损坏时的可取消恢复，确保未知旧用量不被静默清零；之后再选择有收益的真实工作验收，不重复同一付费报告。真实供应商无人介入交付/引用准确性、复杂逆向、隔离 Git
 worktree 和成员独立模型仍未完成。保留 goal
 active，不合并 master、不正式发布 Release。
+
+## E-132 三平台包
+
+[运行42891302374](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/42891302374)
+completed/success，源5f37e00a2de5f303b03e3909b44200bf56d95af1。每平台工件版本/SHA、安装报告、六rg二进制hash/Unix权限核对通过；原生Swarm正常20请求/预算3请求，以及新工作流正常12请求/预算3请求均通过，响应仅loopback
+fixture。
+
+| 平台        | 包SHA-256                                                        | 正常五阶段     | 预算停止       |
+| ----------- | ---------------------------------------------------------------- | -------------- | -------------- |
+| Windows x64 | 911c84a5e18cf0b31d82e50c36ce0a4c208ee3e061b623e159c449ff6d4baf1a | 1487ms / 退出0 | 1311ms / 退出1 |
+| Linux x64   | e7dfcfa5330337d092f2145bf26684d681fa836b0e77fe3381326094d1e541f1 | 1214ms / 退出0 | 1051ms / 退出1 |
+| macOS arm64 | 18f4187a3443f7f0e71ef5e0d00b392234c3f438843ac3ea8f02b27433f58542 | 1063ms / 退出0 | 971ms / 退出1  |
+
+正常场景独立最终审查通过，账本closed/10次成员调度/1次实施；停止场景blocked/paused/2次累计调度，未启动writer，原报告带预算原因。耗尽场景退出1为程序有界失败，辅助报告passed只表示这个门槛正确，不等于业务完成。隔离时长不作跨平台性能基准。
+
+## E-133 本机安装
+
+仅一次offline已有缓存安装：7038ms/退出0；两个命令均1.0.0-preview.34，424包内文件与Windows
+CI包逐一匹配。入口SHA为9dce84e0e66c7338839bdfc785e822bea665af38233544c3159fe8ac8c7c61bd。旧preview.33包保留；不重复已由相同Windows包执行的fixture，不改个人供应商/数据库/逆向工具。
+
+工程记录：github-preview34-run.json、github-preview34-artifacts-result.json、github-run-42891302374/各平台/workflow-verification.json与workflow-budget-verification.json及对应输出；global-preview34-install-result.json、global-install-github-preview34-full-result.json。WI-064原生累计预算交付完成；仍非真实供应商自主交付验收。
+
+## E-134 / F-036 下一项已复现
+
+reproduce-workflow-budget-corruption.mjs在全新生成的隔离项目上预留两次调度（未调用模型），随后将账本替换为坏JSON。现有cancel和后续调度均拒绝，工作流仍ready，坏文件字节保持原值。workflow-budget-corruption-before.json记录reproduced=true、0模型请求；临时夹随后清理。它是状态恢复缺陷，未观察到真实用户数据损坏，也没有静默清零用量。
+
+WI-065接续：允许保留坏账本后显式取消；未知历史用量必须标记并阻止直接恢复为新预算，避免恢复操作绕过已花额度。此问题尚未修复，不能称整个系统已可正式上线。随后继续WI-054真实自主交付/引用可靠性、WI-056复杂逆向以及隔离工作树/成员独立模型。目标active，仅codex分支，未合并master、未发布正式Release。
