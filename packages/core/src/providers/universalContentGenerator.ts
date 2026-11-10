@@ -26,6 +26,7 @@ import { providerUsage } from './providerUsage.js';
 import { isRecord } from '../utils/markdownUtils.js';
 import type { HttpError } from '../utils/httpErrors.js';
 import { consumeSwarmRequest } from '../agents/swarm.js';
+import { consumeWorkflowRequest } from '../agents/workflowBudget.js';
 import {
   providerReasoningSignature,
   shouldReplayReasoning,
@@ -159,6 +160,7 @@ export class UniversalContentGenerator implements ContentGenerator {
     role: LlmRole,
   ): Promise<GenerateContentResponse> {
     consumeSwarmRequest(this.gcConfig?.storage?.getProjectTempDir());
+    consumeWorkflowRequest(this.gcConfig?.storage?.getProjectTempDir());
     if (role === LlmRole.MAIN || role === LlmRole.SUBAGENT)
       request = withUltraPrompt(request);
     const resolution = this.resolve(request.model);
@@ -194,6 +196,7 @@ export class UniversalContentGenerator implements ContentGenerator {
     role: LlmRole,
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
     consumeSwarmRequest(this.gcConfig?.storage?.getProjectTempDir());
+    consumeWorkflowRequest(this.gcConfig?.storage?.getProjectTempDir());
     if (role === LlmRole.MAIN || role === LlmRole.SUBAGENT)
       request = withUltraPrompt(request);
     const resolution = this.resolve(request.model);

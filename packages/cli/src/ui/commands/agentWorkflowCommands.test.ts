@@ -11,6 +11,8 @@ import {
   ApprovalMode,
   latestAgentWorkflow,
   saveAgentWorkflow,
+  workflowBudget,
+  consumeWorkflowRequest,
   type Config,
 } from '@google/gemini-cli-core';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
@@ -81,4 +83,35 @@ it('restores permissions when cancelling an interview and routes boost directly 
     content: expect.stringContaining('run_agent_workflow'),
   });
   expect(latestAgentWorkflow(root, 'boost')?.approved).toBe(true);
+});
+
+it('updates only local cumulative limits and refuses a depleted resume without submitting another prompt', async () => {
+  const { context } = commandContext();
+  await boostCommand.action!(context, 'Deliver a bounded fix');
+  const record = latestAgentWorkflow(root, 'boost')!;
+  consumeWorkflowRequest(root);
+  const budget = boostCommand.subCommands!.find(
+    (command) => command.name === 'budget',
+  )!;
+  expect(await budget.action!(context, '1 4 2')).toBeUndefined();
+  expect(workflowBudget(root, record)).toMatchObject({
+    requests: 1,
+    maxRequests: 1,
+  });
+  const resume = boostCommand.subCommands!.find(
+    (command) => command.name === 'resume',
+  )!;
+  expect(await resume.action!(context, '')).toBeUndefined();
+  expect(workflowBudget(root, record).state).toBe('paused');
+  expect(await budget.action!(context, '3 4 2')).toBeUndefined();
+  expect(await resume.action!(context, '')).toMatchObject({
+    type: 'submit_prompt',
+  });
+  expect(workflowBudget(root, record)).toMatchObject({
+    state: 'active',
+    requests: 1,
+    maxRequests: 3,
+  });
+  expect(await budget.action!(context, '0 bad -1')).toBeUndefined();
+  expect(workflowBudget(root, record).maxRequests).toBe(3);
 });

@@ -10,6 +10,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { lock, lockSync } from 'proper-lockfile';
 import { z } from 'zod';
 import type { WorkflowAgentRunner } from './agentWorkflows.js';
+import { hasOpenWorkflowBudget } from './workflowBudget.js';
 
 const memberSchema = z.object({
   name: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/),
@@ -164,6 +165,10 @@ function appendPost(
   }
 }
 export function createSwarm(root: string, objective: string): Swarm {
+  if (hasOpenWorkflowBudget(root))
+    throw new Error(
+      'Resolve the pending workflow with resume or cancel before starting a swarm.',
+    );
   if (['active', 'blocked'].includes(latestSwarm(root)?.phase ?? ''))
     throw new Error(
       'Resolve the active swarm with finish or cancel before starting another.',

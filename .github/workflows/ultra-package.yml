@@ -48,6 +48,14 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node scripts/verify-ultra-swarm.mjs $entry artifacts/ultra-release/swarm-budget-verification.json budget
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Verify native workflow budgets
+        shell: pwsh
+        run: |
+          $entry = Join-Path $env:RUNNER_TEMP 'ultra-install/node_modules/gemini-ultra-cli/bundle/gemini.js'
+          node scripts/verify-ultra-workflow.mjs $entry artifacts/ultra-release/workflow-verification.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/verify-ultra-workflow.mjs $entry artifacts/ultra-release/workflow-budget-verification.json budget
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v4
         with:
           name: gemini-ultra-cli-${{ matrix.os }}
@@ -59,4 +67,8 @@ jobs:
             artifacts/ultra-release/swarm-verification-output.txt
             artifacts/ultra-release/swarm-budget-verification.json
             artifacts/ultra-release/swarm-budget-verification-output.txt
+            artifacts/ultra-release/workflow-verification.json
+            artifacts/ultra-release/workflow-verification-output.txt
+            artifacts/ultra-release/workflow-budget-verification.json
+            artifacts/ultra-release/workflow-budget-verification-output.txt
           if-no-files-found: error

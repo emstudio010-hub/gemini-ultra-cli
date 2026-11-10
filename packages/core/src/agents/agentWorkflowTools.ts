@@ -182,7 +182,7 @@ export class RunAgentWorkflowTool extends BaseDeclarativeTool<
     super(
       RunAgentWorkflowTool.Name,
       'Run Agent Workflow',
-      'Execute a ready, explicitly approved /boost or /teamwork workflow. Runs independent investigations, serial implementation and structured read-only review, with at most two correction rounds per milestone and a final independent audit. Persists progress; cannot approve scoping records.',
+      'Execute a ready, explicitly approved /boost or /teamwork workflow. Runs independent investigations, serial implementation and structured read-only review, with cumulative per-milestone implementation rounds and a final independent audit. Model dispatches, failed stages and implementation rounds persist across resumes. Only the user can change limits with the local budget command. A blocked task requires explicit resume; do not bypass its limits with ad hoc worker batches. Persists progress; cannot approve scoping records.',
       Kind.Agent,
       {
         type: 'object',

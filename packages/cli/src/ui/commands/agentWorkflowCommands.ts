@@ -11,6 +11,10 @@ import {
   saveAgentWorkflow,
   cancelAgentWorkflow,
   isAgentWorkflowRunning,
+  workflowBudget,
+  setWorkflowBudget,
+  activateWorkflowBudget,
+  closeWorkflowBudget,
   type AgentWorkflow,
   type AgentWorkflowMode,
 } from '@google/gemini-cli-core';
@@ -58,8 +62,8 @@ function workflowCommand(
       if (!operation && !text) {
         info(
           i18n.t(
-            `用法：/${mode} <任务>；/${mode} status|resume|cancel${mode === 'teamwork' ? '|approve' : mode === 'grill-me' ? '|finish' : ''}`,
-            `Usage: /${mode} <task>; /${mode} status|resume|cancel${mode === 'teamwork' ? '|approve' : mode === 'grill-me' ? '|finish' : ''}`,
+            `用法：/${mode} <任务>；/${mode} status|budget|resume|cancel${mode === 'teamwork' ? '|approve' : mode === 'grill-me' ? '|finish' : ''}`,
+            `Usage: /${mode} <task>; /${mode} status|budget|resume|cancel${mode === 'teamwork' ? '|approve' : mode === 'grill-me' ? '|finish' : ''}`,
           ),
         );
         return;
@@ -76,7 +80,7 @@ function workflowCommand(
       if (operation === 'status') {
         info(
           record
-            ? `${record.mode}: ${record.phase}\n${record.objective}\n${record.stage}\n${record.milestones.map((item, index) => `${index + 1}. [${item.completed ? 'x' : ' '}] ${item.title}\n${item.acceptance}`).join('\n')}\nID: ${record.id}`
+            ? `${record.mode}: ${record.phase}\n${record.objective}\n${record.stage}\n${i18n.t('累计预算', 'Cumulative budget')}: ${JSON.stringify(workflowBudget(root, record))}\n${record.milestones.map((item, index) => `${index + 1}. [${item.completed ? 'x' : ' '}] ${item.title}\n${item.acceptance}`).join('\n')}\nID: ${record.id}`
             : i18n.t(
                 '当前项目没有该工作流。',
                 'No workflow of this kind in this project.',
@@ -114,6 +118,33 @@ function workflowCommand(
           );
           return;
         }
+        if (operation === 'budget') {
+          const values = args.trim().split(/\s+/);
+          if (
+            values.length !== 3 ||
+            values.some((value) => !/^[1-9]\d*$/.test(value))
+          )
+            throw new Error(
+              i18n.t(
+                `用法：/${mode} budget <模型调度上限> <失败阶段上限> <每里程碑实施轮数上限>，例如 240 4 2。累计用量不会清零。`,
+                `Usage: /${mode} budget <model-dispatch-limit> <failed-stage-limit> <rounds-per-milestone>, e.g. 240 4 2. Cumulative usage is retained.`,
+              ),
+            );
+          const [maxRequests, maxFailedStages, maxImplementationRounds] =
+            values.map(Number);
+          setWorkflowBudget(root, record, {
+            maxRequests,
+            maxFailedStages,
+            maxImplementationRounds,
+          });
+          info(
+            i18n.t(
+              '预算已保存，累计用量保留。受阻任务需显式 resume。',
+              'Budget saved; cumulative usage retained. Explicitly resume a blocked task.',
+            ),
+          );
+          return;
+        }
         if (operation === 'approve' || operation === 'finish') {
           if (record.phase !== 'ready' || record.approved)
             throw new Error(
@@ -123,16 +154,19 @@ function workflowCommand(
               ),
             );
           record.approved = true;
+          if (mode !== 'grill-me') activateWorkflowBudget(root, record);
           restoreApproval(record);
           if (mode === 'grill-me') {
             record.phase = 'completed';
             saveAgentWorkflow(root, record);
+            closeWorkflowBudget(root, record);
             return {
               type: 'submit_prompt',
               content: `Requirements interview complete. Continue the agreed task under the current permissions and user constraints.\n${record.brief}\nAcceptance:\n${record.milestones.map((item) => `${item.title}: ${item.acceptance}`).join('\n')}`,
             };
           }
         } else if (operation === 'resume') {
+          activateWorkflowBudget(root, record);
           if (!record.approved) {
             record.phase = 'scoping';
             saveAgentWorkflow(root, record);
@@ -197,6 +231,7 @@ function workflowCommand(
   };
   const operations = [
     'status',
+    'budget',
     'resume',
     'cancel',
     ...(mode === 'teamwork'
@@ -217,6 +252,7 @@ function workflowCommand(
       get description() {
         const labels: Record<string, [string, string]> = {
           status: ['查看阶段与里程碑', 'Show stages and milestones'],
+          budget: ['设置累计执行预算', 'Set cumulative execution limits'],
           resume: ['恢复已保存任务', 'Resume the saved workflow'],
           cancel: ['取消并保留结果', 'Cancel and retain results'],
           approve: ['按已对齐的草案执行', 'Execute the scoped draft'],
@@ -225,7 +261,7 @@ function workflowCommand(
         return I18nManager.getInstance().t(...labels[name]);
       },
       kind: CommandKind.BUILT_IN,
-      autoExecute: true,
+      autoExecute: name !== 'budget',
       isSafeConcurrent: name === 'status' || name === 'cancel',
       action: (context, args) => action(context, args, name),
     })),
