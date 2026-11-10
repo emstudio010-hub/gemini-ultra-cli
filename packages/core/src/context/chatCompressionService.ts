@@ -374,16 +374,44 @@ export function findCompressSplitPoint(
 
   let lastSplitPoint = 0; // 0 is always valid (compress nothing)
   let cumulativeCharCount = 0;
+  const pendingCalls = new Map<string, number>();
+  let completedCalls = 0;
   for (let i = 0; i < contents.length; i++) {
     const content = contents[i];
-    if (
+    const isUserPrompt =
       content.role === 'user' &&
-      !content.parts?.some((part) => !!part.functionResponse)
-    ) {
+      !content.parts?.some((part) => !!part.functionResponse);
+    // A long investigation can contain only one user prompt. Once earlier
+    // calls have all returned, the next tool cycle is also a safe boundary.
+    const startsToolCycle =
+      content.role === 'model' &&
+      completedCalls > 0 &&
+      content.parts?.some((part) => !!part.functionCall);
+    if (pendingCalls.size === 0 && (isUserPrompt || startsToolCycle)) {
       if (cumulativeCharCount >= targetCharCount) {
         return i;
       }
       lastSplitPoint = i;
+    }
+    for (const part of content.parts ?? []) {
+      if (part.functionCall) {
+        const call = part.functionCall;
+        const key = call.id ? `id:${call.id}` : `name:${call.name}`;
+        pendingCalls.set(key, (pendingCalls.get(key) ?? 0) + 1);
+      }
+      if (part.functionResponse) {
+        const response = part.functionResponse;
+        const key =
+          response.id && pendingCalls.has(`id:${response.id}`)
+            ? `id:${response.id}`
+            : `name:${response.name}`;
+        const count = pendingCalls.get(key);
+        if (count !== undefined) {
+          if (count === 1) pendingCalls.delete(key);
+          else pendingCalls.set(key, count - 1);
+          completedCalls++;
+        }
+      }
     }
     cumulativeCharCount += charCounts[i];
   }
@@ -393,6 +421,7 @@ export function findCompressSplitPoint(
   const lastContent = contents[contents.length - 1];
   if (
     lastContent?.role === 'model' &&
+    pendingCalls.size === 0 &&
     !lastContent?.parts?.some((part) => part.functionCall)
   ) {
     return contents.length;
@@ -748,10 +777,14 @@ export class ChatCompressionService {
         role: 'user',
         parts: [{ text: finalSummary }],
       },
-      {
-        role: 'model',
-        parts: [{ text: 'Got it. Thanks for the additional context!' }],
-      },
+      ...(historyToKeepTruncated[0]?.role === 'model'
+        ? []
+        : [
+            {
+              role: 'model',
+              parts: [{ text: 'Got it. Thanks for the additional context!' }],
+            } satisfies Content,
+          ]),
       ...historyToKeepTruncated,
     ];
 

@@ -98,6 +98,38 @@ describe('findCompressSplitPoint', () => {
     expect(findCompressSplitPoint(historyWithEmptyParts, 0.5)).toBe(0);
   });
 
+  it('keeps a pending parallel call together with its later response', () => {
+    const history: Content[] = [
+      { role: 'user', parts: [{ text: 'Investigate' }] },
+      {
+        role: 'model',
+        parts: [
+          { functionCall: { id: 'first', name: 'read_file', args: {} } },
+          { functionCall: { id: 'pending', name: 'read_file', args: {} } },
+        ],
+      },
+      {
+        role: 'user',
+        parts: [
+          {
+            functionResponse: {
+              id: 'first',
+              name: 'read_file',
+              response: { output: 'x'.repeat(5000) },
+            },
+          },
+        ],
+      },
+      {
+        role: 'model',
+        parts: [
+          { functionCall: { id: 'next', name: 'grep_search', args: {} } },
+        ],
+      },
+    ];
+    expect(findCompressSplitPoint(history, 0.5)).toBe(0);
+  });
+
   it('should handle history with weird parts', () => {
     const historyWithEmptyParts: Content[] = [
       { role: 'user', parts: [{ text: 'Message 1' }] },
@@ -309,6 +341,85 @@ describe('ChatCompressionService', () => {
       2,
     );
   });
+
+  it.each([true, false])(
+    'compresses a single tool investigation while preserving recent call pairs (ids=%s)',
+    async (withIds) => {
+      const olderCall: Part = {
+        functionCall: {
+          name: 'read_file',
+          args: {},
+          ...(withIds ? { id: 'old' } : {}),
+        },
+      };
+      const olderResponse: Part = {
+        functionResponse: {
+          name: 'read_file',
+          response: { output: 'Old evidence '.repeat(500) },
+          ...(withIds ? { id: 'old' } : {}),
+        },
+      };
+      const recentCall: Content = {
+        role: 'model',
+        parts: [
+          {
+            functionCall: {
+              name: 'grep_search',
+              args: {},
+              ...(withIds ? { id: 'recent' } : {}),
+            },
+          },
+        ],
+      };
+      const recentResponse: Content = {
+        role: 'user',
+        parts: [
+          {
+            functionResponse: {
+              name: 'grep_search',
+              response: { output: 'Latest evidence must stay exact' },
+              ...(withIds ? { id: 'recent' } : {}),
+            },
+          },
+        ],
+      };
+      const history: Content[] = [
+        {
+          role: 'user',
+          parts: [{ text: 'Investigate this source without modifying it' }],
+        },
+        { role: 'model', parts: [olderCall] },
+        { role: 'user', parts: [olderResponse] },
+        recentCall,
+        recentResponse,
+      ];
+      const original = structuredClone(history);
+      vi.mocked(mockChat.getHistory).mockReturnValue(history);
+      vi.mocked(mockChat.getLastPromptTokenCount).mockReturnValue(600000);
+
+      const result = await service.compress(
+        mockChat,
+        mockPromptId,
+        false,
+        mockModel,
+        mockConfig,
+        false,
+      );
+
+      expect(result.info.compressionStatus).toBe(CompressionStatus.COMPRESSED);
+      // A summary can replace complete older cycles even before the user sends
+      // another prompt. Keep the latest call/response and valid role order.
+      expect(result.newHistory).toEqual([
+        { role: 'user', parts: [{ text: 'Verified Summary' }] },
+        recentCall,
+        recentResponse,
+      ]);
+      expect(history).toEqual(original);
+      expect(
+        mockConfig.getBaseLlmClient().generateContent,
+      ).toHaveBeenCalledTimes(2);
+    },
+  );
 
   it('should fall back to initial summary if verification response is empty', async () => {
     const history: Content[] = [

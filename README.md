@@ -7,7 +7,7 @@ CLI 的增强版，提供外接模型供应商、中英文界面、六档推理�
 下载此仓库发布的安装包后执行：
 
 ```sh
-npm install -g ./gemini-ultra-cli-1.0.0-preview.14.tgz
+npm install -g ./gemini-ultra-cli-1.0.0-preview.15.tgz
 gemini-ultra
 ```
 

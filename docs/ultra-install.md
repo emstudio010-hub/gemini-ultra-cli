@@ -15,7 +15,7 @@ v24.22.2；校验场景使用本地模型fixture，真实逆向工具需另行�
 Release 下载），执行：
 
 ```sh
-npm install -g ./gemini-ultra-cli-1.0.0-preview.14.tgz
+npm install -g ./gemini-ultra-cli-1.0.0-preview.15.tgz
 gemini-ultra --version
 gemini-ultra
 ```
@@ -72,13 +72,13 @@ Release。每个安装包附带 `.sha256` 文件，便于传输后核对。
 Windows PowerShell 校验安装包：
 
 ```powershell
-Get-FileHash ./gemini-ultra-cli-1.0.0-preview.14.tgz -Algorithm SHA256
-Get-Content ./gemini-ultra-cli-1.0.0-preview.14.tgz.sha256
+Get-FileHash ./gemini-ultra-cli-1.0.0-preview.15.tgz -Algorithm SHA256
+Get-Content ./gemini-ultra-cli-1.0.0-preview.15.tgz.sha256
 ```
 
 macOS 使用
-`shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.14.tgz.sha256`；Linux 使用
-`sha256sum -c gemini-ultra-cli-1.0.0-preview.14.tgz.sha256`。
+`shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.15.tgz.sha256`；Linux 使用
+`sha256sum -c gemini-ultra-cli-1.0.0-preview.15.tgz.sha256`。
 
 ## 自定义逆向工具路径
 
@@ -228,3 +228,9 @@ Schema 标准小写。
 仍遵循工作区与忽略规则；显式关闭 `tools.useRipgrep`
 时保留原搜索回退。其他逆向工具仍通过 `/drill setup`
 在本机配置。实际运行的系统/架构范围以目标池记录为准。
+
+## 连续工具任务的上下文与协作额度
+
+同一任务持续读文件、搜索或调用其他工具时，压缩可在已完整返回的工具组之后进行，不必等下一条用户消息。尚未返回的并行调用及最新工具结果保留在同一段历史里；支持带ID和无ID的工具协议，不产生孤立的工具响应。
+
+会话并发额度降低后，下一次准入使用新额度；已经运行的任务继续收尾，等待任务不会趁某个旧槽位释放而越过新上限。子 Agent 的完成工具使用自己的结果定义，避免从父代理重复继承和覆盖。

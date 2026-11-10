@@ -209,7 +209,10 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
         return;
       }
 
-      if (tool.name === UPDATE_TOPIC_TOOL_NAME) {
+      if (
+        tool.name === UPDATE_TOPIC_TOOL_NAME ||
+        tool.name === COMPLETE_TASK_TOOL_NAME
+      ) {
         return;
       }
 
@@ -266,7 +269,8 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
           'name' in toolRef &&
           'build' in toolRef
         ) {
-          agentToolRegistry.registerTool(toolRef);
+          if (toolRef.name !== COMPLETE_TASK_TOOL_NAME)
+            agentToolRegistry.registerTool(toolRef);
         }
         // Note: Raw `FunctionDeclaration` objects in the config don't need to be
         // registered; their schemas are passed directly to the model later.

@@ -29,6 +29,7 @@ interface SessionQueue {
 const sessions = new Map<string, SessionQueue>();
 
 function drain(sessionId: string, queue: SessionQueue): void {
+  queue.limit = getMaxParallelSubagents();
   while (queue.active < queue.limit && queue.waiting.length) {
     const waiter = queue.waiting.shift()!;
     waiter.signal.removeEventListener('abort', waiter.onAbort);
