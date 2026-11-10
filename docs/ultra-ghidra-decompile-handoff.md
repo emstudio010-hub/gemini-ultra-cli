@@ -1,6 +1,6 @@
 # Gemini Ultra CLI 原生 Ghidra 反编译交接
 
-日期：2026-11-11。WI-070，候选preview.40；本机当前preview.39。沿用自有源码case
+日期：2026-11-11。WI-070，本机双命令已安装preview.40，产品源1801fe128b340fda722f0c5e8d8e7d44098bd1f9。沿用自有源码case
 scope，R26/code-audit接入，R22/ghidra-reverse执行生成样本静态分析；lead/cae/doc由本会话承担。不执行样本或外部目标，不改本机工具安装和个人模型配置。
 
 ## E-153 实现与证据
@@ -60,3 +60,33 @@ digest为ddac49f903da9d5bac833e5cc79395098b9c33cfd3279be5f31bd00387d2d4db；CI�
 
 WI-070本地实现完成，跨平台及本机最终安装待核对。更复杂格式/大样本、多函数关联及动态逆向仍未验收，WI-056继续；WI-054真实供应商完整自主交付与引用准确性仍未完成，不重复原付费任务。整体goal
 active，只codex隔离分支、不合并master/正式Release。
+
+## E-154 三平台最终包
+
+[运行42914813529](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/42914813529)
+completed/success，产品源1801fe128b340fda722f0c5e8d8e7d44098bd1f9。三个包版本/SHA、源码运行身份、安装报告、六rg二进制hash及Unix权限核对通过。同源既有Swarm/工作流多模型两入口、预算与恢复、工作树保护链全部通过。
+
+| 平台        | 包SHA-256                                                        | 原生反编译链            |
+| ----------- | ---------------------------------------------------------------- | ----------------------- |
+| Windows x64 | 3985d423b1f0a01f128fb248a36e1f9a3c5060e45cd53b1f02b3786e048ebe59 | 18469ms / 3请求 / 退出0 |
+| Linux x64   | 87728269df2de3e19396f35923213e01cdd8a0ada10b332f606f333a534c21a3 | 13826ms / 3请求 / 退出0 |
+| macOS arm64 | a077c02e8c46c6a0f07c1898e867f5c2b84531ae43d412bf07c098466e14a62c | 14978ms / 3请求 / 退出0 |
+
+每平台实际安装CLI调用原生Ghidra12.1.4/JDK21，反编译同一生成x86-64
+ELF的0x400090函数，再通过read_file读取完整工件。循环、0x51/0x21/0x13579bdf/0x2a及条件返回观察均通过；样本未运行/未变，报告/完整C/log均随工件留存。输入SHA均44900c63dad5a5178be8069f7a5519a7afc017198172a0a5ec315dfb226c1222。Windows完整伪代码SHA244936bbdccd1bdea1b6b3a3a1d0b629aba57baef27433042b5e8bb6ae5d06dd，Unix13ef48846222940a0089b413e4fee3527b5d672617279fdc821b106ade07923f；按各自实际字节核对，不因换行不同强制伪造一致hash。macOS官方原生组件构建2m20s/6任务成功，构建日志随包报告留存。
+
+时长仅为fixture/工具链，不用作跨平台性能比较。生成ELF在macOS上是跨目标静态解析，不代表执行它或涵盖所有二进制格式，也不是付费模型自主理解验收。
+
+## E-155 本机安装
+
+一次offline已有缓存安装7101ms/退出0；gemini-ultra和gemini-ultra-cli均1.0.0-preview.40，424包内文件逐一匹配Windows
+CI包。入口SHA27dc398e7dfa5ecc17a01a8821edd1f52db19d3069e3fe9064534a98519f721f；旧preview.39包保留。安装辅助脚本初次误调用preview39校验器，因旧chunk缺失失败；只修正校验器引用并对已安装文件重新核对通过，未重新安装或重跑相同fixture。原失败输出保留，不将其当产品缺包。
+
+个人模型配置/数据库及Ghidra/JDK安装未改；不自动跑真实模型或旧付费审查。其他电脑需按产品说明独立配置工具；macOS/Linux
+ARM需先准备Ghidra对应原生组件，CLI已明确检测。
+
+工程证据：github-preview40-run.json、github-preview40-artifacts-result.json、github-run-42914813529各平台decompile-verification.json/-output.txt/-artifacts及macOS
+decompile-native-build.log；global-preview40-install-result.json、global-install-github-preview40-full-result.json。交接源码/工程/Obsidian同步。
+
+WI-070交付。WI-056仍需更复杂格式、多函数关联与动态逆向实际验收，WI-054真实供应商无人介入完整交付/引用准确性未完成。goal
+active，仅codex分支，不合并master、不正式Release。后续集中真实交付及能力缺口，不无止境新增小测试或重复原付费任务。

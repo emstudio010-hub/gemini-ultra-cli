@@ -16,9 +16,9 @@
 | P1     | Swarm具名成员、共享留言与实时看板           | 三平台原生链通过         | E-120/122/123/151：@提及唤醒、事件等待、终端看板、任务工作树及显式回写；真实自主交付待验收                         |
 | P1     | 内置红队工作流                              | 本地分析闭环通过         | 临时授权下redteam-analyst真实分析生成样本并归档，E-016；复杂逆向与外部目标未验收                                   |
 | P2     | 演练台 Morphicons 交互图标与强度动效        | 本地完成                 | 使用 Morphicons 2.0.2；浏览器确认六档、图标、移动布局、减少动态效果与隐藏暂停                                      |
-| P0     | 安装到 CLI 本身并生成可分发安装包           | 本地完成                 | 当前preview.39 Windows CI包，424文件匹配；E-151/152；成员独立模型与任务工作树                                      |
-| P1     | 其他电脑可以开展本地逆向                    | 三平台原生静态链通过     | preview.28的Windows/Linux x64、macOS arm64实际r2函数/指令/引用及SQLite归档通过E-107/111/112；复杂反编译待补        |
-| P1     | GitHub 三平台分发验收                       | 已通过至preview.39       | preview.39/run42909725723三平台success；多模型、任务worktree/回写/ignored保护及安装身份通过E-151/152               |
+| P0     | 安装到 CLI 本身并生成可分发安装包           | 本地完成                 | 当前preview.40 Windows CI包，424文件匹配；E-154/155；原生Ghidra反编译及成员协作                                    |
+| P1     | 其他电脑可以开展本地逆向                    | 三平台原生静态链通过     | E-154原生Ghidra函数反编译/完整工件哈希，既有r2结构/函数/指令/引用及归档通过；复杂格式、多函数关联及动态分析待补    |
+| P1     | GitHub 三平台分发验收                       | 已通过至preview.40       | preview.40/run42914813529三平台success；原生Ghidra/JDK、协作链及工件安装身份通过E-154/155                          |
 | P1     | 真实供应商与长会话上线验收                  | 未完成                   | E-124真实Swarm报告未交付，隔离8192两次length，观察者停下第三轮；原失败保留，完整自主交付仍未通过                   |
 
 ## 证据记录
@@ -683,3 +683,8 @@
 - F-042/E-154候选：42912878896
   Win/Linux原生Ghidra通过，macOS失败。原fixture未留内部日志，42913639623仅复用同一macOS包并保留日志，实证缺os/mac_arm_64/decompile；官方GettingStarted.md明确macOS/Linux
   ARM需构建原生组件。新增native存在/执行权限巡检、缺依赖清晰诊断及失败关键日志摘要；4项原用例补缺native分支并通过，类型构建通过。42914177196仅在runner临时目录按官方:Decompiler:buildNatives构建后重查旧包，不改本机工具、不跑真实模型。
+
+- E-154：preview.40源1801fe128b340fda722f0c5e8d8e7d44098bd1f9/run42914813529三平台completed/success，版本/SHA/源/安装/六rg身份权限核对。实际CLI→原生Ghidra/JDK→同一循环分支ELF→read_file完整工件，三平台各3loopback请求/退出0，样本与完整伪代码hash通过；Win18469ms/Linux13826ms/macOS14978ms，macOS官方native构建2m20s成功，日志留存。既有多模型/工作树/预算恢复同源链通过，不是任意格式或真实模型自主质量验收。
+- E-155：offline缓存安装7101ms/退出0，双命令preview.40，424文件匹配Windows
+  CI包。辅助脚本误用preview39核对器失败后，仅对已安装包改用preview40核对器通过，没有重复安装/fixture。旧包保留，不改个人配置/数据库/工具安装。WI-070交付，WI-056复杂格式关联动态、WI-054真实完整交付/引用继续；goal
+  active，不合并master/正式Release。
