@@ -125,7 +125,10 @@ export function ultraSpecialists(
 export function workflowAuditor(context: AgentLoopContext) {
   const base = GeneralistAgent(context);
   return {
-    ...base,
+    kind: 'local' as const,
+    inputConfig: base.inputConfig,
+    modelConfig: base.modelConfig,
+    runConfig: base.runConfig,
     name: 'workflow-auditor',
     displayName: 'Workflow Auditor',
     processOutput: undefined,

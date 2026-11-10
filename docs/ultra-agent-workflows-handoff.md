@@ -30,3 +30,10 @@ worktree隔离。status/cancel可在繁忙时处理；取消等待已发起子�
 、https://antigravity.google/docs/boost/
 、https://antigravity.google/docs/commands/grill-me/
 。源码和提示词为本项目实现。
+
+## E-117：首个分发失败与修复
+
+原提交17a630fb3d7423be994db9b99603b60cf6696911的run42874678575已completed/failure，失败保留。Linux/macOS原日志显示已安装CLI启动时getAllToolNames的宿主为undefined。根因为workflowAuditor展开Generalist对象，提前求值了本应延迟访问的toolConfig
+getter；Agent注册发生在ToolRegistry准备之前。修为显式复用静态配置并保留延迟getter。
+
+新增唯一针对性回归：在工具注册表未就绪时创建审查员定义，随后实际解析只读工具。该用例及原四项状态机共5项通过；相关lint与core/cli类型构建通过。原两个CLI用例证据保留。首个CI失败不作为可安装成果；修订源提交的分发结果后补。

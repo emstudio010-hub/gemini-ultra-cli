@@ -15,6 +15,8 @@ import {
   cancelAgentWorkflow,
   type WorkflowAgentRunner,
 } from './agentWorkflows.js';
+import { workflowAuditor } from './ultraSpecialists.js';
+import type { AgentLoopContext } from '../config/agent-loop-context.js';
 
 let root: string;
 beforeEach(() => {
@@ -34,6 +36,26 @@ const verdict = (passed: boolean) =>
       evidence: ['deliverable.txt'],
     }),
   );
+
+it('registers the auditor before the tool registry exists and resolves read-only tools later', () => {
+  let registryReady = false;
+  const context = {
+    get toolRegistry() {
+      if (!registryReady) throw new Error('Tool registry not initialized yet');
+      return {
+        getAllToolNames: () => [
+          'read_file',
+          'complete_task',
+          'write_file',
+          'run_agent_workflow',
+        ],
+      };
+    },
+  } as unknown as AgentLoopContext;
+  const definition = workflowAuditor(context);
+  registryReady = true;
+  expect(definition.toolConfig.tools).toEqual(['read_file', 'complete_task']);
+});
 
 it('rejects unapproved scoping records without changing them or starting workers', async () => {
   const record = createAgentWorkflow(
