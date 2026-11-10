@@ -5,19 +5,19 @@
 
 状态中的「本地完成」表示已有实现与对应本地证据，不等同于生产或跨平台验收。持续目标仍开启。
 
-| 优先级 | 目标                                        | 状态                 | 已有依据 / 剩余工作                                                                                                |
-| ------ | ------------------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| P0     | 缩短启动，避免父子进程重复加载核心依赖      | 本地完成             | preview.11默认监督进程完整ConPTY观察：5,182ms输入框、6,290ms本地命令执行，0模型请求；单台Windows，其他机器仍需记录 |
-| P0     | 加载卡住时可取消、有超时和错误恢复          | 本地完成，持续观察   | 修复结束后保活不断重置收尾期限，安装HTTP场景6,511→2,046ms且usage保留；启动期斜杠等待当前命令表，E-033至038         |
-| P0     | `/language` 中文/英文选择与六档唯一推理强度 | 本地完成             | 显式切换、即时刷新、持久化；终端与浏览器中英文各六档，别名仍可输入                                                 |
-| P1     | 模型配置便捷可靠                            | 本地完成             | 新增不覆盖旧供应商、端点规范化、手动模型、密钥清空与掩码、外接供应商可独立初始化；真实供应商待验收                 |
-| P1     | 多 Agent 有界排队、取消与结果可见           | 基础链通过，长任务待修 | E-063真实三角色2完成1超时，状态准确；父模型INVALID_STREAM未交付报告，不能算完整任务通过                          |
-| P1     | 内置红队工作流                              | 本地分析闭环通过     | 临时授权下redteam-analyst真实分析生成样本并归档，E-016；复杂逆向与外部目标未验收                                   |
-| P2     | 演练台 Morphicons 交互图标与强度动效        | 本地完成             | 使用 Morphicons 2.0.2；浏览器确认六档、图标、移动布局、减少动态效果与隐藏暂停                                      |
-| P0     | 安装到 CLI 本身并生成可分发安装包           | 本地完成             | 当前preview.19，GitHub Windows工件与本机入口匹配；E-073；多段思考/正文/分片工具链落盘完整，无误重试                   |
-| P1     | 其他电脑可以开展本地逆向                    | 三平台原生基础链通过 | preview.8的Windows/Linux x64、macOS arm64真实rabin2读取/归档/查询通过E-022/027/029；复杂反编译与其他工具仍待补     |
-| P1     | GitHub 三平台分发验收                       | 已通过               | 最新preview.19 run42761930268三平台success，独立构建/打包/安装与工件核对；E-072                                    |
-| P1     | 真实供应商与长会话上线验收                  | 未完成               | E-070原生同ID恢复与原笔记保留有证据，但再次无正文、无报告；正确退出1。F-023本地协议修复不当作真实任务通过            |
+| 优先级 | 目标                                        | 状态                   | 已有依据 / 剩余工作                                                                                                |
+| ------ | ------------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| P0     | 缩短启动，避免父子进程重复加载核心依赖      | 本地完成               | preview.11默认监督进程完整ConPTY观察：5,182ms输入框、6,290ms本地命令执行，0模型请求；单台Windows，其他机器仍需记录 |
+| P0     | 加载卡住时可取消、有超时和错误恢复          | 本地完成，持续观察     | 修复结束后保活不断重置收尾期限，安装HTTP场景6,511→2,046ms且usage保留；启动期斜杠等待当前命令表，E-033至038         |
+| P0     | `/language` 中文/英文选择与六档唯一推理强度 | 本地完成               | 显式切换、即时刷新、持久化；终端与浏览器中英文各六档，别名仍可输入                                                 |
+| P1     | 模型配置便捷可靠                            | 本地完成               | 新增不覆盖旧供应商、端点规范化、手动模型、密钥清空与掩码、外接供应商可独立初始化；真实供应商待验收                 |
+| P1     | 多 Agent 有界排队、取消与结果可见           | 基础链通过，长任务待修 | E-063真实三角色2完成1超时，状态准确；父模型INVALID_STREAM未交付报告，不能算完整任务通过                            |
+| P1     | 内置红队工作流                              | 本地分析闭环通过       | 临时授权下redteam-analyst真实分析生成样本并归档，E-016；复杂逆向与外部目标未验收                                   |
+| P2     | 演练台 Morphicons 交互图标与强度动效        | 本地完成               | 使用 Morphicons 2.0.2；浏览器确认六档、图标、移动布局、减少动态效果与隐藏暂停                                      |
+| P0     | 安装到 CLI 本身并生成可分发安装包           | 本地完成               | 当前preview.20，GitHub Windows工件与本机入口匹配；E-076；输出上限与分片工具链落盘完整                              |
+| P1     | 其他电脑可以开展本地逆向                    | 三平台原生基础链通过   | preview.8的Windows/Linux x64、macOS arm64真实rabin2读取/归档/查询通过E-022/027/029；复杂反编译与其他工具仍待补     |
+| P1     | GitHub 三平台分发验收                       | 已通过                 | 最新preview.20 run42764054577三平台success，独立构建/打包/安装与工件核对；E-075                                    |
+| P1     | 真实供应商与长会话上线验收                  | 未完成                 | E-077原生同ID续接保留数据，四请求均发32768仍无正文/报告、退出1；真实流终止原因待定位                               |
 
 ## 证据记录
 
@@ -268,47 +268,84 @@
 ## 2026-11-10 协作结果交接
 
 - F-019/E-057：批次工具原先再次JSON序列化子代理Part数组，产生多层转义；现在优先使用结构化执行结果，解开内置单字段response包装，向父代理提供可读文本、每项状态和完成/失败/取消数量。额外JSON字段与非文本Part保留，中断原因和部分结果保留，统计语义不变。
-- 三个定向用例修前失败、修后通过；四个受影响文件严格ESLint、核心/CLI TypeScript通过。没有全量或冒烟检查。
+- 三个定向用例修前失败、修后通过；四个受影响文件严格ESLint、核心/CLI
+  TypeScript通过。没有全量或冒烟检查。
 - 协作提示增加整合交付与复用证据；只读角色不得将快照缺少依赖当作产品缺失。这是交接改进，不据此宣布父任务自主收尾已修复。
 - E-058：preview.16开发bundle、当前Ess/DeepSeek真实服务，八份源码副本、三个真实产品Agent、并发2；researcher/reviewer超时失败，redteam-analyst以GOAL完成并归档note。父代理保留正常工具权限，自行补查并写出报告（距会话开始474,530ms），但480秒观察器终止前无最终JSON，整体验证仍未通过；不能称为交付后卡死或正常收尾已通过，也不是旧四文件任务的严格速度对照。
-- 会话、源码快照、报告及原失败JSON均保留。原JSON的subagentsRan=false因最终统计缺失，已另用三份子会话和实际批次结果证明真实执行；不覆盖原记录。笔记清理前SELECT成功，保存主库漏WAL、没有note表，不可作为可重放数据库证据；后续观察脚本改用SQLite backup，未重复真实任务。
+- 会话、源码快照、报告及原失败JSON均保留。原JSON的subagentsRan=false因最终统计缺失，已另用三份子会话和实际批次结果证明真实执行；不覆盖原记录。笔记清理前SELECT成功，保存主库漏WAL、没有note表，不可作为可重放数据库证据；后续观察脚本改用SQLite
+  backup，未重复真实任务。
 - 模型报告的混合批次总error、协议补交和取消后worker回调候选经人工复核均属既定语义，不认定为新缺陷。对象形式工具注入仍待核实。另发现真实timeout抛普通Error而恢复分支仅识别AbortError，下一阶段定向追踪，不先宣布根因成立。
 - E-059：[preview.16运行42754395069](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/42754395069)三平台completed/success，功能提交4ccc2c6423ddf0e9a16b997cf8c782a63cd59530。版本、安装报告、三个包SHA-256与内置六个rg文件hash/0755核对通过。
-- E-060：本机两个命令已安装Windows CI preview.16，入口SHA-256与工件一致。一个成功/一个HTTP400失败的实际CLI协作交接通过，4次loopback请求、3,948ms、退出0；父代理收到1 completed/1 failed/0 cancelled、未多层转义的多行结果、GOAL与失败原因。模型响应为fixture，无重复付费模型/压缩/原生链检查，没有全量或冒烟。
-- Windows包SHA-256 `bf3abb8561ff88d9ad1122010093ba08bb7c376244ccabd5865d283d4c64a062`；Linux `88cc49fcef52fdb1a5fe3dd95e2a6a39da49cf1ec5da54d2b57aa44438fc1287`；macOS `57f276257ee988298c5e04bb17d0e2e24d2e6602d74bf5566646207967f073ad`。本机已有缓存离线安装12秒，不代表无缓存新电脑可离线安装。整体目标保持active。
+- E-060：本机两个命令已安装Windows CI
+  preview.16，入口SHA-256与工件一致。一个成功/一个HTTP400失败的实际CLI协作交接通过，4次loopback请求、3,948ms、退出0；父代理收到1
+  completed/1 failed/0
+  cancelled、未多层转义的多行结果、GOAL与失败原因。模型响应为fixture，无重复付费模型/压缩/原生链检查，没有全量或冒烟。
+- Windows包SHA-256
+  `bf3abb8561ff88d9ad1122010093ba08bb7c376244ccabd5865d283d4c64a062`；Linux
+  `88cc49fcef52fdb1a5fe3dd95e2a6a39da49cf1ec5da54d2b57aa44438fc1287`；macOS
+  `57f276257ee988298c5e04bb17d0e2e24d2e6602d74bf5566646207967f073ad`。本机已有缓存离线安装12秒，不代表无缓存新电脑可离线安装。整体目标保持active。
 
 ## 2026-11-10 真实deadline与对象工具边界
 
 - E-061/F-020：DeadlineTimer的abort携带普通Error，fetch可原样拒绝该reason；旧runInternal只识别AbortError，跳过TIMEOUT阶段总结。四个定向对照修前1失败3通过，preview.16已安装实际fetch场景也不发总结请求、只返回普通错误（4,999ms，失败基线保留）。现在识别定时器的同一reason对象或AbortError，仍要求内部deadline已触发且非用户取消；不吞掉无关错误。总结保持TIMEOUT/FAILED和部分发现，不升级成功。14个恢复/超时相关用例通过。
 - E-062/F-021：可信程序化工具实例分支原先只排除complete_task，漏过Kind.Agent和update_topic，而名称分支已过滤。一个定向用例修前失败；现在共用过滤条件，保留浏览器显式实例与状态，不强制克隆。4个相关实例/声明/执行用例通过。此为递归与父会话控制规则的一致性修复，未宣称外部可利用漏洞。
-- 两个受影响文件严格ESLint通过；核心/CLI TypeScript在deadline修复后通过，最终三平台构建亦完成新增对象过滤改动的类型构建。共18个选定用例，没有全量或冒烟。
-- E-063：preview.17开发bundle、当前Ess/DeepSeek、八份只读副本、三个产品Agent/并发2，633,710ms自行结束，未触及720秒观察器。researcher/redteam-analyst GOAL，reviewer TIMEOUT，父代理准确收到2 completed/1 failed/0 cancelled；该超时的总结没有成功捕获。父模型最终INVALID_STREAM（只有思考、无最终正文），无报告、整体失败；CLI却退出0（F-022待修）。35次API请求、57工具调用，均有最终统计；不作旧版速度对照，不把退出0当成功。
+- 两个受影响文件严格ESLint通过；核心/CLI
+  TypeScript在deadline修复后通过，最终三平台构建亦完成新增对象过滤改动的类型构建。共18个选定用例，没有全量或冒烟。
+- E-063：preview.17开发bundle、当前Ess/DeepSeek、八份只读副本、三个产品Agent/并发2，633,710ms自行结束，未触及720秒观察器。researcher/redteam-analyst
+  GOAL，reviewer TIMEOUT，父代理准确收到2 completed/1 failed/0
+  cancelled；该超时的总结没有成功捕获。父模型最终INVALID_STREAM（只有思考、无最终正文），无报告、整体失败；CLI却退出0（F-022待修）。35次API请求、57工具调用，均有最终统计；不作旧版速度对照，不把退出0当成功。
 - 会话、源码快照、原失败结果和一致性SQLite备份已保留；笔记在清理前查询成功，保存库亦重开查到note表及一条记录。不覆盖preview.16漏WAL的旧证据。下一阶段先用fixture追踪错误退出码、核对已有thinking-only重试/nudge路径，不重跑整套付费任务。
-- E-064：[preview.17运行42756282770](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/42756282770)三平台completed/success，功能提交1b52d4217e1d2fb763d4645f69b77921fea92e7e。三个包版本/安装报告/SHA-256、六rg hash/0755核对通过。
-- E-065：本机双命令preview.17、入口与Windows CI包一致。实际fetch等待响应头直到deadline的场景得到5次loopback请求、9,818ms、退出0，发起总结且保留TIMEOUT/FAILED与完整部分发现。最初脚本将JSON包装的部分结果误按裸多行文本匹配，原false结果保留；单独解码同一捕获的内置response结构后所有语义断言通过，没有重跑CLI或模型。不是新一轮真实模型验证。
-- Windows包SHA-256 `55b704db9c4a59a07fe1ec3cbd81ca8aacc1a1dde6216168511240609c9b598e`；Linux `3b29d231773c154b4a12afc12c9143c0f73225927dd4ad2584cbae23b367eaa0`；macOS `97b464dd6cacbe03905ade045672d4d7e084753ba02aa0e9d5642324877bc986`。本机已有缓存offline安装26秒，不代表无缓存新电脑离线安装。整体目标active，完整上线仍未验收。
+- E-064：[preview.17运行42756282770](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/42756282770)三平台completed/success，功能提交1b52d4217e1d2fb763d4645f69b77921fea92e7e。三个包版本/安装报告/SHA-256、六rg
+  hash/0755核对通过。
+- E-065：本机双命令preview.17、入口与Windows
+  CI包一致。实际fetch等待响应头直到deadline的场景得到5次loopback请求、9,818ms、退出0，发起总结且保留TIMEOUT/FAILED与完整部分发现。最初脚本将JSON包装的部分结果误按裸多行文本匹配，原false结果保留；单独解码同一捕获的内置response结构后所有语义断言通过，没有重跑CLI或模型。不是新一轮真实模型验证。
+- Windows包SHA-256
+  `55b704db9c4a59a07fe1ec3cbd81ca8aacc1a1dde6216168511240609c9b598e`；Linux
+  `3b29d231773c154b4a12afc12c9143c0f73225927dd4ad2584cbae23b367eaa0`；macOS
+  `97b464dd6cacbe03905ade045672d4d7e084753ba02aa0e9d5642324877bc986`。本机已有缓存offline安装26秒，不代表无缓存新电脑离线安装。整体目标active，完整上线仍未验收。
 
 ## 2026-11-10 无正文错误与退出状态
 
-- E-066/F-022：两个非交互路径的InvalidStream原先只输出错误；主入口又无条件将exitCode重置为0。现错误分支设置非零退出状态，主入口仅在未设置状态时默认成功，保留现有错误输出及异步清理。八个既有TEXT/JSON/stream-json与自定义错误用例新增退出状态断言后，修前8失败、修后8通过；五文件严格ESLint、格式和核心/CLI TypeScript通过。
+- E-066/F-022：两个非交互路径的InvalidStream原先只输出错误；主入口又无条件将exitCode重置为0。现错误分支设置非零退出状态，主入口仅在未设置状态时默认成功，保留现有错误输出及异步清理。八个既有TEXT/JSON/stream-json与自定义错误用例新增退出状态断言后，修前8失败、修后8通过；五文件严格ESLint、格式和核心/CLI
+  TypeScript通过。
 - E-067：开发bundle七个实际CLI/HTTP场景完成定向核对：三格式持续thinking-only、ADK持续失败、默认监督入口失败均退出1；普通与ADK恢复场景均在既有重试/nudge后真实write_file落盘并退出0。请求次数分别2与3（general.maxAttempts=2），证明本地有界重试，不是实际供应商长任务验收。
-- 首次七场景里5通过，两个在连接本地端口前ETIMEDOUT、0请求；仅这两项改用固定空闲端口45679复核通过，原false记录保留，不宣称修复本机网络根因。preview.17基线另有一次重试前TypeError及Windows CRLF被脚本误按LF匹配，原记录亦保留，未用其推断产品没有重试。
+- 首次七场景里5通过，两个在连接本地端口前ETIMEDOUT、0请求；仅这两项改用固定空闲端口45679复核通过，原false记录保留，不宣称修复本机网络根因。preview.17基线另有一次重试前TypeError及Windows
+  CRLF被脚本误按LF匹配，原记录亦保留，未用其推断产品没有重试。
 - E-068：[preview.18运行42758828025](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/42758828025)三平台completed/success，功能提交9a4c4628767afcc7dd6d1f9c225699f4b713a702。三个包的版本、安装报告、SHA-256及六个rg文件hash/0755核对通过。
-- E-069：本机双命令preview.18、入口与Windows CI包一致。安装后两个重点实际CLI/HTTP场景通过：持续无正文2请求/3,036ms、JSON明确INVALID_STREAM、退出1且无伪造产物；首次无正文后既有nudge重试到write_file，3请求/2,590ms、实际文件落盘、最终正文正确且退出0。general.maxAttempts=2为隔离验证配置，不是修改产品默认重试策略。
-- Windows包SHA-256 `9348630f2b3cf8eed640bb2002b8932599bd42733831a69d68f83e807370347e`；Linux `249d47afcb5b810a21ce28db990f237e371f2a985b9f34242e261118e8e0caae`；macOS `7252e931a07ff66d2061d870b7219be913c5b179d1e57495cc79b7dff2675e7b`。本机已有缓存offline安装14秒，不代表无缓存新电脑离线安装。本阶段没有重跑E-063整套付费任务；真实完整交付与复杂逆向仍未完成，整体目标active。
+- E-069：本机双命令preview.18、入口与Windows
+  CI包一致。安装后两个重点实际CLI/HTTP场景通过：持续无正文2请求/3,036ms、JSON明确INVALID_STREAM、退出1且无伪造产物；首次无正文后既有nudge重试到write_file，3请求/2,590ms、实际文件落盘、最终正文正确且退出0。general.maxAttempts=2为隔离验证配置，不是修改产品默认重试策略。
+- Windows包SHA-256
+  `9348630f2b3cf8eed640bb2002b8932599bd42733831a69d68f83e807370347e`；Linux
+  `249d47afcb5b810a21ce28db990f237e371f2a985b9f34242e261118e8e0caae`；macOS
+  `7252e931a07ff66d2061d870b7219be913c5b179d1e57495cc79b7dff2675e7b`。本机已有缓存offline安装14秒，不代表无缓存新电脑离线安装。本阶段没有重跑E-063整套付费任务；真实完整交付与复杂逆向仍未完成，整体目标active。
 
 ## 2026-11-10 原生恢复与流式终止标记
 
-- E-070：preview.18已安装CLI恢复原隔离目录、八份原源码快照、原会话与一致性笔记库，原生--resume保持442e90eb-db6c-4ebd-b6ca-b10843721b53，未导入新ID。358,103ms自行结束，未触及480秒观察器；8次主请求、0新子代理请求，仅补读一文件，原笔记1条未重复、源码及用户供应商配置未变，checkpoint原始前缀保留。仍因thinking-only INVALID_STREAM未生成报告，退出1正确；恢复连续性有证据，交付仍未通过。原数据全部保留，不用恢复机制成功掩盖报告失败。
-- E-071/F-023：人工追踪发现OpenAI Chat/Responses/Anthropic中间思考和文本块都被builder标为STOP。现中间块不带finishReason，协议真正结束后才发送一个包含完整工具调用和尾部usage的终止块，即使只有正文、没有usage也显式结束。三个协议×有/无工具的6个定向用例修前失败；修后加原固定尾部deadline和截断恢复对照共8项通过，受影响两文件严格lint与核心/CLI TypeScript通过。
+- E-070：preview.18已安装CLI恢复原隔离目录、八份原源码快照、原会话与一致性笔记库，原生--resume保持442e90eb-db6c-4ebd-b6ca-b10843721b53，未导入新ID。358,103ms自行结束，未触及480秒观察器；8次主请求、0新子代理请求，仅补读一文件，原笔记1条未重复、源码及用户供应商配置未变，checkpoint原始前缀保留。仍因thinking-only
+  INVALID_STREAM未生成报告，退出1正确；恢复连续性有证据，交付仍未通过。原数据全部保留，不用恢复机制成功掩盖报告失败。
+- E-071/F-023：人工追踪发现OpenAI
+  Chat/Responses/Anthropic中间思考和文本块都被builder标为STOP。现中间块不带finishReason，协议真正结束后才发送一个包含完整工具调用和尾部usage的终止块，即使只有正文、没有usage也显式结束。三个协议×有/无工具的6个定向用例修前失败；修后加原固定尾部deadline和截断恢复对照共8项通过，受影响两文件严格lint与核心/CLI
+  TypeScript通过。
 - 开发bundle实际HTTP场景通过：思考→多段正文→分片write_file参数→工具结果→多段最终正文，两次请求、2,177ms、退出0，文件实际落盘、usage保留、没有误触重试。此为协议适配修复，尚未证明它是E-070真实thinking-only的根因；本阶段没有继续重复付费恢复任务。
 - E-072：[preview.19运行42761930268](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/42761930268)三平台completed/success，功能提交07173eb57df0a5f686bf62aa10beb338fa32554b。三个工件版本、安装报告、SHA-256及六个rg文件hash/0755核对通过。
-- E-073：本机双命令preview.19、入口与Windows CI包一致。已安装OpenAI Chat HTTP fixture上述分片链通过，2请求/2,149ms/退出0，真实落盘、最终正文及usage完整、无重试。使用deepseek/deepseek-v4.1-flash模型名称但端点为本地fixture，不是真实服务。观察到两次默认主请求均未发送显式max_tokens/max_completion_tokens；供应商默认上限是否导致无正文仍是假设，后续先核对输出预算及实际终止信息，不凭此直接归因。
-- Windows包SHA-256 `2b5d433cc3d1717b68fde6bed314e0166569900c9c34120bcd80b6450586d0d3`；Linux `76df20ebecb8c10e471c3a39e6922fd311bfb578b3a772b708891f54f47520a6`；macOS `ca340b7731f51ab732ba130159263c7d8cfe5c4ce577164c3bf72c6a4dca172a`。本机已有缓存offline安装11秒，不代表无缓存新电脑离线安装。完整交付与复杂逆向仍未验收，整体目标active。
+- E-073：本机双命令preview.19、入口与Windows CI包一致。已安装OpenAI Chat HTTP
+  fixture上述分片链通过，2请求/2,149ms/退出0，真实落盘、最终正文及usage完整、无重试。使用deepseek/deepseek-v4.1-flash模型名称但端点为本地fixture，不是真实服务。观察到两次默认主请求均未发送显式max_tokens/max_completion_tokens；供应商默认上限是否导致无正文仍是假设，后续先核对输出预算及实际终止信息，不凭此直接归因。
+- Windows包SHA-256
+  `2b5d433cc3d1717b68fde6bed314e0166569900c9c34120bcd80b6450586d0d3`；Linux
+  `76df20ebecb8c10e471c3a39e6922fd311bfb578b3a772b708891f54f47520a6`；macOS
+  `ca340b7731f51ab732ba130159263c7d8cfe5c4ce577164c3bf72c6a4dca172a`。本机已有缓存offline安装11秒，不代表无缓存新电脑离线安装。完整交付与复杂逆向仍未验收，整体目标active。
 
 ## 2026-11-10 可选输出上限
 
 - E-074：新增按供应商保存的 maxOutputTokens 和 /provider「输出上限」菜单。留空沿用现有默认，任务显式上限优先；普通参数编辑及演练台保存未传此字段时保留旧值，明确 undefined 清除。严格校验正安全整数，拒绝非法值时内存与原文件不变。两个公开生成入口统一注入，不改变四协议的参数命名与既有 Anthropic 推理预算。
 - 12项必要定向检查通过，覆盖保存/重载/保留/清除/非法值，以及四协议、Chat两种Token参数、流式/非流式的默认和覆盖行为；六个改动TypeScript文件严格lint、核心/CLI类型构建通过。首次两个Anthropic断言把现有高强度默认24192误写为8192，已修正检查预期，产品默认未改。原检查日志保留。
-- 开发bundle的实际Windows ConPTY输入通过：打开菜单、0就地报错、32768保存、重开读回、留空清除、正常退出，10,789ms。没有模型请求；不新增首次供应商创建步骤、不做全量或冒烟。
+- 开发bundle的实际Windows
+  ConPTY输入通过：打开菜单、0就地报错、32768保存、重开读回、留空清除、正常退出，10,789ms。没有模型请求；不新增首次供应商创建步骤、不做全量或冒烟。
 - preview.20分发与安装尚待本阶段后续核对；真实thinking-only是否与输出预算有关仍未证实，不根据本地参数检查宣布真实交付修复。整体目标active。
+
+- E-075：preview.20运行42764054577三平台success，功能提交1f98705a6ebc6be9dde5a036d3d4dc8527644d6e；独立构建/安装报告/工件SHA与六rg
+  hash/0755核对通过。
+- E-076：本机双命令preview.20，入口8e7153b32b4d37eaafb3bc961a3dcce99d57333b98ac43721be8b9600c762ebc匹配Windows
+  CI包，已有缓存offline安装9秒。安装后实际HTTP工具链2请求、2,566ms、退出0，均发32768、分片write_file落盘、正文与usage完整、无误重试；响应为fixture。
+- E-077：仅一次当前Ess/DeepSeek原生续接，使用E-070最新会话/数据库和E-063源码快照，隔离配置32768、maxAttempts=2、maxSessionTurns=8、240秒观察器。167,219ms自行结束、退出1、INVALID_STREAM，无报告；4主请求/0新子代理/1成功read_file。会话同ID与字节前缀、原note整行、源码和用户配置保留。总Token195,654，其中缓存46,080，非账单金额。
+- 四个真实请求参数均为32768、HTTP200，返回思考长度2072/4188/5178/3969，正文长度全部0；仅第二个有tool_calls结束原因，其他未提供finish_reason。未保存原始网络流或盘点DONE，不断言模型/供应商/超时/适配器根因。提高上限未解决真实失败，停止原样重复付费续跑；下一阶段离线定位流终止与timeout链。交接已写源码docs、工程目录和Obsidian，整体目标active。
