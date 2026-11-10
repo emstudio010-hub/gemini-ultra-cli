@@ -1,6 +1,6 @@
 # Gemini Ultra CLI 工作流交接上下文精简
 
-日期：2026-11-11。WI-072/E-157；候选preview.41，本机当前preview.40。沿用R26/code-audit自有源码case与lead/cae/doc，依据上一轮真实Boost记录优化，不发起新的真实模型任务。
+日期：2026-11-11。WI-072/E-157；本机双命令已安装preview.41，产品源7b1d271f3b6af77b78041e6673df4c375e01a04e。沿用R26/code-audit自有源码case与lead/cae/doc，依据上一轮真实Boost记录优化，不发起新的真实模型任务。
 
 ## 根因与修改
 
@@ -52,3 +52,28 @@ WI-072精简交接、完整证据保留及CLI实际读取。原真实任务成�
 
 WI-072本地完成，preview.41待三平台最终包及安装身份核对。沿用已授权codex隔离分支，不合并master、不正式Release；每阶段同步Obsidian。WI-054真实Swarm、长任务、更多模型及摘要准确性仍未完成，复杂逆向边界保留；整体goal
 active，不以一次成功或提示词精简宣称全面可上线。
+
+## E-158 三平台最终包
+
+[运行42919315474](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/42919315474)
+completed/success，产品源7b1d271f3b6af77b78041e6673df4c375e01a04e。三个工件版本/SHA/来源提交、安装报告、六rg二进制hash及Unix权限核对通过。同源既有Swarm/工作流两入口多模型、预算/恢复、工作树及原生Ghidra链通过。
+
+| 平台        | 包SHA-256                                                        | 新长交接链              |
+| ----------- | ---------------------------------------------------------------- | ----------------------- |
+| Windows x64 | 7d30cc4e4168e4a95b0e7323dc0a52c75e340de386edc775158afd36e094d182 | 1202ms / 13请求 / 退出0 |
+| Linux x64   | a2eecc741454f8e999ce1ff6f5538be22e1110c6c8570ff73abec6e445e5b206 | 963ms / 13请求 / 退出0  |
+| macOS arm64 | 9de08e121b5c3838858984eae268b7f337d2e80b1a32a6d998ce7d7c7805fd9a | 953ms / 13请求 / 退出0  |
+
+每平台实际安装CLI和原生子执行器，五份成员输入目标各出现一次；coder通过read_file读到预览省略的中段证据后write_file交付，原长报告正文保留，阶段及整体审查完成。11次任务调度、一次实施预算保持，任务自然completed。响应为loopback
+fixture；不作真实模型质量、成本或跨平台性能比较。
+
+## E-159 本机安装
+
+一次offline已有缓存安装7171ms/退出0；gemini-ultra和gemini-ultra-cli均1.0.0-preview.41，424包内文件逐一匹配Windows
+CI包。入口SHA
+c03fa5b2fa219f45bb5dcb196fcdcd4e6bb0891c4a97763eb364e6d6845db7de。旧preview.40包保留；不重复Windows同工件fixture、真实付费任务，不改个人供应商配置、数据库或逆向工具。
+
+工程证据：github-preview41-run.json、github-preview41-artifacts-result.json、github-run-42919315474各平台workflow-context-verification.json及-output.txt；global-preview41-install-result.json、global-install-github-preview41-full-result.json。源码/工程/Obsidian交接同步。
+
+WI-072交付，整体goal
+active。仅证明减少无条件重复交接并保留可读证据，真实总Token/费用/耗时收益仍未度量，不为此自动重跑E-156。真实Swarm、长任务、更多模型及摘要准确性、复杂逆向仍有边界。不合并master、不正式Release。
