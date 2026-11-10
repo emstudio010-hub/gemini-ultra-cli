@@ -361,19 +361,21 @@ export class UniversalContentGenerator implements ContentGenerator {
   private buildGeminiResponse(
     parts: Part[],
     usageMetadata?: GenerateContentResponseUsageMetadata,
+    complete = true,
   ): GenerateContentResponse {
     const response = new GenerateContentResponse();
-    response.candidates = parts.length
-      ? [
-          {
-            content: {
-              role: 'model',
-              parts,
+    response.candidates =
+      parts.length || complete
+        ? [
+            {
+              content: {
+                role: 'model',
+                parts,
+              },
+              ...(complete ? { finishReason: FinishReason.STOP } : {}),
             },
-            finishReason: FinishReason.STOP,
-          },
-        ]
-      : [];
+          ]
+        : [];
     if (usageMetadata) response.usageMetadata = usageMetadata;
     return response;
   }
@@ -552,14 +554,20 @@ export class UniversalContentGenerator implements ContentGenerator {
 
       // 1. Reasoning content
       if (delta.reasoning_content) {
-        yield this.buildGeminiResponse([
-          { text: delta.reasoning_content, thought: true },
-        ]);
+        yield this.buildGeminiResponse(
+          [{ text: delta.reasoning_content, thought: true }],
+          undefined,
+          false,
+        );
       }
 
       // 2. Normal text content
       if (delta.content) {
-        yield this.buildGeminiResponse([{ text: delta.content }]);
+        yield this.buildGeminiResponse(
+          [{ text: delta.content }],
+          undefined,
+          false,
+        );
       }
 
       // 3. Tool calls delta
@@ -584,9 +592,9 @@ export class UniversalContentGenerator implements ContentGenerator {
         'OpenAI stream ended before completion; response may be incomplete.',
       );
 
-    // Flush any pending tool calls
+    // Emit completion only after the protocol has ended and usage is collected.
+    const parts: Part[] = [];
     if (pendingToolCalls.size > 0) {
-      const parts: Part[] = [];
       for (const [, tc] of pendingToolCalls) {
         if (!tc.id || !tc.name)
           throw new Error(
@@ -600,9 +608,8 @@ export class UniversalContentGenerator implements ContentGenerator {
           },
         });
       }
-      yield this.buildGeminiResponse(parts);
     }
-    if (usage) yield this.buildGeminiResponse([], usage);
+    yield this.buildGeminiResponse(parts, usage);
   }
   // --- Shared SSE reader ---
 
@@ -810,12 +817,21 @@ export class UniversalContentGenerator implements ContentGenerator {
       );
       switch (ev.type) {
         case 'response.output_text.delta':
-          if (ev.delta) yield this.buildGeminiResponse([{ text: ev.delta }]);
+          if (ev.delta)
+            yield this.buildGeminiResponse(
+              [{ text: ev.delta }],
+              undefined,
+              false,
+            );
           break;
         case 'response.reasoning_summary_text.delta':
         case 'response.reasoning_text.delta':
           if (ev.delta) {
-            yield this.buildGeminiResponse([{ text: ev.delta, thought: true }]);
+            yield this.buildGeminiResponse(
+              [{ text: ev.delta, thought: true }],
+              undefined,
+              false,
+            );
           }
           break;
         case 'response.output_item.added':
@@ -861,18 +877,16 @@ export class UniversalContentGenerator implements ContentGenerator {
       throw new Error(
         'OpenAI Responses stream ended before response.completed.',
       );
-    if (calls.size > 0) {
-      yield this.buildGeminiResponse(
-        [...calls.values()].map((c) => ({
-          functionCall: {
-            id: c.callId,
-            name: c.name,
-            args: this.parseArgs(c.args),
-          },
-        })),
-      );
-    }
-    if (usage) yield this.buildGeminiResponse([], usage);
+    yield this.buildGeminiResponse(
+      [...calls.values()].map((c) => ({
+        functionCall: {
+          id: c.callId,
+          name: c.name,
+          args: this.parseArgs(c.args),
+        },
+      })),
+      usage,
+    );
   }
 
   // --- Anthropic Messages Adapter (/v1/messages) ---
@@ -1024,9 +1038,13 @@ export class UniversalContentGenerator implements ContentGenerator {
       } else if (ev.type === 'content_block_delta') {
         const d = ev.delta;
         if (d?.type === 'thinking_delta' && d.thinking) {
-          yield this.buildGeminiResponse([{ text: d.thinking, thought: true }]);
+          yield this.buildGeminiResponse(
+            [{ text: d.thinking, thought: true }],
+            undefined,
+            false,
+          );
         } else if (d?.type === 'text_delta' && d.text) {
-          yield this.buildGeminiResponse([{ text: d.text }]);
+          yield this.buildGeminiResponse([{ text: d.text }], undefined, false);
         } else if (d?.type === 'input_json_delta') {
           const b =
             ev.index !== undefined ? toolBlocks.get(ev.index) : undefined;
@@ -1049,21 +1067,17 @@ export class UniversalContentGenerator implements ContentGenerator {
 
     if (!completed)
       throw new Error('Anthropic stream ended before message_stop.');
-    if (toolBlocks.size > 0) {
-      yield this.buildGeminiResponse(
-        [...toolBlocks.values()].map((b) => ({
-          functionCall: {
-            id: b.id,
-            name: b.name,
-            args: this.parseArgs(
-              b.json || JSON.stringify(b.initialInput ?? {}),
-            ),
-          },
-        })),
-      );
-    }
     const usage = providerUsage(usageData, 'anthropic');
-    if (usage) yield this.buildGeminiResponse([], usage);
+    yield this.buildGeminiResponse(
+      [...toolBlocks.values()].map((b) => ({
+        functionCall: {
+          id: b.id,
+          name: b.name,
+          args: this.parseArgs(b.json || JSON.stringify(b.initialInput ?? {})),
+        },
+      })),
+      usage,
+    );
   }
 
   // --- Gemini-compatible custom endpoint (baseUrl + apiKey) ---

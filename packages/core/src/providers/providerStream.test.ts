@@ -56,6 +56,195 @@ describe('Provider stream completion and recovery', () => {
     rmSync(directory, { recursive: true, force: true });
   });
 
+  it.each(
+    (['openai-chat', 'openai-responses', 'anthropic'] as const).flatMap(
+      (protocol) => [
+        { protocol, tool: false },
+        { protocol, tool: true },
+      ],
+    ),
+  )(
+    'emits one terminal marker after thoughts, text and tools: $protocol / tool=$tool',
+    async ({ protocol, tool }) => {
+      const manager = ProviderManager.getInstance();
+      const provider = manager.getActiveProvider();
+      if (!provider) throw new Error('Missing fixture provider');
+      manager.upsertProvider({ ...provider, protocol });
+      let events: unknown[];
+      if (protocol === 'openai-chat') {
+        const delta = (value: unknown) => ({ choices: [{ delta: value }] });
+        events = [
+          delta({ reasoning_content: 'Thinking...' }),
+          delta({ content: 'Before ' }),
+          delta({ content: 'answer.' }),
+          ...(tool
+            ? [
+                delta({
+                  tool_calls: [
+                    {
+                      index: 0,
+                      id: 'c1',
+                      function: { name: 'read_file', arguments: '{"path":' },
+                    },
+                  ],
+                }),
+                delta({
+                  tool_calls: [{ index: 0, function: { arguments: '"x"}' } }],
+                }),
+              ]
+            : []),
+          {
+            choices: [
+              { delta: {}, finish_reason: tool ? 'tool_calls' : 'stop' },
+            ],
+          },
+          {
+            choices: [],
+            usage: {
+              prompt_tokens: 12,
+              completion_tokens: 3,
+              total_tokens: 15,
+            },
+          },
+        ];
+      } else if (protocol === 'openai-responses') {
+        events = [
+          {
+            type: 'response.reasoning_summary_text.delta',
+            delta: 'Thinking...',
+          },
+          { type: 'response.output_text.delta', delta: 'Before ' },
+          { type: 'response.output_text.delta', delta: 'answer.' },
+          ...(tool
+            ? [
+                {
+                  type: 'response.output_item.added',
+                  item: {
+                    type: 'function_call',
+                    id: 'item1',
+                    call_id: 'c1',
+                    name: 'read_file',
+                  },
+                },
+                {
+                  type: 'response.function_call_arguments.delta',
+                  item_id: 'item1',
+                  delta: '{"path":',
+                },
+                {
+                  type: 'response.function_call_arguments.delta',
+                  item_id: 'item1',
+                  delta: '"x"}',
+                },
+              ]
+            : []),
+          {
+            type: 'response.completed',
+            response: { usage: { input_tokens: 12, output_tokens: 3 } },
+          },
+        ];
+      } else {
+        events = [
+          {
+            type: 'message_start',
+            message: { usage: { input_tokens: 12, output_tokens: 0 } },
+          },
+          {
+            type: 'content_block_delta',
+            index: 0,
+            delta: { type: 'thinking_delta', thinking: 'Thinking...' },
+          },
+          {
+            type: 'content_block_delta',
+            index: 1,
+            delta: { type: 'text_delta', text: 'Before ' },
+          },
+          {
+            type: 'content_block_delta',
+            index: 1,
+            delta: { type: 'text_delta', text: 'answer.' },
+          },
+          ...(tool
+            ? [
+                {
+                  type: 'content_block_start',
+                  index: 2,
+                  content_block: {
+                    type: 'tool_use',
+                    id: 'c1',
+                    name: 'read_file',
+                    input: {},
+                  },
+                },
+                {
+                  type: 'content_block_delta',
+                  index: 2,
+                  delta: { type: 'input_json_delta', partial_json: '{"path":' },
+                },
+                {
+                  type: 'content_block_delta',
+                  index: 2,
+                  delta: { type: 'input_json_delta', partial_json: '"x"}' },
+                },
+              ]
+            : []),
+          {
+            type: 'message_delta',
+            delta: { stop_reason: tool ? 'tool_use' : 'end_turn' },
+            usage: { output_tokens: 3 },
+          },
+          { type: 'message_stop' },
+        ];
+      }
+      const body = events
+        .map((value) => `data: ${JSON.stringify(value)}\n\n`)
+        .join('');
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(body)));
+      const chunks: GenerateContentResponse[] = [];
+      const stream = await generator.generateContentStream(
+        request,
+        'fixture',
+        LlmRole.UTILITY_TOOL,
+      );
+      for await (const chunk of stream) chunks.push(chunk);
+      expect(
+        chunks
+          .slice(0, -1)
+          .flatMap((chunk) => chunk.candidates ?? [])
+          .every((candidate) => !candidate.finishReason),
+      ).toBe(true);
+      expect(chunks.at(-1)?.candidates?.[0]?.finishReason).toBe('STOP');
+      expect(
+        chunks
+          .flatMap((chunk) => chunk.candidates ?? [])
+          .filter((candidate) => candidate.finishReason),
+      ).toHaveLength(1);
+      expect(chunks.at(-1)?.usageMetadata?.totalTokenCount).toBe(15);
+      const parts = chunks.flatMap(
+        (chunk) => chunk.candidates?.[0]?.content?.parts ?? [],
+      );
+      expect(
+        parts
+          .filter((part) => part.thought)
+          .map((part) => part.text)
+          .join(''),
+      ).toBe('Thinking...');
+      expect(
+        parts
+          .filter((part) => !part.thought && part.text)
+          .map((part) => part.text)
+          .join(''),
+      ).toBe('Before answer.');
+      expect(
+        parts
+          .filter((part) => part.functionCall)
+          .map((part) => part.functionCall),
+      ).toEqual(
+        tool ? [{ id: 'c1', name: 'read_file', args: { path: 'x' } }] : [],
+      );
+    },
+  );
+
   it('finishes within the fixed tail deadline despite keepalives and retains trailing usage', async () => {
     let heartbeat: ReturnType<typeof setInterval>;
     let usage: ReturnType<typeof setTimeout>;

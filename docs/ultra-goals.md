@@ -296,3 +296,9 @@
 - E-068：[preview.18运行42758828025](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/42758828025)三平台completed/success，功能提交9a4c4628767afcc7dd6d1f9c225699f4b713a702。三个包的版本、安装报告、SHA-256及六个rg文件hash/0755核对通过。
 - E-069：本机双命令preview.18、入口与Windows CI包一致。安装后两个重点实际CLI/HTTP场景通过：持续无正文2请求/3,036ms、JSON明确INVALID_STREAM、退出1且无伪造产物；首次无正文后既有nudge重试到write_file，3请求/2,590ms、实际文件落盘、最终正文正确且退出0。general.maxAttempts=2为隔离验证配置，不是修改产品默认重试策略。
 - Windows包SHA-256 `9348630f2b3cf8eed640bb2002b8932599bd42733831a69d68f83e807370347e`；Linux `249d47afcb5b810a21ce28db990f237e371f2a985b9f34242e261118e8e0caae`；macOS `7252e931a07ff66d2061d870b7219be913c5b179d1e57495cc79b7dff2675e7b`。本机已有缓存offline安装14秒，不代表无缓存新电脑离线安装。本阶段没有重跑E-063整套付费任务；真实完整交付与复杂逆向仍未完成，整体目标active。
+
+## 2026-11-10 原生恢复与流式终止标记
+
+- E-070：preview.18已安装CLI恢复原隔离目录、八份原源码快照、原会话与一致性笔记库，原生--resume保持442e90eb-db6c-4ebd-b6ca-b10843721b53，未导入新ID。358,103ms自行结束，未触及480秒观察器；8次主请求、0新子代理请求，仅补读一文件，原笔记1条未重复、源码及用户供应商配置未变，checkpoint原始前缀保留。仍因thinking-only INVALID_STREAM未生成报告，退出1正确；恢复连续性有证据，交付仍未通过。原数据全部保留，不用恢复机制成功掩盖报告失败。
+- E-071/F-023：人工追踪发现OpenAI Chat/Responses/Anthropic中间思考和文本块都被builder标为STOP。现中间块不带finishReason，协议真正结束后才发送一个包含完整工具调用和尾部usage的终止块，即使只有正文、没有usage也显式结束。三个协议×有/无工具的6个定向用例修前失败；修后加原固定尾部deadline和截断恢复对照共8项通过，受影响两文件严格lint与核心/CLI TypeScript通过。
+- 开发bundle实际HTTP场景通过：思考→多段正文→分片write_file参数→工具结果→多段最终正文，两次请求、2,177ms、退出0，文件实际落盘、usage保留、没有误触重试。此为协议适配修复，尚未证明它是E-070真实thinking-only的根因；本阶段不继续重复付费恢复任务。preview.19准备三平台分发，完整目标active。
