@@ -1,6 +1,7 @@
 # Gemini Ultra CLI 成员独立模型交接
 
-日期：2026-11-11。候选 preview.38；本机此刻仍 preview.37。
+日期：2026-11-11。本机双命令已安装 preview.38，产品源提交
+`a823805998c3c9a300f43fca37346d33661ee041`。
 
 ## E-147 成员模型路由
 
@@ -63,3 +64,27 @@ E-147 调用内路由、prepare与本地配置、两入口实际协议链和累�
 
 WI-068 本地实现完成，preview.38 待三平台分发/本机安装核对。下一步 WI-069 推进可选 Git 工作树隔离与回收/结果整合，不并发覆盖共享工作区；现有共享模式仍串行writer/verifier。WI-054 真实供应商完整自主交付/引用、WI-056 复杂逆向继续。多模型配置不自动证明模型质量或全部上线验收；goal
 active，不合并 master、不正式发布 Release。
+
+## E-148 三平台最终工件
+
+[运行42903510083](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/42903510083)
+completed/success，产品源a823805998c3c9a300f43fca37346d33661ee041。每平台包版本/SHA/源运行、安装报告和六rg二进制hash/Unix权限核对通过；最终含prepare、具名预设及显式成员429策略隔离的源码包均实际执行原生多模型四链。
+
+| 平台        | 包SHA-256                                                        | Swarm普通/Session | 工作流普通/Session |
+| ----------- | ---------------------------------------------------------------- | ----------------- | ------------------ |
+| Windows x64 | bb6a3f809a2db4503ecff6194209f9c2f2ab5af46cb2b345b9ef4eeed6a191af | 1612 / 1618ms     | 1432 / 1469ms      |
+| Linux x64   | 694312a7e22921d0de16b8e2136515dccde382a6190a1dd43e3ac16c9d8beb9d | 936 / 952ms       | 800 / 766ms        |
+| macOS arm64 | c50896c2caf8a3272f5fe627e414a6080a7465ad54d88bd5352d4c0209fa629d | 2125 / 1915ms     | 1459 / 1595ms      |
+
+每平台四链20/20/12/12请求全部退出0，研究/实施/审查实际命中三个不同loopback路径与模型ID，主会话保持fixture-model；成员/阶段modelsUsed持久化，累计18次Swarm任务调度/10次工作流成员调度保持原值。既有预算与损坏状态/记录恢复链同源包通过。时长仅为隔离fixture，不作跨平台性能比较或真实供应商质量/内部模型身份验收。
+
+## E-149 本机安装
+
+仅一次offline已有缓存安装7081ms/退出0；gemini-ultra与gemini-ultra-cli均1.0.0-preview.38，424包内文件逐一匹配Windows
+CI包。入口SHA为28a89b576e6e99c62ed0b93a4cb77a99d8343a67ec4ae5d13656868dcc8bf77f。preview.37原包保留，不重复相同Windows工件已执行的fixture；个人供应商配置、数据库与逆向工具未改。
+
+工程记录：github-preview38-run.json、github-preview38-artifacts-result.json、github-run-42903510083/各平台/swarm-verification.json、swarm-model-session-verification.json、workflow-verification.json、workflow-model-session-verification.json及输出；global-preview38-install-result.json、global-install-github-preview38-full-result.json。WI-068交付，goal
+active，仅codex分支，不合并master/正式发布。
+
+WI-069继续可选Git工作树隔离和整合，现有writer/verifier仍共享工作区串行。只读调查发现已有scoped-config.ts支持调用内WorkspaceContext覆盖，但它当前用于额外目录权限，不等于更改cwd/项目根或隔离写入；后续不能仅换提示词路径就声称实现隔离工作树。应核对shell
+cwd、文件工具路径、预算状态项目归属、worktree清理与整合冲突，保留未提交变更。真实供应商完整自主交付/引用与复杂逆向仍未完成。
