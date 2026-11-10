@@ -15,7 +15,7 @@ v24.22.2；校验场景使用本地模型fixture，真实逆向工具需另行�
 Release 下载），执行：
 
 ```sh
-npm install -g ./gemini-ultra-cli-1.0.0-preview.30.tgz
+npm install -g ./gemini-ultra-cli-1.0.0-preview.31.tgz
 gemini-ultra --version
 gemini-ultra
 ```
@@ -111,13 +111,13 @@ Release。每个安装包附带 `.sha256` 文件，便于传输后核对。
 Windows PowerShell 校验安装包：
 
 ```powershell
-Get-FileHash ./gemini-ultra-cli-1.0.0-preview.30.tgz -Algorithm SHA256
-Get-Content ./gemini-ultra-cli-1.0.0-preview.30.tgz.sha256
+Get-FileHash ./gemini-ultra-cli-1.0.0-preview.31.tgz -Algorithm SHA256
+Get-Content ./gemini-ultra-cli-1.0.0-preview.31.tgz.sha256
 ```
 
 macOS 使用
-`shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.30.tgz.sha256`；Linux 使用
-`sha256sum -c gemini-ultra-cli-1.0.0-preview.30.tgz.sha256`。
+`shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.31.tgz.sha256`；Linux 使用
+`sha256sum -c gemini-ultra-cli-1.0.0-preview.31.tgz.sha256`。
 
 ## 自定义逆向工具路径
 
@@ -327,3 +327,26 @@ worktree，不应当作 Antigravity 的隔离工作树实现。独立审查员�
 原始阶段报告按项目保存，主会话只接收有长度上限的近期摘要与原始记录路径，避免大量并行报告撑满上下文。测试范围始终遵循用户要求，只运行必要检查。
 
 参考：[Teamwork](https://antigravity.google/docs/teamwork/)、[Boost](https://antigravity.google/docs/boost/)、[Grill me](https://antigravity.google/docs/commands/grill-me/)。本项目为独立实现。
+
+## Swarm 具名蜂群
+
+`/swarm <任务>`
+将当前对话作为协调者，为不同问题或文件范围分配具名成员，并安排独立验证成员。成员的公开任务、提问与结果都追加到同一个留言板，`@成员`
+或 `@all`
+可唤醒等待成员。空闲成员不轮询模型；协调者等待运行中的成员时使用原生事件等待。
+
+- `/swarm board`：实时终端留言板与成员状态，每秒刷新；↑↓查看历史，Esc返回。
+- `/swarm status`：查看状态和留言板保存位置。
+- `/swarm message @成员 <补充>`：公开追加指令并唤醒对应成员；运行中的成员在当前轮收尾后处理新的提及。
+- `/swarm resume`：恢复已保存的蜂群；中断成员保持暂停，由协调者明确提及后继续。已经移除的成员名称不会复活。
+- `/swarm cancel`：停止成员并保留留言和结果；不删除用户文件。
+
+消息发送者由运行时分配，成员不能冒充协调者或其他成员。只有当前修改版本通过独立验证，且没有运行、排队或暂停未处理的成员，蜂群才能标为完成；后续成员工作会使旧验证失效。
+
+调查成员可并行，写入与验证成员在当前共享工作区串行执行，并遵循 `/team`
+的会话并发上限。当前使用同一模型路由，不自动创建隔离Git工作树或切换成员模型。跨进程工作区锁只约束本CLI原生工作流，外部编辑仍需用户自行协调。
+
+每个蜂群最多12名成员、每成员最多20次唤醒、每轮最多10分钟，留言最多500条/4MiB；达到边界会暂停并保留结果，不无限消耗模型。状态按项目保存在临时目录的
+`swarms/<ID>/`，原CLI进程仍在运行时应在原会话发送指令；另一会话可查看板面。进程退出后，显式恢复会把中断成员标为暂停。
+
+参考：[Antigravity Swarm](https://antigravity.google/docs/swarm/)。本项目独立实现共享留言板和事件唤醒机制。

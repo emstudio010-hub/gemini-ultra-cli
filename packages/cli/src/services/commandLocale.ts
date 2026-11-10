@@ -37,6 +37,10 @@ const descriptions: Record<string, [string, string]> = {
   drill: ['打开演练台控制中心', 'Open the drill control center'],
   redteam: ['切换授权红队工作流', 'Configure the authorized red-team workflow'],
   team: ['设置多代理协作模式', 'Configure multi-agent collaboration'],
+  swarm: [
+    '启动具名蜂群与共享留言板',
+    'Coordinate named swarm members on a shared board',
+  ],
   boost: [
     '启动难题调查、实施与独立复核',
     'Investigate, implement and independently review a difficult task',

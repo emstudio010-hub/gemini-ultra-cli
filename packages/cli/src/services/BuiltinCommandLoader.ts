@@ -79,6 +79,7 @@ import { bypassCommand } from '../ui/commands/bypassCommand.js';
 import { langCommand } from '../ui/commands/langCommand.js';
 import { localizeCommand } from './commandLocale.js';
 import { teamCommand } from '../ui/commands/teamCommand.js';
+import { swarmCommand } from '../ui/commands/swarmCommand.js';
 import {
   boostCommand,
   teamworkCommand,
@@ -222,6 +223,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       bypassCommand,
       langCommand,
       teamCommand,
+      swarmCommand,
       boostCommand,
       teamworkCommand,
       grillMeCommand,

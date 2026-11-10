@@ -8,6 +8,7 @@ import type { AgentLoopContext } from '../config/agent-loop-context.js';
 import type { LocalAgentDefinition } from './types.js';
 import { GeneralistAgent } from './generalist-agent.js';
 import { AGENT_TOOL_NAME } from '../tools/tool-names.js';
+import { currentSwarmActor } from './swarm.js';
 
 const resultSchema = z.object({ response: z.string() });
 const roleDefinitions = [
@@ -107,7 +108,11 @@ export function ultraSpecialists(
           );
         return {
           tools: role.readOnly
-            ? tools.filter((name) => readTools.has(name))
+            ? tools.filter(
+                (name) =>
+                  readTools.has(name) ||
+                  (name === 'post_swarm_message' && !!currentSwarmActor()),
+              )
             : tools,
         };
       },
@@ -149,7 +154,9 @@ export function workflowAuditor(context: AgentLoopContext) {
         tools: context.toolRegistry
           .getAllToolNames()
           .filter(
-            (name) => readTools.has(name) && name !== 'drill_record_fact',
+            (name) =>
+              (readTools.has(name) && name !== 'drill_record_fact') ||
+              (name === 'post_swarm_message' && !!currentSwarmActor()),
           ),
       };
     },

@@ -1,6 +1,6 @@
 # Gemini Ultra CLI Teamwork / Boost / Grill me 交接
 
-日期：2026-11-11。preview.30 候选；本机安装此刻仍为preview.29，构建及安装结果随后补充。
+日期：2026-11-11。preview.30已安装；产品源码59476132c5952b9e821832b704743b2e6582c90a。Swarm在后续preview.31单独记录。
 
 ## 实现
 
@@ -37,3 +37,18 @@ worktree隔离。status/cancel可在繁忙时处理；取消等待已发起子�
 getter；Agent注册发生在ToolRegistry准备之前。修为显式复用静态配置并保留延迟getter。
 
 新增唯一针对性回归：在工具注册表未就绪时创建审查员定义，随后实际解析只读工具。该用例及原四项状态机共5项通过；相关lint与core/cli类型构建通过。原两个CLI用例证据保留。首个CI失败不作为可安装成果；修订源提交的分发结果后补。
+
+## E-118/119：preview.30最终交付
+
+修订run42875429446三平台completed/success，三包源提交/版本/SHA/安装记录及六rg
+hash和Unix权限核对通过。Windows
+CI包SHA为4d5c944f8078afbfdac7d543eed4e98f1cdf6a1124bee2eb3a9066a58917771b；Linux
+3d35557a7dd525ad727a659d437b92d6fa9a42cb6ce88fe1e918ac34eb774e34；macOS
+3eba8068e52a1353aad8727168d28b6830ee29436165a106e968088548eeb552。
+
+已有缓存offline全局安装7秒，双命令preview.30，424包内文件逐一匹配Windows
+CI包。实际已安装CLI/native工作流/子执行器通过：12个loopback请求、1814ms、退出0，2研究+1实施+里程碑审查+整体审查共5阶段，文件实际读写、状态完成、seed保留；模型为fixture，没有付费调用。
+
+首次辅助脚本误将审查员独立输出键verdict当作普通result，返回HTTP400并被产品如实保留为blocked；原false文件保留。改用正确键后原生流程完成，脚本又因Windows新文件使用CRLF而把语义正确的换行判失败。最终按单个LF/CRLF换行核对并记录实际字节616e737765723d34320d0a，所有检查通过。两次辅助脚本失败未改产品实现，均保留；不把它们包装成真实供应商故障或重复收费。
+
+原始证据位于工程目录：agent-workflows-preview30-source-result.json、github-preview30-original-run.json、preview30-linux-original-job.log、preview30-macos-original-job.log、github-preview30-run.json、github-preview30-artifacts-result.json、global-install-github-preview30-full-result.json、installed-preview30-workflow-result.json；原始fixture和EOL失败另存。目标继续active，真实模型自主交付与引用可靠性未被fixture扩大验收。

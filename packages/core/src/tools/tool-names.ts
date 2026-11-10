@@ -276,6 +276,8 @@ export const ALL_BUILTIN_TOOL_NAMES = [
   'spawn_subagents',
   'draft_agent_workflow',
   'run_agent_workflow',
+  'manage_swarm',
+  'post_swarm_message',
   'generate_image',
   'deep_web_fetch',
   'render_diagram',

@@ -55,6 +55,7 @@ import { UpdateTopicTool } from '../tools/topicTool.js';
 import { TopicState } from './topicState.js';
 import { AgentTool } from '../agents/agent-tool.js';
 import { SpawnSubagentsTool } from '../agents/spawn-subagents-tool.js';
+import { ManageSwarmTool, PostSwarmMessageTool } from '../agents/swarmTools.js';
 import {
   DraftAgentWorkflowTool,
   RunAgentWorkflowTool,
@@ -4199,6 +4200,12 @@ export class Config implements McpContext, AgentLoopContext {
 
     maybeRegister(SpawnSubagentsTool, () =>
       registry.registerTool(new SpawnSubagentsTool(this, this.messageBus)),
+    );
+    maybeRegister(ManageSwarmTool, () =>
+      registry.registerTool(new ManageSwarmTool(this, this.messageBus)),
+    );
+    maybeRegister(PostSwarmMessageTool, () =>
+      registry.registerTool(new PostSwarmMessageTool(this.messageBus)),
     );
     maybeRegister(DraftAgentWorkflowTool, () =>
       registry.registerTool(new DraftAgentWorkflowTool(this, this.messageBus)),
