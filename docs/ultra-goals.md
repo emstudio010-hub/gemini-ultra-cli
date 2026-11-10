@@ -15,7 +15,7 @@
 | P1     | 内置红队工作流                              | 本地分析闭环通过     | 临时授权下redteam-analyst真实分析生成样本并归档，E-016；复杂逆向与外部目标未验收                                   |
 | P2     | 演练台 Morphicons 交互图标与强度动效        | 本地完成             | 使用 Morphicons 2.0.2；浏览器确认六档、图标、移动布局、减少动态效果与隐藏暂停                                      |
 | P0     | 安装到 CLI 本身并生成可分发安装包           | 本地完成             | 当前preview.28 Windows CI包，424包内文件匹配；E-109；原生函数/指令工具已交付                                       |
-| P1     | 其他电脑可以开展本地逆向                    | 三平台原生基础链通过 | preview.8的Windows/Linux x64、macOS arm64真实rabin2读取/归档/查询通过E-022/027/029；复杂反编译与其他工具仍待补     |
+| P1     | 其他电脑可以开展本地逆向                    | 三平台原生静态链通过 | preview.28的Windows/Linux x64、macOS arm64实际r2函数/指令/引用及SQLite归档通过E-107/111/112；复杂反编译待补        |
 | P1     | GitHub 三平台分发验收                       | 已通过至preview.28   | preview.28/run42868353559三平台success，工件核对和本机安装通过；E-108/109                                          |
 | P1     | 真实供应商与长会话上线验收                  | 未完成               | E-104当前真实服务压缩后73,466ms完成原报告，3请求；完整无人介入协作、真实复杂逆向仍未验收                           |
 
@@ -477,4 +477,17 @@
   hash/0755核对通过；Linux/macOS本轮未运行新native-r2分析路径。
 - E-109：双命令preview.28，Windows
   CI已有缓存offline安装6秒，424包内文件逐一一致，入口59f6a36c271c6b39a09e4b91a004596a4bf36755666e7584247af157afae1f1f。新工具原生链与包身份分别记证据；源码/工程目录/Obsidian交接已写，goal
+  active。
+
+## 2026-11-11 新原生分析链跨平台核对
+
+- E-110：新增便携scripts/verify-ultra-native-analysis.mjs和专用工作流，去除作者目录/固定端口，校验原产品run42868353559的源提交/成功状态及工件SHA；在隔离runner安装SHA固定的官方radare2
+  6.2.2，再调用已安装preview.28，未重新构建产品。验证分支codex/ultra-agent-native-analysis，脚本/工作流提交77d4cbf6c5939703b98a43f65ba8745fae0ce53e，运行42869801303。脚本语法/格式/lint/YAML检查通过，首次Node全局导入/空catch
+  lint错误已修正并保留日志。
+- E-111：Linux x64已实际通过，Node24.22.2/native-r2
+  6.2.2，6请求/1,425ms/退出0；functions/instructions/xrefs三视图+SQLite笔记写入/查询成功，样本hash不变。报告sourceCommit和包SHA匹配原Linux工件。模型loopback
+  fixture，无付费调用，无样本执行，不作跨系统性能对比。
+- E-112：macOS arm64原排队任务正常开始并成功完成，Node24.22.2/native-r2
+  6.2.2，6请求/1,814ms/退出0；与Linux一样三视图及SQLite笔记写入/查询成功、样本hash不变，原包SHA和产品源提交均匹配。整次run42869801303为completed/success，跨平台证据脚本退出0；三平台新静态分析路径均已实际核对。模型fixture及生成ELF范围不扩大为反编译/真实供应商验收。
+- WI-058：Linux成功记录出现cleanup_ops启动遥测生命周期告警，后续离线核对，不据此推断卡顿。本机双命令仍为preview.28，不为本阶段重复安装；整体goal
   active。

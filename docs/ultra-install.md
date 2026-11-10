@@ -181,6 +181,10 @@ MiB 样本；可取消。超时或 JSON 不完整时明确报错，不将部分�
 包装器；缺失时工具会显示该配置方法，可用 `/drill setup`
 查看实际发现路径。CLI 包不捆绑 radare2，也不依赖开发机目录。
 
+preview.28 已分别在 Windows x64、Linux x64 和 macOS arm64 调用原生 r2
+6.2.2，完成生成 ELF 的函数、指令和 CALL 引用读取，并写入/查询 SQLite 笔记。Linux/macOS 复用了原 CI 安装包，源提交和包 SHA 均已核对。模型响应为本地 fixture，样本未执行；该记录验证静态分析接线，不代表复杂反编译或真实模型理解能力。macOS
+arm64 读取 x86-64 ELF 属于跨架构静态解析。
+
 ## 已核对的原生工具安装
 
 Windows x64、Debian 12 x64和macOS arm64已使用官方radare2
