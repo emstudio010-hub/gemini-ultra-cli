@@ -2956,36 +2956,82 @@ describe('LocalAgentExecutor', () => {
       );
     });
 
-    it('preserves TIMEOUT when a thrown timeout is followed by partial findings', async () => {
-      const definition = createTestDefinition([LS_TOOL_NAME], {
-        maxTimeMinutes: 0.5,
-      });
-      const executor = await LocalAgentExecutor.create(definition, mockConfig);
+    it.each(['AbortError', 'signal reason'])(
+      'preserves TIMEOUT when a thrown timeout uses %s and is followed by partial findings',
+      async (errorStyle) => {
+        const definition = createTestDefinition([LS_TOOL_NAME], {
+          maxTimeMinutes: 0.5,
+        });
+        const executor = await LocalAgentExecutor.create(
+          definition,
+          mockConfig,
+        );
+        mockSendMessageStream.mockImplementationOnce(
+          async (_key, _message, _promptId, requestSignal: AbortSignal) => {
+            await vi.advanceTimersByTimeAsync(31_000);
+            if (errorStyle === 'signal reason') requestSignal.throwIfAborted();
+            throw new DOMException('Request timed out', 'AbortError');
+          },
+        );
+        mockModelResponse([
+          {
+            name: COMPLETE_TASK_TOOL_NAME,
+            args: { finalResult: 'Partial evidence' },
+            id: 'summary',
+          },
+        ]);
+
+        const output = await executor.run({ goal: 'Thrown timeout' }, signal);
+
+        expect(output.terminate_reason).toBe(AgentTerminateMode.TIMEOUT);
+        expect(output.result).toBe(
+          'Agent stopped (TIMEOUT). Partial result:\nPartial evidence',
+        );
+        expect(mockSaveSummary).toHaveBeenCalledWith(output.result);
+        expect(mockedLogAgentFinish).toHaveBeenCalledWith(
+          mockConfig,
+          expect.objectContaining({
+            terminate_reason: AgentTerminateMode.TIMEOUT,
+          }),
+        );
+      },
+    );
+
+    it('does not recover unrelated errors after the deadline', async () => {
+      const executor = await LocalAgentExecutor.create(
+        createTestDefinition([LS_TOOL_NAME], { maxTimeMinutes: 0.5 }),
+        mockConfig,
+      );
+      const providerError = new Error('Independent provider failure');
       mockSendMessageStream.mockImplementationOnce(async () => {
         await vi.advanceTimersByTimeAsync(31_000);
-        throw new DOMException('Request timed out', 'AbortError');
+        throw providerError;
       });
-      mockModelResponse([
-        {
-          name: COMPLETE_TASK_TOOL_NAME,
-          args: { finalResult: 'Partial evidence' },
-          id: 'summary',
-        },
-      ]);
 
-      const output = await executor.run({ goal: 'Thrown timeout' }, signal);
+      await expect(
+        executor.run({ goal: 'Unrelated failure' }, signal),
+      ).rejects.toBe(providerError);
+      expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
+      expect(mockSaveSummary).not.toHaveBeenCalled();
+    });
 
-      expect(output.terminate_reason).toBe(AgentTerminateMode.TIMEOUT);
-      expect(output.result).toBe(
-        'Agent stopped (TIMEOUT). Partial result:\nPartial evidence',
-      );
-      expect(mockSaveSummary).toHaveBeenCalledWith(output.result);
-      expect(mockedLogAgentFinish).toHaveBeenCalledWith(
+    it('does not recover external cancellation after the deadline', async () => {
+      const executor = await LocalAgentExecutor.create(
+        createTestDefinition([LS_TOOL_NAME], { maxTimeMinutes: 0.5 }),
         mockConfig,
-        expect.objectContaining({
-          terminate_reason: AgentTerminateMode.TIMEOUT,
-        }),
       );
+      const cancellation = new Error('Cancelled by user');
+      mockSendMessageStream.mockImplementationOnce(async () => {
+        await vi.advanceTimersByTimeAsync(31_000);
+        abortController.abort(cancellation);
+        throw cancellation;
+      });
+
+      await expect(
+        executor.run({ goal: 'Cancellation wins' }, signal),
+      ).rejects.toBe(cancellation);
+      expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
+      expect(mockSaveSummary).not.toHaveBeenCalled();
     });
 
     it('preserves cancellation during the grace turn instead of reporting a limit failure', async () => {
@@ -3944,6 +3990,38 @@ describe('LocalAgentExecutor', () => {
       const toolsArg = chatCtorArgs[2] as Tool[];
       return toolsArg[0].functionDeclarations ?? [];
     };
+
+    it('keeps agent and topic instances out of subagent tools while preserving browser instances', async () => {
+      const snapshot = new MockTool({ name: 'take_snapshot' });
+      const executor = await LocalAgentExecutor.create(
+        createInstanceToolDefinition([
+          new MockTool({ name: 'spawn_subagents', kind: Kind.Agent }),
+          new MockTool({ name: 'invoke_agent', kind: Kind.Agent }),
+          new MockTool({ name: 'update_topic' }),
+          snapshot,
+        ]),
+        mockConfig,
+      );
+      const registry = executor['toolRegistry'];
+      expect(registry.getTool('spawn_subagents')).toBeUndefined();
+      expect(registry.getTool('invoke_agent')).toBeUndefined();
+      expect(registry.getTool('update_topic')).toBeUndefined();
+      expect(registry.getTool('take_snapshot')).toBe(snapshot);
+
+      mockModelResponse([
+        {
+          name: COMPLETE_TASK_TOOL_NAME,
+          args: { finalResult: 'done' },
+          id: 'done',
+        },
+      ]);
+      await executor.run({ goal: 'Use the browser tool instance' }, signal);
+      expect(
+        getSentFunctionDeclarations()
+          .map((tool) => tool.name)
+          .sort(),
+      ).toEqual([COMPLETE_TASK_TOOL_NAME, 'take_snapshot'].sort());
+    });
 
     it('should produce NO duplicate function declarations when tools are DeclarativeTool instances', async () => {
       const clickTool = new MockTool({ name: 'click' });

@@ -15,7 +15,7 @@ v24.22.2；校验场景使用本地模型fixture，真实逆向工具需另行�
 Release 下载），执行：
 
 ```sh
-npm install -g ./gemini-ultra-cli-1.0.0-preview.16.tgz
+npm install -g ./gemini-ultra-cli-1.0.0-preview.17.tgz
 gemini-ultra --version
 gemini-ultra
 ```
@@ -72,13 +72,13 @@ Release。每个安装包附带 `.sha256` 文件，便于传输后核对。
 Windows PowerShell 校验安装包：
 
 ```powershell
-Get-FileHash ./gemini-ultra-cli-1.0.0-preview.16.tgz -Algorithm SHA256
-Get-Content ./gemini-ultra-cli-1.0.0-preview.16.tgz.sha256
+Get-FileHash ./gemini-ultra-cli-1.0.0-preview.17.tgz -Algorithm SHA256
+Get-Content ./gemini-ultra-cli-1.0.0-preview.17.tgz.sha256
 ```
 
 macOS 使用
-`shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.16.tgz.sha256`；Linux 使用
-`sha256sum -c gemini-ultra-cli-1.0.0-preview.16.tgz.sha256`。
+`shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.17.tgz.sha256`；Linux 使用
+`sha256sum -c gemini-ultra-cli-1.0.0-preview.17.tgz.sha256`。
 
 ## 自定义逆向工具路径
 

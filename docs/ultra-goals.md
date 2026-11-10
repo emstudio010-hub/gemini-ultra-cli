@@ -276,3 +276,9 @@
 - E-059：[preview.16运行42754395069](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/42754395069)三平台completed/success，功能提交4ccc2c6423ddf0e9a16b997cf8c782a63cd59530。版本、安装报告、三个包SHA-256与内置六个rg文件hash/0755核对通过。
 - E-060：本机两个命令已安装Windows CI preview.16，入口SHA-256与工件一致。一个成功/一个HTTP400失败的实际CLI协作交接通过，4次loopback请求、3,948ms、退出0；父代理收到1 completed/1 failed/0 cancelled、未多层转义的多行结果、GOAL与失败原因。模型响应为fixture，无重复付费模型/压缩/原生链检查，没有全量或冒烟。
 - Windows包SHA-256 `bf3abb8561ff88d9ad1122010093ba08bb7c376244ccabd5865d283d4c64a062`；Linux `88cc49fcef52fdb1a5fe3dd95e2a6a39da49cf1ec5da54d2b57aa44438fc1287`；macOS `57f276257ee988298c5e04bb17d0e2e24d2e6602d74bf5566646207967f073ad`。本机已有缓存离线安装12秒，不代表无缓存新电脑可离线安装。整体目标保持active。
+
+## 2026-11-10 真实deadline与对象工具边界
+
+- E-061/F-020：DeadlineTimer的abort携带普通Error，fetch可原样拒绝该reason；旧runInternal只识别AbortError，跳过TIMEOUT阶段总结。四个定向对照修前1失败3通过，preview.16已安装实际fetch场景也不发总结请求、只返回普通错误（4,999ms，失败基线保留）。现在识别定时器的同一reason对象或AbortError，仍要求内部deadline已触发且非用户取消；不吞掉无关错误。总结保持TIMEOUT/FAILED和部分发现，不升级成功。14个恢复/超时相关用例通过。
+- E-062/F-021：可信程序化工具实例分支原先只排除complete_task，漏过Kind.Agent和update_topic，而名称分支已过滤。一个定向用例修前失败；现在共用过滤条件，保留浏览器显式实例与状态，不强制克隆。4个相关实例/声明/执行用例通过。此为递归与父会话控制规则的一致性修复，未宣称外部可利用漏洞。
+- 两个受影响文件严格ESLint通过；核心/CLI TypeScript在deadline修复后通过，最终发布构建会覆盖新增对象过滤改动。共18个选定用例，没有全量或冒烟。preview.17准备分发，八文件真实三角色任务观察中，12分钟外部观察窗口不作旧版本速度对照。整体目标active。

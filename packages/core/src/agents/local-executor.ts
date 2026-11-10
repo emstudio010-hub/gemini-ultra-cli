@@ -202,19 +202,14 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
 
     const parentToolRegistry = context.toolRegistry;
 
-    const registerToolInstance = (tool: AnyDeclarativeTool) => {
-      // Check if the tool is an agent tool to prevent recursion.
-      // We do not allow agents to call other agents.
-      if (tool.kind === Kind.Agent) {
-        return;
-      }
+    const canRegisterTool = (tool: AnyDeclarativeTool) =>
+      tool.kind !== Kind.Agent &&
+      tool.name !== UPDATE_TOPIC_TOOL_NAME &&
+      tool.name !== COMPLETE_TASK_TOOL_NAME;
 
-      if (
-        tool.name === UPDATE_TOPIC_TOOL_NAME ||
-        tool.name === COMPLETE_TASK_TOOL_NAME
-      ) {
-        return;
-      }
+    const registerToolInstance = (tool: AnyDeclarativeTool) => {
+      // Subagents cannot delegate recursively or inherit parent session controls.
+      if (!canRegisterTool(tool)) return;
 
       // Clone the tool, so it gets its own state and subagent messageBus
       const clonedTool = tool.clone(subagentMessageBus);
@@ -269,8 +264,9 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
           'name' in toolRef &&
           'build' in toolRef
         ) {
-          if (toolRef.name !== COMPLETE_TASK_TOOL_NAME)
-            agentToolRegistry.registerTool(toolRef);
+          // Preserve explicit browser tool instances and their state, while
+          // applying the same exclusions as inherited tools.
+          if (canRegisterTool(toolRef)) agentToolRegistry.registerTool(toolRef);
         }
         // Note: Raw `FunctionDeclaration` objects in the config don't need to be
         // registered; their schemas are passed directly to the model later.
@@ -865,12 +861,13 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
         duration_ms: Date.now() - startTime,
       };
     } catch (error) {
-      // Check if the error is an AbortError caused by our internal timeout.
+      // Fetch may reject with the deadline's exact reason instead of AbortError.
+      // Do not turn unrelated failures or an external cancellation into recovery.
       if (
-        error instanceof Error &&
-        error.name === 'AbortError' &&
         deadlineTimer.signal.aborted &&
-        !signal.aborted // Ensure the external signal was not the cause
+        !signal.aborted &&
+        (error === deadlineTimer.signal.reason ||
+          (error instanceof Error && error.name === 'AbortError'))
       ) {
         terminateReason = AgentTerminateMode.TIMEOUT;
 
