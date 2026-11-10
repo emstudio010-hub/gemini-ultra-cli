@@ -346,6 +346,7 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
     combinedSignal: AbortSignal,
     timeoutSignal: AbortSignal, // Pass the timeout controller's signal
     onWaitingForConfirmation?: (waiting: boolean) => void,
+    completionOnly = false,
   ): Promise<AgentTurnResult> {
     const promptId = `${this.agentId}#${turnCounter}`;
 
@@ -382,6 +383,22 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
       return {
         status: 'stop',
         terminateReason: AgentTerminateMode.ERROR_NO_COMPLETE_TASK_CALL,
+        finalResult: null,
+      };
+    }
+
+    if (
+      completionOnly &&
+      functionCalls.some((call) => call.name !== COMPLETE_TASK_TOOL_NAME)
+    ) {
+      this.emitActivity('ERROR', {
+        error: `Only '${COMPLETE_TASK_TOOL_NAME}' is allowed during the final grace turn. No work tools were executed.`,
+        context: 'recovery_turn',
+        errorType: SubagentActivityErrorType.GENERIC,
+      });
+      return {
+        status: 'stop',
+        terminateReason: AgentTerminateMode.ERROR,
         finalResult: null,
       };
     }
@@ -443,7 +460,7 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
       default:
         throw new Error(`Unknown terminate reason: ${reason}`);
     }
-    return `${explanation} You have one final chance to complete the task with a short grace period. You MUST call \`${COMPLETE_TASK_TOOL_NAME}\` immediately with your best answer and explain that your investigation was interrupted. Do not call any other tools.`;
+    return `${explanation} You have one final grace turn to submit your result. You MUST call \`${COMPLETE_TASK_TOOL_NAME}\` immediately with your best answer and explain any unfinished work. Do not call any other tools.${reason === AgentTerminateMode.ERROR_NO_COMPLETE_TASK_CALL ? '' : ' The investigation remains interrupted by the execution limit; this final summary preserves partial findings and does not mark the task complete.'}`;
   }
 
   /**
@@ -498,6 +515,7 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
         combinedSignal,
         graceTimeoutController.signal, // Pass grace signal to identify a *grace* timeout
         onWaitingForConfirmation,
+        true,
       );
 
       if (
@@ -506,7 +524,7 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
       ) {
         // Success!
         this.emitActivity('THOUGHT_CHUNK', {
-          text: 'Graceful recovery succeeded.',
+          text: 'Final result captured during grace period.',
         });
         success = true;
         return turnResult.finalResult ?? 'Task completed during grace period.';
@@ -773,10 +791,22 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
           onWaitingForConfirmation,
         );
 
-        if (recoveryResult !== null) {
-          // Recovery Succeeded
-          terminateReason = AgentTerminateMode.GOAL;
-          finalResult = recoveryResult;
+        if (signal.aborted) {
+          terminateReason = AgentTerminateMode.ABORTED;
+          finalResult = 'Agent execution was cancelled.';
+        } else if (recoveryResult !== null) {
+          if (
+            terminateReason === AgentTerminateMode.ERROR_NO_COMPLETE_TASK_CALL
+          ) {
+            // A missing completion call can be corrected without hitting a limit.
+            terminateReason = AgentTerminateMode.GOAL;
+            finalResult = recoveryResult;
+          } else {
+            // A final summary preserves useful findings, but cannot undo the
+            // time/turn limit that interrupted the investigation.
+            finalResult = `Agent stopped (${terminateReason}). Partial result:\n${recoveryResult}`;
+            this.saveSessionSummary(chat, finalResult);
+          }
         } else {
           // Recovery Failed. Set the final error message based on the *original* reason.
           if (terminateReason === AgentTerminateMode.TIMEOUT) {
@@ -812,12 +842,7 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
       if (terminateReason === AgentTerminateMode.GOAL) {
         // Save the session summary upon completion
         if (finalResult && chat) {
-          try {
-            const summary = this.getTruncatedSummary(finalResult);
-            chat.getChatRecordingService()?.saveSummary(summary);
-          } catch (error) {
-            debugLogger.warn('Failed to save subagent session summary.', error);
-          }
+          this.saveSessionSummary(chat, finalResult);
         }
 
         return {
@@ -855,20 +880,13 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
             onWaitingForConfirmation,
           );
 
-          if (recoveryResult !== null) {
-            // Recovery Succeeded
-            terminateReason = AgentTerminateMode.GOAL;
-            finalResult = recoveryResult;
-
-            // Save the session summary upon successful recovery
-            try {
-              const summary = this.getTruncatedSummary(finalResult);
-              chat.getChatRecordingService()?.saveSummary(summary);
-            } catch (summaryError) {
-              debugLogger.warn(
-                'Failed to save subagent session summary during recovery.',
-                summaryError,
-              );
+          if (signal.aborted || recoveryResult !== null) {
+            if (signal.aborted) {
+              terminateReason = AgentTerminateMode.ABORTED;
+              finalResult = 'Agent execution was cancelled.';
+            } else {
+              finalResult = `Agent stopped (${terminateReason}). Partial result:\n${recoveryResult}`;
+              this.saveSessionSummary(chat, finalResult);
             }
 
             return {
@@ -1560,6 +1578,16 @@ Important Rules:
         data,
       };
       this.onActivity(event);
+    }
+  }
+
+  private saveSessionSummary(chat: GeminiChat, result: string): void {
+    try {
+      chat
+        .getChatRecordingService()
+        ?.saveSummary(this.getTruncatedSummary(result));
+    } catch (error) {
+      debugLogger.warn('Failed to save subagent session summary.', error);
     }
   }
 

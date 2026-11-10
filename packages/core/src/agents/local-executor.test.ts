@@ -2699,7 +2699,7 @@ describe('LocalAgentExecutor', () => {
       ]);
     };
 
-    it('should recover successfully if complete_task is called during the grace turn after MAX_TURNS', async () => {
+    it('preserves MAX_TURNS when the grace turn captures partial findings', async () => {
       const MAX = 1;
       const definition = createTestDefinition([LS_TOOL_NAME], {
         maxTurns: MAX,
@@ -2727,8 +2727,16 @@ describe('LocalAgentExecutor', () => {
 
       const output = await executor.run({ goal: 'Turns recovery' }, signal);
 
-      expect(output.terminate_reason).toBe(AgentTerminateMode.GOAL);
-      expect(output.result).toBe('Recovered!');
+      expect(output.terminate_reason).toBe(AgentTerminateMode.MAX_TURNS);
+      expect(output.result).toBe(
+        'Agent stopped (MAX_TURNS). Partial result:\nRecovered!',
+      );
+      expect(mockedLogAgentFinish).toHaveBeenCalledWith(
+        mockConfig,
+        expect.objectContaining({
+          terminate_reason: AgentTerminateMode.MAX_TURNS,
+        }),
+      );
       expect(mockSendMessageStream).toHaveBeenCalledTimes(MAX + 1); // 1 regular + 1 recovery
 
       expect(activities).toContainEqual(
@@ -2743,10 +2751,28 @@ describe('LocalAgentExecutor', () => {
         expect.objectContaining({
           type: 'THOUGHT_CHUNK',
           data: expect.objectContaining({
-            text: 'Graceful recovery succeeded.',
+            text: 'Final result captured during grace period.',
           }),
         }),
       );
+    });
+
+    it('does not execute more work tools during a grace turn after MAX_TURNS', async () => {
+      const executor = await LocalAgentExecutor.create(
+        createTestDefinition([LS_TOOL_NAME], { maxTurns: 1 }),
+        mockConfig,
+      );
+      mockWorkResponse('work');
+      mockWorkResponse('late-work');
+
+      const output = await executor.run(
+        { goal: 'No work after the limit' },
+        signal,
+      );
+
+      expect(output.terminate_reason).toBe(AgentTerminateMode.MAX_TURNS);
+      expect(mockScheduleAgentTools).toHaveBeenCalledTimes(1);
+      expect(mockSendMessageStream).toHaveBeenCalledTimes(2);
     });
 
     it('should fail if complete_task is NOT called during the grace turn after MAX_TURNS', async () => {
@@ -2871,7 +2897,7 @@ describe('LocalAgentExecutor', () => {
       );
     });
 
-    it('should recover successfully from a TIMEOUT', async () => {
+    it('preserves TIMEOUT when the grace turn captures partial findings', async () => {
       const definition = createTestDefinition([LS_TOOL_NAME], {
         maxTimeMinutes: 0.5, // 30 seconds
       });
@@ -2915,8 +2941,10 @@ describe('LocalAgentExecutor', () => {
       const output = await runPromise;
 
       expect(mockSendMessageStream).toHaveBeenCalledTimes(2); // 1 failed + 1 recovery
-      expect(output.terminate_reason).toBe(AgentTerminateMode.GOAL);
-      expect(output.result).toBe('Recovered from timeout!');
+      expect(output.terminate_reason).toBe(AgentTerminateMode.TIMEOUT);
+      expect(output.result).toBe(
+        'Agent stopped (TIMEOUT). Partial result:\nRecovered from timeout!',
+      );
 
       expect(activities).toContainEqual(
         expect.objectContaining({
@@ -2926,6 +2954,56 @@ describe('LocalAgentExecutor', () => {
           }),
         }),
       );
+    });
+
+    it('preserves TIMEOUT when a thrown timeout is followed by partial findings', async () => {
+      const definition = createTestDefinition([LS_TOOL_NAME], {
+        maxTimeMinutes: 0.5,
+      });
+      const executor = await LocalAgentExecutor.create(definition, mockConfig);
+      mockSendMessageStream.mockImplementationOnce(async () => {
+        await vi.advanceTimersByTimeAsync(31_000);
+        throw new DOMException('Request timed out', 'AbortError');
+      });
+      mockModelResponse([
+        {
+          name: COMPLETE_TASK_TOOL_NAME,
+          args: { finalResult: 'Partial evidence' },
+          id: 'summary',
+        },
+      ]);
+
+      const output = await executor.run({ goal: 'Thrown timeout' }, signal);
+
+      expect(output.terminate_reason).toBe(AgentTerminateMode.TIMEOUT);
+      expect(output.result).toBe(
+        'Agent stopped (TIMEOUT). Partial result:\nPartial evidence',
+      );
+      expect(mockSaveSummary).toHaveBeenCalledWith(output.result);
+      expect(mockedLogAgentFinish).toHaveBeenCalledWith(
+        mockConfig,
+        expect.objectContaining({
+          terminate_reason: AgentTerminateMode.TIMEOUT,
+        }),
+      );
+    });
+
+    it('preserves cancellation during the grace turn instead of reporting a limit failure', async () => {
+      const definition = createTestDefinition([LS_TOOL_NAME], { maxTurns: 1 });
+      const executor = await LocalAgentExecutor.create(definition, mockConfig);
+      mockWorkResponse('work');
+      mockSendMessageStream.mockImplementationOnce(async () => {
+        abortController.abort();
+        throw new DOMException('Cancelled', 'AbortError');
+      });
+
+      const output = await executor.run(
+        { goal: 'Cancel final summary' },
+        signal,
+      );
+
+      expect(output.terminate_reason).toBe(AgentTerminateMode.ABORTED);
+      expect(mockSaveSummary).not.toHaveBeenCalled();
     });
 
     it('should fail recovery from a TIMEOUT if the grace period also times out', async () => {
@@ -3083,7 +3161,9 @@ describe('LocalAgentExecutor', () => {
 
       // Verify that the summary is saved upon successful recovery
       expect(mockSaveSummary).toHaveBeenCalledTimes(1);
-      expect(mockSaveSummary).toHaveBeenCalledWith('Recovered!');
+      expect(mockSaveSummary).toHaveBeenCalledWith(
+        'Agent stopped (MAX_TURNS). Partial result:\nRecovered!',
+      );
     });
 
     describe('Model Steering', () => {
