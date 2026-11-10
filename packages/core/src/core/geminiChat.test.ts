@@ -3595,6 +3595,20 @@ describe('GeminiChat', () => {
   });
 
   describe('stripThoughtsFromHistory', () => {
+    it('keeps endpoint-bound continuation when native signatures are cleared', () => {
+      const continuation = {
+        text: 'bound continuation',
+        thought: true,
+        thoughtSignature: 'ultra-chat-reasoning-v1:' + 'a'.repeat(64),
+      };
+      chat.setHistory([
+        { role: 'user', parts: [{ text: 'hello' }] },
+        { role: 'model', parts: [continuation, { text: 'Visible' }] },
+      ]);
+      chat.stripThoughtsFromHistory();
+      expect(chat.getHistory()[1].parts?.[0]).toEqual(continuation);
+    });
+
     it('should strip thought signatures', () => {
       chat.setHistory([
         {

@@ -1111,6 +1111,30 @@ describe('formatRelativeTime', () => {
 });
 
 describe('convertSessionToHistoryFormats', () => {
+  it.each(['Visible', ''])(
+    'uses explicit display content without surfacing continuation parts (%s)',
+    (displayContent) => {
+      const result = convertSessionToHistoryFormats([
+        {
+          id: 'reasoning',
+          type: 'gemini',
+          timestamp: '2026-11-10T00:00:00.000Z',
+          content: [
+            { text: 'PRIVATE_CONTINUATION', thought: true },
+            { text: 'Visible' },
+          ],
+          displayContent,
+        },
+      ]);
+      expect(result.uiHistory).toHaveLength(displayContent ? 1 : 0);
+      expect(JSON.stringify(result.uiHistory)).not.toContain(
+        'PRIVATE_CONTINUATION',
+      );
+      expect(JSON.stringify(result.uiHistory)).not.toContain('[Thought:');
+      if (displayContent)
+        expect(result.uiHistory[0]).toMatchObject({ text: displayContent });
+    },
+  );
   it('should preserve tool call arguments', () => {
     const messages: MessageRecord[] = [
       {

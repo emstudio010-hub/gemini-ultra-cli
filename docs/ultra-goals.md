@@ -385,3 +385,14 @@
   fixture、maxAttempts=2，无付费调用，不声称各平台所有原生错误路径均已验收。
 - F-025/F-026实际DevTools取消与429/503成功恢复证据对应preview.22，相关实现保留在preview.23；未重复未受改动影响的场景。F-027原始Windows断言与检查脚本首次假设错误、0请求ETIMEDOUT均保留，不用最终通过覆盖原失败。交接写入源码docs、工程目录和Obsidian。
 - 下一阶段优先结合本地DSH-purge参考及保存会话，离线重建E-077最后请求的角色/工具交接载荷，寻找明确兼容性差异，不盲目重跑八文件付费任务。真实thinking-only、复杂逆向与完整自主交付仍未验收，整体目标active。
+
+## 2026-11-10 DeepSeek推理续接
+
+- E-087：使用生产JSONL加载器、GeminiChat恢复及公共Universal入口离线重建E-077历史部分：32条会话消息、31个历史turn、41个Chat消息，23调用/23结果配对、无重复/孤立ID；原文件SHA保持。保存了747个思考显示片段（41,942字符），出站reasoning_content为0。未获得原始system/tools/retry请求，不能声称完整HTTP逐字重放。
+- 本地DSH-purge
+  1.1.71/core.js的69/72补丁面向宿主系统提示历史，不含通用reasoning_content适配，不执行宿主补丁。DeepSeek官方Thinking
+  Mode文档明确携带tools的后续请求需要完整推理回传，第三方网关兼容性存在差异；这确认一个独立契约缺口，不证明它是E-077的根因。
+- F-028：Chat适配器现给可续接原始推理加供应商/端点/协议/模型绑定标记，核心仅对成功回合保留原始内容及空白，持久化和原生恢复保留；携带tools且同绑定时通过reasoning_content回传。普通思考摘要不冒充原始数据，原生Gemini请求剥离外部标记及数据；关闭和无tools请求不回传。/provider新增自动/启用/关闭，自动识别DeepSeek；未改创建供应商流程，旧编辑保留配置。恢复UI使用明确displayContent（含空串）避免把传输思考标记当正文。
+- E-088：10项必要选择用例通过（6协议/存储与绑定、2显示、2签名清理），受影响文件严格lint/格式及核心/CLI类型构建通过。已安装preview.23基线在write_file后第二请求因缺少推理字段被本地协议fixture拒绝，退出400，失败原文保留。
+- 开发CLI实际HTTP四请求通过，5,634ms；首次write_file后同ID
+  --resume再read_file，所有已知assistant原始推理逐字回传、4份原始内容落盘，最终正文未混入思考。thinking-only对照2请求/2,935ms仍退出1/INVALID_STREAM、无文件且不提交无效思考。实际ConPTY中英菜单三档保存/重开/语言切换通过，10,799ms。均fixture，无付费调用。等待preview.24分发与安装后核对；整体目标active。

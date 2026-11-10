@@ -39,6 +39,7 @@ type MenuPage =
   | 'select-models-checklist'
   | 'edit-image-model'
   | 'edit-output-limit'
+  | 'select-reasoning-replay'
   | 'confirm-delete';
 
 const PROTOCOLS: Array<{ id: ProviderProtocol; name: string; desc: string }> = [
@@ -63,6 +64,8 @@ const PROTOCOLS: Array<{ id: ProviderProtocol; name: string; desc: string }> = [
     desc: '适用于 Google 官方 generativelanguage.googleapis.com 或第三方反代镜像',
   },
 ];
+
+const REASONING_REPLAY_MODES = ['auto', 'on', 'off'] as const;
 
 export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
   onClose,
@@ -111,6 +114,7 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
   // Image model buffer
   const [imageModelInput, setImageModelInput] = useState('');
   const [outputLimitInput, setOutputLimitInput] = useState('');
+  const [reasoningReplayCursor, setReasoningReplayCursor] = useState(0);
 
   const [statusMessage, setStatusMessage] = useState('');
   const [editingProviderId, setEditingProviderId] = useState<string | null>(
@@ -184,8 +188,15 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
       ),
     },
     {
+      id: 'reasoning-replay',
+      label: t(
+        '10. [推理续接] - 为 Chat 工具对话保留原始推理内容',
+        '10. [Reasoning Replay] - Preserve reasoning for Chat tool conversations',
+      ),
+    },
+    {
       id: 'exit',
-      label: t('10. [保存并返回终端]', '10. [Save and Return to Terminal]'),
+      label: t('11. [保存并返回终端]', '11. [Save and Return to Terminal]'),
     },
   ];
 
@@ -345,6 +356,15 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
               if (focusedProvider) setPage('confirm-delete');
             } else if (selected === 'lang') {
               i18n.toggleLocale();
+            } else if (selected === 'reasoning-replay') {
+              if (!focusedProvider) return true;
+              setReasoningReplayCursor(
+                REASONING_REPLAY_MODES.indexOf(
+                  focusedProvider.reasoningReplay ?? 'auto',
+                ),
+              );
+              setStatusMessage('');
+              setPage('select-reasoning-replay');
             } else if (selected === 'exit') {
               onClose();
             }
@@ -609,6 +629,32 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
         }
 
         // ------------------------------------------------------------------
+        // Reasoning replay is a provider compatibility setting.
+        // ------------------------------------------------------------------
+        if (page === 'select-reasoning-replay') {
+          if (key.name === 'up' || key.name === 'down') {
+            setReasoningReplayCursor(
+              (p) => (p + (key.name === 'up' ? 2 : 1)) % 3,
+            );
+            return true;
+          }
+          if (isEnter(key) && focusedProvider) {
+            mgr.upsertProvider({
+              ...focusedProvider,
+              reasoningReplay: REASONING_REPLAY_MODES[reasoningReplayCursor],
+              setActive: activeProvider?.id === focusedProvider.id,
+            });
+            setProviders(mgr.listProviders());
+            setStatusMessage(
+              t('✓ 推理续接已更新。', '✓ Reasoning replay updated.'),
+            );
+            setPage('main-menu');
+            return true;
+          }
+          return false;
+        }
+
+        // ------------------------------------------------------------------
         // Output limit is optional and does not add a step to provider creation.
         // ------------------------------------------------------------------
         if (page === 'edit-output-limit') {
@@ -792,6 +838,8 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
             {page === 'edit-image-model' &&
               t('› 生图模型参数设置', '› Image Generation Model')}
             {page === 'edit-output-limit' && t('› 输出上限', '› Output Limit')}
+            {page === 'select-reasoning-replay' &&
+              t('› 推理续接', '› Reasoning Replay')}
             {page === 'confirm-delete' &&
               t('› 确认删除供应商', '› Confirm Deletion')}
           </Text>
@@ -1207,6 +1255,50 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
       )}
 
       {/* PAGE 6: IMAGE MODEL */}
+      {page === 'select-reasoning-replay' && (
+        <Box flexDirection="column">
+          <Text bold color={theme.text.primary}>
+            {t('推理续接', 'Reasoning Replay')} · {focusedProvider?.name}
+          </Text>
+          <Text color={theme.text.secondary}>
+            {t(
+              '仅用于 Chat 工具对话，同一供应商与模型的原始推理不会混入最终正文。',
+              'For Chat tool conversations. Original reasoning stays with its provider and model, separate from the final answer.',
+            )}
+          </Text>
+          {REASONING_REPLAY_MODES.map((mode, index) => (
+            <Text
+              key={mode}
+              bold={index === reasoningReplayCursor}
+              color={
+                index === reasoningReplayCursor
+                  ? theme.status.success
+                  : theme.text.primary
+              }
+            >
+              {index === reasoningReplayCursor ? '▶ ' : '  '}
+              {mode === 'auto'
+                ? t('自动：识别 DeepSeek 模型', 'Auto: detect DeepSeek models')
+                : mode === 'on'
+                  ? t(
+                      '启用：端点支持 reasoning_content',
+                      'Enabled: endpoint supports reasoning_content',
+                    )
+                  : t(
+                      '关闭：端点不接受推理回传',
+                      'Disabled: endpoint rejects reasoning replay',
+                    )}
+            </Text>
+          ))}
+          <Text color={theme.ui.comment}>
+            {t(
+              '[↑/↓] 选择 | [Enter] 保存 | [Esc] 取消',
+              '[↑/↓] Select | [Enter] Save | [Esc] Cancel',
+            )}
+          </Text>
+        </Box>
+      )}
+
       {page === 'edit-output-limit' && (
         <Box flexDirection="column">
           <Text bold color={theme.text.primary}>

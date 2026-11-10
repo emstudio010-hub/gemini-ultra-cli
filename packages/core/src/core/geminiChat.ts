@@ -79,6 +79,7 @@ import {
 import { coreEvents } from '../utils/events.js';
 import type { AgentLoopContext } from '../config/agent-loop-context.js';
 import { debugLogger } from '../utils/debugLogger.js';
+import { isProviderReasoningPart } from '../providers/providerReasoning.js';
 
 export enum StreamEventType {
   /** A regular content chunk from the API. */
@@ -1441,6 +1442,7 @@ export class GeminiChat {
       const newContent = { ...turn.content };
       if (newContent.parts) {
         newContent.parts = newContent.parts.map((part) => {
+          if (isProviderReasoningPart(part)) return part;
           if (part && typeof part === 'object' && 'thoughtSignature' in part) {
             const newPart = { ...part };
             delete (newPart as { thoughtSignature?: string }).thoughtSignature;
@@ -1546,6 +1548,7 @@ export class GeminiChat {
     isOriginalFunctionResponse: boolean = false,
   ): AsyncGenerator<GenerateContentResponse> {
     const modelResponseParts: Part[] = [];
+    const providerReasoningParts: Part[] = [];
 
     let hasToolCall = false;
     let hasThoughts = false;
@@ -1610,6 +1613,9 @@ export class GeminiChat {
       if (isValidResponse(chunk)) {
         const content = chunk.candidates?.[0]?.content;
         if (content?.parts) {
+          providerReasoningParts.push(
+            ...content.parts.filter(isProviderReasoningPart),
+          );
           if (content.parts.some((part) => part.thought)) {
             // Record thoughts
             hasThoughts = true;
@@ -1819,6 +1825,24 @@ export class GeminiChat {
       }
     }
 
+    const reasoningSignature = providerReasoningParts[0]?.thoughtSignature;
+    const persistedParts =
+      providerReasoningParts.length &&
+      providerReasoningParts.every(
+        (part) => part.thoughtSignature === reasoningSignature,
+      )
+        ? [
+            {
+              thought: true,
+              thoughtSignature: reasoningSignature,
+              text: providerReasoningParts
+                .map((part) => part.text ?? '')
+                .join(''),
+            },
+            ...consolidatedParts,
+          ]
+        : consolidatedParts;
+
     // Flush buffered thoughts from the successful attempt
     for (const thought of bufferedThoughts) {
       this.chatRecordingService.recordThought(thought);
@@ -1840,7 +1864,10 @@ export class GeminiChat {
       id = this.chatRecordingService.recordMessage({
         model,
         type: 'gemini',
-        content: responseText,
+        content: providerReasoningParts.length ? persistedParts : responseText,
+        ...(providerReasoningParts.length
+          ? { displayContent: responseText }
+          : {}),
       });
     } else {
       // Still need a durable ID even if response is empty (e.g. only tool calls)
@@ -1852,7 +1879,7 @@ export class GeminiChat {
 
     this.agentHistory.push({
       id,
-      content: { role: 'model', parts: consolidatedParts },
+      content: { role: 'model', parts: persistedParts },
     });
   }
 
@@ -2152,7 +2179,9 @@ export function stripThoughts(history: HistoryTurn[]): HistoryTurn[] {
       continue;
     }
 
-    const nonThoughtParts = turn.content.parts.filter((p) => p && !p.thought);
+    const nonThoughtParts = turn.content.parts.filter(
+      (p) => p && (!p.thought || isProviderReasoningPart(p)),
+    );
 
     if (nonThoughtParts.length === 0) {
       const prev = result.at(-1);

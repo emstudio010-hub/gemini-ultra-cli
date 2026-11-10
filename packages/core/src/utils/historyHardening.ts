@@ -8,6 +8,7 @@ import { type Part, type Content } from '@google/genai';
 import { debugLogger } from './debugLogger.js';
 import { type HistoryTurn } from '../core/agentChatHistory.js';
 import { deriveStableId } from './cryptoUtils.js';
+import { isProviderReasoningPart } from '../providers/providerReasoning.js';
 
 export const SYNTHETIC_THOUGHT_SIGNATURE = 'skip_thought_signature_validator';
 
@@ -147,7 +148,10 @@ function stripThoughts(history: HistoryTurn[]): HistoryTurn[] {
     }
 
     const nonThoughtParts = turn.content.parts.filter(
-      (p) => p && !isInternalThought(p) && !isEmptyTextOnlyPart(p),
+      (p) =>
+        p &&
+        (!isInternalThought(p) || isProviderReasoningPart(p)) &&
+        !isEmptyTextOnlyPart(p),
     );
     if (
       nonThoughtParts.length === 0 &&
@@ -469,7 +473,10 @@ export function scrubHistory(history: HistoryTurn[]): HistoryTurn[] {
   const result: HistoryTurn[] = [];
   for (const turn of history) {
     const nonThoughtParts = (turn.content.parts ?? []).filter(
-      (p) => p && !isInternalThought(p) && !isEmptyTextOnlyPart(p),
+      (p) =>
+        p &&
+        (!isInternalThought(p) || isProviderReasoningPart(p)) &&
+        !isEmptyTextOnlyPart(p),
     );
     if (nonThoughtParts.length === 0) {
       const prev = result.at(-1);
@@ -524,7 +531,10 @@ export function scrubContents(contents: Content[]): Content[] {
   const result: Content[] = [];
   for (const content of contents) {
     const nonThoughtParts = (content.parts ?? []).filter(
-      (p) => p && !isInternalThought(p) && !isEmptyTextOnlyPart(p),
+      (p) =>
+        p &&
+        (!isInternalThought(p) || isProviderReasoningPart(p)) &&
+        !isEmptyTextOnlyPart(p),
     );
     if (nonThoughtParts.length === 0) {
       const prev = result.at(-1);
@@ -593,6 +603,7 @@ export function scrubPart(part: Part): Part {
   if (isThoughtPart(part)) {
     scrubbed['thoughtSignature'] = part.thoughtSignature;
   }
+  if (isProviderReasoningPart(part)) scrubbed['thought'] = true;
   if ('functionResponse' in part && part.functionResponse) {
     const scrubbedResp: Record<string, unknown> = {
       name: part.functionResponse.name,

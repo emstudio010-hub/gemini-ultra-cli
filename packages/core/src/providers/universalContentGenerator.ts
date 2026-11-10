@@ -26,6 +26,11 @@ import { providerUsage } from './providerUsage.js';
 import { isRecord } from '../utils/markdownUtils.js';
 import type { HttpError } from '../utils/httpErrors.js';
 import {
+  providerReasoningSignature,
+  shouldReplayReasoning,
+  stripProviderReasoning,
+} from './providerReasoning.js';
+import {
   chatSchema,
   responsesSchema,
   anthropicSchema,
@@ -125,7 +130,10 @@ export class UniversalContentGenerator implements ContentGenerator {
       return { totalTokens: this.estimateTokens(request) };
     }
     try {
-      return await this.fallbackGenerator.countTokens(request);
+      return await this.fallbackGenerator.countTokens({
+        ...request,
+        contents: stripProviderReasoning(providerContents(request.contents)),
+      });
     } catch {
       return { totalTokens: this.estimateTokens(request) };
     }
@@ -148,7 +156,10 @@ export class UniversalContentGenerator implements ContentGenerator {
 
     if (!resolution) {
       return this.fallbackGenerator.generateContent(
-        request,
+        {
+          ...request,
+          contents: stripProviderReasoning(providerContents(request.contents)),
+        },
         userPromptId,
         role,
       );
@@ -179,7 +190,10 @@ export class UniversalContentGenerator implements ContentGenerator {
 
     if (!resolution) {
       return this.fallbackGenerator.generateContentStream(
-        request,
+        {
+          ...request,
+          contents: stripProviderReasoning(providerContents(request.contents)),
+        },
         userPromptId,
         role,
       );
@@ -223,6 +237,8 @@ export class UniversalContentGenerator implements ContentGenerator {
 
   private formatOpenAIMessages(
     request: GenerateContentParameters,
+    provider?: ExternalProviderProfile,
+    hasTools = false,
   ): ChatMessage[] {
     const messages: ChatMessage[] = [];
 
@@ -249,16 +265,30 @@ export class UniversalContentGenerator implements ContentGenerator {
     const contents = providerContents(request.contents);
     const callsByName = new Map<string, string[]>();
     let generatedCall = 0;
+    const reasoningSignature =
+      provider && hasTools && shouldReplayReasoning(provider, request.model)
+        ? providerReasoningSignature(provider, request.model)
+        : undefined;
 
     for (const content of contents) {
       const role = content.role === 'model' ? 'assistant' : 'user';
       const parts = content.parts || [];
 
       let textBuffer = '';
+      let reasoningText: string | undefined;
       const toolCalls: ChatToolCall[] = [];
       const toolMessages: ChatMessage[] = [];
 
       for (const part of parts) {
+        if (
+          role === 'assistant' &&
+          reasoningSignature &&
+          part.thought &&
+          part.thoughtSignature === reasoningSignature &&
+          typeof part.text === 'string'
+        ) {
+          reasoningText = (reasoningText ?? '') + part.text;
+        }
         if (part.text && !part.thought) {
           textBuffer += part.text;
         }
@@ -311,10 +341,14 @@ export class UniversalContentGenerator implements ContentGenerator {
           messages.push({
             role,
             content: textBuffer,
+            ...(reasoningText !== undefined
+              ? { reasoning_content: reasoningText }
+              : {}),
             ...(toolCalls.length ? { tool_calls: toolCalls } : {}),
           });
       } else {
         const msg: ChatMessage = { role, content: textBuffer };
+        if (reasoningText !== undefined) msg.reasoning_content = reasoningText;
         if (toolCalls.length > 0) {
           msg.tool_calls = toolCalls;
         }
@@ -448,8 +482,8 @@ export class UniversalContentGenerator implements ContentGenerator {
     request: GenerateContentParameters,
   ): Promise<GenerateContentResponse> {
     const url = `${provider.baseUrl}/chat/completions`;
-    const messages = this.formatOpenAIMessages(request);
     const tools = this.formatOpenAITools(request);
+    const messages = this.formatOpenAIMessages(request, provider, !!tools);
     const effort = ProviderManager.getInstance().getReasoningEffort();
 
     const payload = {
@@ -501,6 +535,14 @@ export class UniversalContentGenerator implements ContentGenerator {
       parts.push({
         text: choice.message.reasoning_content,
         thought: true,
+        ...(shouldReplayReasoning(provider, request.model)
+          ? {
+              thoughtSignature: providerReasoningSignature(
+                provider,
+                request.model,
+              ),
+            }
+          : {}),
       });
     }
     if (choice?.message?.content) {
@@ -536,8 +578,11 @@ export class UniversalContentGenerator implements ContentGenerator {
   ): AsyncGenerator<GenerateContentResponse> {
     const abortController = new AbortController();
     const url = `${provider.baseUrl}/chat/completions`;
-    const messages = this.formatOpenAIMessages(request);
+    const reasoningSignature = shouldReplayReasoning(provider, request.model)
+      ? providerReasoningSignature(provider, request.model)
+      : undefined;
     const tools = this.formatOpenAITools(request);
+    const messages = this.formatOpenAIMessages(request, provider, !!tools);
     const effort = ProviderManager.getInstance().getReasoningEffort();
 
     const payload = {
@@ -605,7 +650,15 @@ export class UniversalContentGenerator implements ContentGenerator {
       // 1. Reasoning content
       if (delta.reasoning_content) {
         yield this.buildGeminiResponse(
-          [{ text: delta.reasoning_content, thought: true }],
+          [
+            {
+              text: delta.reasoning_content,
+              thought: true,
+              ...(reasoningSignature
+                ? { thoughtSignature: reasoningSignature }
+                : {}),
+            },
+          ],
           undefined,
           false,
         );
@@ -1174,7 +1227,7 @@ export class UniversalContentGenerator implements ContentGenerator {
     void _h;
     const { systemInstruction, tools, ...generationConfig } = rest;
     return {
-      contents: providerContents(request.contents),
+      contents: stripProviderReasoning(providerContents(request.contents)),
       systemInstruction: systemInstruction
         ? {
             parts: providerContents(systemInstruction).flatMap(

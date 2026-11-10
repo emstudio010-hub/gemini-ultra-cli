@@ -692,11 +692,12 @@ export function convertSessionToHistoryFormats(
     }
 
     // Add the message only if it has content
-    const displayContentString = msg.displayContent
-      ? partListUnionToString(msg.displayContent)
-      : undefined;
+    const displayContentString =
+      msg.displayContent !== undefined
+        ? partListUnionToString(msg.displayContent)
+        : undefined;
     const contentString = partListUnionToString(msg.content);
-    const uiText = displayContentString || contentString;
+    const uiText = displayContentString ?? contentString;
 
     // Skip internal context messages in the UI history
     const trimmedText = uiText.trim();

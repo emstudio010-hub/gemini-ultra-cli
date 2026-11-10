@@ -15,7 +15,7 @@ v24.22.2；校验场景使用本地模型fixture，真实逆向工具需另行�
 Release 下载），执行：
 
 ```sh
-npm install -g ./gemini-ultra-cli-1.0.0-preview.23.tgz
+npm install -g ./gemini-ultra-cli-1.0.0-preview.24.tgz
 gemini-ultra --version
 gemini-ultra
 ```
@@ -55,6 +55,13 @@ gemini-ultra
 
 非交互 HTTP 错误的 JSON 保留完整状态码（error.code）；系统退出状态在不同平台可能被截断。报错后完成清理并让关闭回调排空，再以非零状态结束。
 
+## DeepSeek 工具对话的推理续接
+
+/provider
+→「推理续接」提供自动、启用、关闭三档。自动按模型名称识别 DeepSeek；启用用于其他支持 reasoning_content 的 Chat 端点；关闭适用于拒绝回传该字段的网关。新接收到的原始推理按供应商、端点、协议与模型绑定保存，并在携带工具的同一模型请求中回传。最终正文与普通 Gemini 请求分开处理。
+
+旧会话只保存显示摘要时，原始推理无法回填；对要求完整推理的端点，可先 /compress 或建立新会话继续。此设置属于 Chat 协议兼容选项，与 /effort 的六档推理强度分别控制。
+
 ## 跨电脑逆向环境
 
 支持从 PATH 查找工具；也可将命令包装器加入 PATH。建议：Ghidra +
@@ -86,13 +93,13 @@ Release。每个安装包附带 `.sha256` 文件，便于传输后核对。
 Windows PowerShell 校验安装包：
 
 ```powershell
-Get-FileHash ./gemini-ultra-cli-1.0.0-preview.23.tgz -Algorithm SHA256
-Get-Content ./gemini-ultra-cli-1.0.0-preview.23.tgz.sha256
+Get-FileHash ./gemini-ultra-cli-1.0.0-preview.24.tgz -Algorithm SHA256
+Get-Content ./gemini-ultra-cli-1.0.0-preview.24.tgz.sha256
 ```
 
 macOS 使用
-`shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.23.tgz.sha256`；Linux 使用
-`sha256sum -c gemini-ultra-cli-1.0.0-preview.23.tgz.sha256`。
+`shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.24.tgz.sha256`；Linux 使用
+`sha256sum -c gemini-ultra-cli-1.0.0-preview.24.tgz.sha256`。
 
 ## 自定义逆向工具路径
 
