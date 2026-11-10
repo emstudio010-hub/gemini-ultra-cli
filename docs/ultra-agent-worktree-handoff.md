@@ -1,6 +1,6 @@
 # Gemini Ultra CLI 协作工作树交接
 
-日期：2026-11-11。WI-069；候选 preview.39，本机当前仍为 preview.38。沿用 R26/code-audit、lead/cae/doc 及 work/gemini-ultra-agent-20261110/scope.md 的自有源码授权。
+日期：2026-11-11。WI-069；本机双命令已安装 preview.39，产品源7582e873f53a679764540dd07cb73e9fbf6fa5d2。沿用 R26/code-audit、lead/cae/doc 及 work/gemini-ultra-agent-20261110/scope.md 的自有源码授权。
 
 ## 使用
 
@@ -81,3 +81,33 @@ WI-069 本地实现完成，preview.39 待三平台工件及安装核对；本�
 active，仅codex分支，不合并master、不正式Release。
 
 后续顺序：完成本候选分发与安装交接；继续复杂逆向能力及可执行交付约束；维护报告和剩余上线边界。用户已授权持续推进，不以阶段菜单重复请求许可。
+
+## E-151 三平台最终工件
+
+[运行42909725723](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/42909725723)
+completed/success，产品源7582e873f53a679764540dd07cb73e9fbf6fa5d2。三个包版本、SHA、运行源码、安装报告、六rg二进制hash及Unix权限均核对通过。
+
+| 平台        | 包SHA-256                                                        | 工作树链时长 |
+| ----------- | ---------------------------------------------------------------- | ------------ |
+| Windows x64 | c41cc349e0e03cff1fba0a0094bba3a0576e35007935962a1b286d4ad31438e7 | 17248ms      |
+| Linux x64   | 23dc3928643c890d0df8c32f350a05d6c9432ae941d026277845000339e17046 | 7014ms       |
+| macOS arm64 | 89845650eb424ea979fac31f10d4fb98ff725eed32afb3e3a7015141308b7530 | 7201ms       |
+
+每平台工作树链21个loopback请求/退出0，19次累计任务调度；第一响应前创建/完成后总结与任务计数边界分别记录。真实CLI
+prepare/on、实际shell
+cwd与write_file、独立审查、显式export/apply/remove通过。原source
+index、staged/unstaged/untracked内容保留；ignored内容存在时本地remove退出42且文件保留，清除本次生成的ignored文件后重试成功，补丁留存。macOS路径别名及Windows
+runner短路径由最终包链验证；记录包含实际shell规范路径。
+
+同源包既有多模型Swarm两入口20/20、工作流两入口12/12请求及预算/恢复链通过。以上为安装包真实执行与loopback响应；时长不作跨平台性能比较或真实供应商自主交付验收。
+
+## E-152 本机安装
+
+一次offline已有缓存安装7050ms/退出0；gemini-ultra与gemini-ultra-cli均1.0.0-preview.39，424包内文件逐一匹配Windows
+CI包。入口SHA为cd211e177886b526c08c58611e670a51d9ed155f963926ddb4743510a3cd8395。preview.38包保留；不再重复Windows
+CI已执行的相同fixture，不改个人供应商配置、数据库或逆向工具。
+
+工程记录：github-preview39-run.json、github-preview39-artifacts-result.json、github-run-42909725723各平台/worktree-verification.json及输出；global-preview39-install-result.json、global-install-github-preview39-full-result.json。源码/工程/Obsidian交接同步。
+
+WI-069交付，整体goal
+active。当前仍每任务一份worktree、writer/verifier串行；WI-054真实自主交付/引用和WI-056复杂反编译继续，不能称整个系统正式上线。后续集中真实交付约束与逆向能力，不无止境新增小测试；不自动重复原付费审查，不合并master、不正式Release。
