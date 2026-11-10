@@ -431,7 +431,7 @@ try {
     delete env[key];
   const started = Date.now();
   const localRuns = [];
-  const localCommand = async (input) => {
+  const localCommand = async (input, expectedCode = 0) => {
     child = spawn(
       process.execPath,
       [
@@ -477,7 +477,7 @@ try {
       output,
       requestCount: requests.length,
     });
-    assert.equal(code, 0, output);
+    assert.equal(code, expectedCode, output);
   };
   let worktreeState;
   let originalIndexHash;
@@ -492,6 +492,7 @@ try {
     git(['config', 'user.name', 'Fixture']);
     git(['config', 'user.email', 'fixture@invalid']);
     git(['config', 'core.autocrlf', 'false']);
+    fs.writeFileSync(path.join(workspace, '.gitignore'), 'ignored-local.txt\n');
     git(['add', '.']);
     git(['commit', '--quiet', '-m', 'fixture']);
     fs.writeFileSync(path.join(workspace, 'local.txt'), 'user staged\n');
@@ -566,6 +567,7 @@ try {
   clearTimeout(timer);
   let isolatedBeforeApply;
   let actualShellCwd;
+  let ignoredFilesPreserved;
   if (worktreeMode) {
     isolatedBeforeApply =
       !fs.existsSync(path.join(workspace, 'deliverable.txt')) &&
@@ -576,6 +578,17 @@ try {
     );
     await localCommand('/swarm workspace export');
     await localCommand('/swarm workspace apply');
+    const ignored = path.join(worktreeState.directory, 'ignored-local.txt');
+    fs.writeFileSync(
+      ignored,
+      'generated ignored content: preserve until explicitly cleared',
+    );
+    await localCommand('/swarm workspace remove', 42);
+    ignoredFilesPreserved =
+      fs.readFileSync(ignored, 'utf8') ===
+        'generated ignored content: preserve until explicitly cleared' &&
+      localRuns.at(-1).output.includes('Git-ignored files');
+    fs.unlinkSync(ignored);
     await localCommand('/swarm workspace remove');
     artifact = path.join(workspace, 'deliverable.txt');
     source = path.join(workspace, 'seed.txt');
@@ -768,6 +781,7 @@ try {
               ? {
                   isolatedBeforeApply,
                   actualShellCwd: actualShellCwd === worktreeState.directory,
+                  ignoredFilesPreserved,
                   sourceIndexUnchanged:
                     originalIndexHash ===
                     createHash('sha256')

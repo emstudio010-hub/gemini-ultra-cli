@@ -351,6 +351,20 @@ export function removeAgentWorktree(root: string, id: string): AgentWorktree {
   const state = readAgentWorktree(root, id);
   if (!state) throw new Error('No managed worktree for this task.');
   assertOwned(root, state);
+  // Git removes ignored files even without --force. Preserve dependencies and
+  // other ignored user content until the user explicitly clears them.
+  if (
+    git(state.directory, [
+      'ls-files',
+      '--others',
+      '--ignored',
+      '--exclude-standard',
+      '-z',
+    ]).length
+  )
+    throw new Error(
+      'Worktree contains Git-ignored files. Preserve or remove them explicitly before workspace remove; automatic cleanup is refused.',
+    );
   const tree = snapshot(
     state.directory,
     path.join(folder(root, id), 'cleanup.index'),

@@ -95,6 +95,14 @@ it('snapshots staged, unstaged and untracked files without changing source HEAD/
     'user untracked\n',
   );
   expect(fs.readFileSync(path.join(source, '.git/index'))).toEqual(index);
+  fs.mkdirSync(path.join(state.directory, 'ignored'));
+  const ignored = path.join(state.directory, 'ignored', 'user-cache');
+  fs.writeFileSync(ignored, 'preserve ignored content');
+  expect(() => removeAgentWorktree(root, id)).toThrow('Git-ignored files');
+  expect(fs.readFileSync(ignored, 'utf8')).toBe('preserve ignored content');
+  expect(git(state.directory, ['rev-parse', 'HEAD'])).toBe(state.baseline);
+  fs.unlinkSync(ignored);
+  fs.rmdirSync(path.dirname(ignored));
   expect(removeAgentWorktree(root, id).phase).toBe('removed');
   expect(fs.existsSync(exported.patch!)).toBe(true);
   await expect(inAgentWorktree(root, id, async () => true)).rejects.toThrow(

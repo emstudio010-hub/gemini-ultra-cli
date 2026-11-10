@@ -654,3 +654,5 @@
   cwd和文件工具、独立审查、回写与回收通过；prepare/配置/回写不加模型请求，原staged/unstaged/untracked及index保持。最终补齐由CI同源包核对，不重跑相同源码链、付费任务或全量/冒烟。
 - WI-069本地完成，preview.39准备三平台及安装。本机仍preview.38；真实自主交付/引用、复杂逆向继续。docs/ultra-agent-worktree-handoff.md为本阶段交接；goal
   active，仅codex分支，不合并master/正式Release。
+
+- E-150/F-040收尾：Git原生remove无force仍删除ignored文件，临时仓库实证退出0；新增显式ignored预检拒绝清理，保留内容和HEAD，用户自行处理后重试。已并入既有工作树6项且通过，严格lint通过；同一21请求CLI链增加一次本地拒绝清理，无新增模型调用。取消旧run42906998485，最终同源包另跑，不把取消当完成。证据worktree-ignored-cleanup-probe.json及agent-worktree-ignore.log/junit。

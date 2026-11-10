@@ -64,6 +64,9 @@ does not apply 来自冲突拒绝用例。
 
 ## 接续目标池
 
+收尾复核 F-040：实际临时 Git 仓库中，原生 `git worktree remove`
+无 force 仍删除 ignored 文件，退出0。产品已在清理前显式列出 ignored 未跟踪文件并拒绝自动清理，保留内容和 HEAD；用户自行保留/清除后可重试。原三平台运行42906998485因此取消，不将其当最终交付。新增保护并入现有工作树用例及同一21请求CLI链，无新增付费调用；证据 worktree-ignored-cleanup-probe.json、agent-worktree-ignore.log/junit、agent-worktree-ignore-lint.log。
+
 WI-069 本地实现完成，preview.39 待三平台工件及安装核对；本机仍preview.38。WI-054真实供应商完整自主交付/引用准确性、WI-056复杂反编译仍未完成；E-124的真实任务失败保留，不自动重复同一付费任务。整体goal
 active，仅codex分支，不合并master、不正式Release。
 
