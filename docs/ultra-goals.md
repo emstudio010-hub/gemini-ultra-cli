@@ -14,10 +14,10 @@
 | P1     | 多 Agent 有界排队、取消与结果可见           | 基础链通过，长任务待修 | E-063真实三角色2完成1超时，状态准确；父模型INVALID_STREAM未交付报告，不能算完整任务通过                          |
 | P1     | 内置红队工作流                              | 本地分析闭环通过     | 临时授权下redteam-analyst真实分析生成样本并归档，E-016；复杂逆向与外部目标未验收                                   |
 | P2     | 演练台 Morphicons 交互图标与强度动效        | 本地完成             | 使用 Morphicons 2.0.2；浏览器确认六档、图标、移动布局、减少动态效果与隐藏暂停                                      |
-| P0     | 安装到 CLI 本身并生成可分发安装包           | 本地完成             | 当前preview.18，GitHub Windows工件与本机入口匹配；E-069；无正文失败退出1，重试恢复后实际落盘并退出0                   |
+| P0     | 安装到 CLI 本身并生成可分发安装包           | 本地完成             | 当前preview.19，GitHub Windows工件与本机入口匹配；E-073；多段思考/正文/分片工具链落盘完整，无误重试                   |
 | P1     | 其他电脑可以开展本地逆向                    | 三平台原生基础链通过 | preview.8的Windows/Linux x64、macOS arm64真实rabin2读取/归档/查询通过E-022/027/029；复杂反编译与其他工具仍待补     |
-| P1     | GitHub 三平台分发验收                       | 已通过               | 最新preview.18 run42758828025三平台success，独立构建/打包/安装与工件核对；E-068                                    |
-| P1     | 真实供应商与长会话上线验收                  | 未完成               | E-063完整任务失败保留；F-022错误退出已修，现有有界重试/nudge在HTTP fixture恢复落盘通过，未重跑完整真实任务           |
+| P1     | GitHub 三平台分发验收                       | 已通过               | 最新preview.19 run42761930268三平台success，独立构建/打包/安装与工件核对；E-072                                    |
+| P1     | 真实供应商与长会话上线验收                  | 未完成               | E-070原生同ID恢复与原笔记保留有证据，但再次无正文、无报告；正确退出1。F-023本地协议修复不当作真实任务通过            |
 
 ## 证据记录
 
@@ -301,4 +301,7 @@
 
 - E-070：preview.18已安装CLI恢复原隔离目录、八份原源码快照、原会话与一致性笔记库，原生--resume保持442e90eb-db6c-4ebd-b6ca-b10843721b53，未导入新ID。358,103ms自行结束，未触及480秒观察器；8次主请求、0新子代理请求，仅补读一文件，原笔记1条未重复、源码及用户供应商配置未变，checkpoint原始前缀保留。仍因thinking-only INVALID_STREAM未生成报告，退出1正确；恢复连续性有证据，交付仍未通过。原数据全部保留，不用恢复机制成功掩盖报告失败。
 - E-071/F-023：人工追踪发现OpenAI Chat/Responses/Anthropic中间思考和文本块都被builder标为STOP。现中间块不带finishReason，协议真正结束后才发送一个包含完整工具调用和尾部usage的终止块，即使只有正文、没有usage也显式结束。三个协议×有/无工具的6个定向用例修前失败；修后加原固定尾部deadline和截断恢复对照共8项通过，受影响两文件严格lint与核心/CLI TypeScript通过。
-- 开发bundle实际HTTP场景通过：思考→多段正文→分片write_file参数→工具结果→多段最终正文，两次请求、2,177ms、退出0，文件实际落盘、usage保留、没有误触重试。此为协议适配修复，尚未证明它是E-070真实thinking-only的根因；本阶段不继续重复付费恢复任务。preview.19准备三平台分发，完整目标active。
+- 开发bundle实际HTTP场景通过：思考→多段正文→分片write_file参数→工具结果→多段最终正文，两次请求、2,177ms、退出0，文件实际落盘、usage保留、没有误触重试。此为协议适配修复，尚未证明它是E-070真实thinking-only的根因；本阶段没有继续重复付费恢复任务。
+- E-072：[preview.19运行42761930268](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/42761930268)三平台completed/success，功能提交07173eb57df0a5f686bf62aa10beb338fa32554b。三个工件版本、安装报告、SHA-256及六个rg文件hash/0755核对通过。
+- E-073：本机双命令preview.19、入口与Windows CI包一致。已安装OpenAI Chat HTTP fixture上述分片链通过，2请求/2,149ms/退出0，真实落盘、最终正文及usage完整、无重试。使用deepseek/deepseek-v4.1-flash模型名称但端点为本地fixture，不是真实服务。观察到两次默认主请求均未发送显式max_tokens/max_completion_tokens；供应商默认上限是否导致无正文仍是假设，后续先核对输出预算及实际终止信息，不凭此直接归因。
+- Windows包SHA-256 `2b5d433cc3d1717b68fde6bed314e0166569900c9c34120bcd80b6450586d0d3`；Linux `76df20ebecb8c10e471c3a39e6922fd311bfb578b3a772b708891f54f47520a6`；macOS `ca340b7731f51ab732ba130159263c7d8cfe5c4ce577164c3bf72c6a4dca172a`。本机已有缓存offline安装11秒，不代表无缓存新电脑离线安装。完整交付与复杂逆向仍未验收，整体目标active。
