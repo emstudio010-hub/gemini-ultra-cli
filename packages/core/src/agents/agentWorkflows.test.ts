@@ -373,6 +373,8 @@ it('migrates old saved implementation attempts and failed review evidence withou
     'default',
   );
   fs.rmSync(path.join(root, 'agent-workflows', `${record.id}.budget.json`));
+  fs.rmSync(path.join(root, 'agent-workflows/current.json'));
+  record.budgetVersion = undefined;
   record.stage = 'implement 1.2';
   record.reports = [
     {

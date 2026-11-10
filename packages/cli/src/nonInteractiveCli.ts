@@ -44,7 +44,10 @@ import type { Content, Part } from '@google/genai';
 import readline from 'node:readline';
 import stripAnsi from 'strip-ansi';
 
-import { handleSlashCommand } from './nonInteractiveCliCommands.js';
+import {
+  handleSlashCommand,
+  LOCAL_SLASH_COMMAND_HANDLED,
+} from './nonInteractiveCliCommands.js';
 import { ConsolePatcher } from './ui/utils/ConsolePatcher.js';
 import { handleAtCommand } from './ui/hooks/atCommandProcessor.js';
 import {
@@ -294,6 +297,7 @@ export async function runNonInteractive(
           config,
           settings,
         );
+        if (slashCommandResult === LOCAL_SLASH_COMMAND_HANDLED) return;
         // If a slash command is found and returns a prompt, use it.
         // Otherwise, slashCommandResult falls through to the default prompt
         // handling.

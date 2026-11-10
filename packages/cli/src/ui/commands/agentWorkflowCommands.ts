@@ -11,7 +11,7 @@ import {
   saveAgentWorkflow,
   cancelAgentWorkflow,
   isAgentWorkflowRunning,
-  workflowBudget,
+  workflowBudgetSummary,
   setWorkflowBudget,
   activateWorkflowBudget,
   closeWorkflowBudget,
@@ -80,7 +80,7 @@ function workflowCommand(
       if (operation === 'status') {
         info(
           record
-            ? `${record.mode}: ${record.phase}\n${record.objective}\n${record.stage}\n${i18n.t('累计预算', 'Cumulative budget')}: ${JSON.stringify(workflowBudget(root, record))}\n${record.milestones.map((item, index) => `${index + 1}. [${item.completed ? 'x' : ' '}] ${item.title}\n${item.acceptance}`).join('\n')}\nID: ${record.id}`
+            ? `${record.mode}: ${record.phase}\n${record.objective}\n${record.stage}\n${i18n.t('累计预算', 'Cumulative budget')}: ${JSON.stringify(workflowBudgetSummary(root, record))}\n${record.milestones.map((item, index) => `${index + 1}. [${item.completed ? 'x' : ' '}] ${item.title}\n${item.acceptance}`).join('\n')}\nID: ${record.id}`
             : i18n.t(
                 '当前项目没有该工作流。',
                 'No workflow of this kind in this project.',
@@ -100,6 +100,13 @@ function workflowCommand(
               'Stop requested; stage results are retained. The workspace is released after running children settle.',
             ),
           );
+          if (record.budgetUnavailable)
+            info(
+              i18n.t(
+                `旧用量不可确认，原状态已保留：${record.budgetRecoveryPath || '账本缺失'}。请创建新任务；不能恢复此旧任务。`,
+                `Historical usage is unavailable; original state retained: ${record.budgetRecoveryPath || 'ledger missing'}. Create a new task; this task cannot resume.`,
+              ),
+            );
           return;
         }
         if (isAgentWorkflowRunning(root))

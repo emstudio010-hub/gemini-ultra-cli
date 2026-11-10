@@ -574,3 +574,9 @@
 - E-132：preview.34源5f37e00a2de5f303b03e3909b44200bf56d95af1/run42891302374三平台completed/success；工件版本/SHA/安装/六rg身份与权限核对通过。每平台Swarm正常20请求/预算3请求、工作流正常12请求/预算3请求通过；正常账本closed/10次成员调度，触限blocked/paused/2次累计调度，CLI自行退出1。仅模型fixture，不是实战交付。
 - E-133：offline缓存安装7038ms/退出0，双命令preview.34，424包内文件逐一匹配Windows CI包；旧包保留，无付费/全量/冒烟。WI-064交付，整体goal active。
 - E-134/F-036：生成的隔离坏JSON账本会同时阻断cancel与调度，原ready记录和坏字节保留、0模型请求，证据workflow-budget-corruption-before.json。WI-065下一步允许保留坏账本后显式取消，并防止未知旧用量通过resume静默重置；尚未修复。WI-054真实自主交付/引用、WI-056复杂逆向及隔离worktree/成员独立模型继续。
+
+## 2026-11-11 工作流损坏预算恢复
+
+- E-135/F-036：显式cancel保存坏预算/坏绑定字节；工作流记录独立保存跟踪版本/拥有进程/未知用量标记。跟踪账本缺失或关键计数字段缺失不再按新预算补0。未知用量在状态中为null，旧任务不能resume或调大额度；健康账本绑定修复不丢累计值，I/O错误不被吞掉。
+- E-136/F-037：非交互本地斜杠命令不再fall through发给模型；真实输入错误使用既有退出42。23项core+2项选定headless检查、lint/type通过；实际CLI取消0/恢复42/正常会话0，两坏文件原字节保留，全场景2个loopback请求/7162ms，无真实调用。
+- 初辅助断言误期望FatalInputError退出1；保留原false并按源码既有42重评同一记录，不重复场景。preview.35准备分发安装，WI-065本地完成；WI-066继续Swarm members.json/绑定和原workflow记录本体损坏恢复。真实自主交付/引用、复杂逆向、隔离工作树和成员模型继续，goal active。

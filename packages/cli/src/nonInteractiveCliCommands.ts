@@ -21,11 +21,15 @@ import { createNonInteractiveUI } from './ui/noninteractive/nonInteractiveUi.js'
 import type { LoadedSettings } from './config/settings.js';
 import type { SessionStatsState } from './ui/contexts/SessionContext.js';
 
+export const LOCAL_SLASH_COMMAND_HANDLED = Symbol(
+  'local slash command handled',
+);
+
 /**
  * Processes a slash command in a non-interactive environment.
  *
- * @returns A Promise that resolves to `PartListUnion` if a valid command is
- *   found and results in a prompt, or `undefined` otherwise.
+ * @returns A prompt for model commands, a handled marker for local actions,
+ *   or undefined when no command action matched.
  * @throws {FatalInputError} if the command result is not supported in
  *   non-interactive mode.
  */
@@ -34,7 +38,7 @@ export const handleSlashCommand = async (
   abortController: AbortController,
   config: Config,
   settings: LoadedSettings,
-): Promise<PartListUnion | undefined> => {
+): Promise<PartListUnion | typeof LOCAL_SLASH_COMMAND_HANDLED | undefined> => {
   const trimmed = rawQuery.trim();
   if (!trimmed.startsWith('/')) {
     return;
@@ -65,6 +69,8 @@ export const handleSlashCommand = async (
 
       const logger = new Logger(config?.getSessionId() || '', config?.storage);
 
+      const ui = createNonInteractiveUI();
+      let commandError = '';
       const commandContext: CommandContext = {
         services: {
           agentContext: config,
@@ -72,7 +78,14 @@ export const handleSlashCommand = async (
           git: undefined,
           logger,
         },
-        ui: createNonInteractiveUI(),
+        ui: {
+          ...ui,
+          addItem: (item, timestamp) => {
+            if (item.type === 'error' && 'text' in item)
+              commandError = item.text || 'Local command failed.';
+            return ui.addItem(item, timestamp);
+          },
+        },
         session: {
           stats: sessionStats,
           sessionShellAllowlist: new Set(),
@@ -85,6 +98,8 @@ export const handleSlashCommand = async (
       };
 
       const result = await commandToExecute.action(commandContext, args);
+
+      if (commandError) throw new FatalInputError(commandError);
 
       if (result) {
         switch (result.type) {
@@ -106,6 +121,7 @@ export const handleSlashCommand = async (
             );
         }
       }
+      return LOCAL_SLASH_COMMAND_HANDLED;
     }
   }
 

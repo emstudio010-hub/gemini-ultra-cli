@@ -19,6 +19,8 @@ const metadata = JSON.parse(
   ),
 );
 const budgetMode = process.argv[4] === 'budget';
+const recoveryMode = process.argv[4] === 'recovery';
+let recoveryReady = false;
 const scratch = fs.mkdtempSync(
   path.join(os.tmpdir(), 'ultra-native-workflow-'),
 );
@@ -85,7 +87,9 @@ const server = createServer(async (req, res) => {
     });
     let message;
     if (role === 'main') {
-      if (results.length) {
+      if (recoveryMode && recoveryReady) {
+        message = { content: 'RECOVERY_CONTINUED' };
+      } else if (results.length) {
         assert.ok(
           results.some(
             (result) =>
@@ -159,6 +163,16 @@ const server = createServer(async (req, res) => {
           fs.writeFileSync(
             path.join(directory, 'current.json'),
             JSON.stringify({ id }),
+          );
+        }
+        if (recoveryMode) {
+          fs.writeFileSync(
+            path.join(directory, `${id}.budget.json`),
+            '{broken-budget',
+          );
+          fs.writeFileSync(
+            path.join(directory, 'current.json'),
+            '{broken-binding',
           );
         }
         message = call('run_agent_workflow', { workflow_id: id });
@@ -346,6 +360,71 @@ try {
     reportPath.replace(/\.json$/, '') + '-output.txt',
     stdout + '\nSTDERR\n' + stderr,
   );
+  const recoveryRuns = [];
+  let requestsBeforeContinue;
+  if (recoveryMode && recordFile) {
+    const runCommand = async (input) => {
+      child = spawn(
+        process.execPath,
+        [
+          entry,
+          '-y',
+          '-m',
+          'fixture-model',
+          '-p',
+          input,
+          '--output-format',
+          'json',
+        ],
+        {
+          cwd: workspace,
+          env,
+          windowsHide: true,
+          stdio: ['ignore', 'pipe', 'pipe'],
+        },
+      );
+      let output = '';
+      child.stdout.on('data', (chunk) => {
+        output += chunk;
+        if (output.length > 4 * 1024 * 1024) child.kill();
+      });
+      child.stderr.on('data', (chunk) => {
+        output += chunk;
+        if (output.length > 4 * 1024 * 1024) child.kill();
+      });
+      const commandTimer = setTimeout(() => {
+        timedOut = true;
+        child.kill();
+      }, 60000);
+      let commandExit;
+      try {
+        commandExit = await new Promise((resolve, reject) => {
+          child.once('error', reject);
+          child.once('close', resolve);
+        });
+      } finally {
+        clearTimeout(commandTimer);
+      }
+      recoveryRuns.push({
+        input,
+        exitCode: commandExit,
+        output,
+        requestCount: requests.length,
+      });
+      return commandExit;
+    };
+    await runCommand('/boost cancel');
+    await runCommand('/boost resume');
+    requestsBeforeContinue = requests.length;
+    recoveryReady = true;
+    await runCommand(
+      'Continue ordinary conversation after the cancelled fixture.',
+    );
+    fs.appendFileSync(
+      reportPath.replace(/\.json$/, '') + '-output.txt',
+      '\nLOCAL RECOVERY\n' + JSON.stringify(recoveryRuns, null, 2),
+    );
+  }
   const record =
     recordFile && fs.existsSync(recordFile)
       ? JSON.parse(fs.readFileSync(recordFile, 'utf8'))
@@ -355,48 +434,84 @@ try {
     budgetFile && fs.existsSync(budgetFile)
       ? JSON.parse(fs.readFileSync(budgetFile, 'utf8'))
       : undefined;
-  const checks = budgetMode
+  const checks = recoveryMode
     ? {
-        boundedExit: exitCode === 1 && !timedOut,
+        initialFailureBounded: exitCode === 1 && !timedOut,
         noFixtureMismatch: failures.length === 0,
-        nativeBlock: record?.phase === 'blocked' && budget?.state === 'paused',
-        exactDispatchCap: budget?.requests === 2 && requests.length === 3,
-        noWriterStarted: !requests.some((request) => request.role === 'coder'),
-        noArtifact: !fs.existsSync(artifact),
-        errorRetained:
-          record?.stage.includes('model dispatch budget exhausted') &&
-          (stdout + stderr).includes('model dispatch budget exhausted'),
-        partialReportsRetained:
-          record?.reports.length > 0 &&
-          record.reports.every((report) =>
-            report.text.includes('model dispatch budget exhausted'),
+        localCancel:
+          recoveryRuns[0]?.exitCode === 0 &&
+          recoveryRuns[0]?.requestCount === 1,
+        oldResumeRejected:
+        recoveryRuns[1]?.exitCode === 42 &&
+          recoveryRuns[1]?.requestCount === 1 &&
+          recoveryRuns[1].output.includes(
+            'Historical workflow usage is unavailable',
           ),
+        cancelledWithUnknownUsage:
+          record?.phase === 'cancelled' &&
+          record.budgetUnavailable === true &&
+          budget?.accountingUnknown === true &&
+          budget.state === 'closed',
+        ledgerPreserved:
+          !!budget?.recoveryPath &&
+          fs.readFileSync(budget.recoveryPath, 'utf8') === '{broken-budget',
+        bindingPreserved:
+          !!budget?.bindingRecoveryPath &&
+          fs.readFileSync(budget.bindingRecoveryPath, 'utf8') ===
+            '{broken-binding',
+        normalConversationRestored:
+          recoveryRuns[2]?.exitCode === 0 &&
+          recoveryRuns[2].output.includes('RECOVERY_CONTINUED'),
+        onlyExplicitConversationUsesModel:
+          requestsBeforeContinue === 1 && requests.length === 2,
+        noArtifact: !fs.existsSync(artifact),
       }
-    : {
-        normalExit: exitCode === 0 && !timedOut,
-        noFixtureMismatch: failures.length === 0,
-        nativeCompletion:
-          record?.phase === 'completed' &&
-          record.milestones.every((item) => item.completed),
-        allFiveStages:
-          record?.reports.length === 5 &&
-          record.reports.every((item) => item.completed),
-        independentFinalAudit: record?.reports.at(-1)?.stage === 'final audit',
-        exactDelivery:
-          fs.existsSync(artifact) &&
-          /^answer=42\r?\n$/.test(fs.readFileSync(artifact, 'utf8')),
-        seedUnchanged:
-          fs.readFileSync(source, 'utf8') ===
-          'Required deliverable: answer=42\n',
-        finalText: stdout.includes('NATIVE_WORKFLOW_DELIVERED'),
-        twelveRequests: requests.length === 12,
-        cumulativeBudget:
-          budget?.state === 'closed' &&
-          budget.requests === 10 &&
-          budget.implementationRounds[0] === 1,
-      };
+    : budgetMode
+      ? {
+          boundedExit: exitCode === 1 && !timedOut,
+          noFixtureMismatch: failures.length === 0,
+          nativeBlock:
+            record?.phase === 'blocked' && budget?.state === 'paused',
+          exactDispatchCap: budget?.requests === 2 && requests.length === 3,
+          noWriterStarted: !requests.some(
+            (request) => request.role === 'coder',
+          ),
+          noArtifact: !fs.existsSync(artifact),
+          errorRetained:
+            record?.stage.includes('model dispatch budget exhausted') &&
+            (stdout + stderr).includes('model dispatch budget exhausted'),
+          partialReportsRetained:
+            record?.reports.length > 0 &&
+            record.reports.every((report) =>
+              report.text.includes('model dispatch budget exhausted'),
+            ),
+        }
+      : {
+          normalExit: exitCode === 0 && !timedOut,
+          noFixtureMismatch: failures.length === 0,
+          nativeCompletion:
+            record?.phase === 'completed' &&
+            record.milestones.every((item) => item.completed),
+          allFiveStages:
+            record?.reports.length === 5 &&
+            record.reports.every((item) => item.completed),
+          independentFinalAudit:
+            record?.reports.at(-1)?.stage === 'final audit',
+          exactDelivery:
+            fs.existsSync(artifact) &&
+            /^answer=42\r?\n$/.test(fs.readFileSync(artifact, 'utf8')),
+          seedUnchanged:
+            fs.readFileSync(source, 'utf8') ===
+            'Required deliverable: answer=42\n',
+          finalText: stdout.includes('NATIVE_WORKFLOW_DELIVERED'),
+          twelveRequests: requests.length === 12,
+          cumulativeBudget:
+            budget?.state === 'closed' &&
+            budget.requests === 10 &&
+            budget.implementationRounds[0] === 1,
+        };
   const report = {
-    mode: budgetMode ? 'budget' : 'delivery',
+    mode: recoveryMode ? 'recovery' : budgetMode ? 'budget' : 'delivery',
     passed: Object.values(checks).every(Boolean),
     version: metadata.version,
     platform: process.platform,
@@ -409,12 +524,15 @@ try {
     failures,
     workflow: record,
     budget,
+    ...(recoveryMode ? { recoveryRuns } : {}),
     actualDeliveryHex: fs.existsSync(artifact)
       ? fs.readFileSync(artifact).toString('hex')
       : null,
-    scope: budgetMode
-      ? 'Actual native workflow and child executors stop at two cumulative model dispatches; one initial coordinator request seeds the isolated state before accounting starts. Partial evidence remains blocked, no writer starts, CLI exits 1 without observer termination. Loopback fixture, not a paid provider task or delivery success.'
-      : 'Actual installed CLI and native workflow tool, real child executors, isolated HTTP model fixture. Two read-only researchers, one writer, milestone auditor and final auditor; actual file read/write and persisted stages. Not live-provider autonomy, UI keyboard interaction, deep reverse-engineering or production acceptance.',
+    scope: recoveryMode
+      ? 'Isolated generated corrupt ledger and binding: initial CLI failure, actual headless /boost cancel without a model call, old resume rejected without a model call, then ordinary conversation restored. Both corrupt files preserved byte for byte. Two loopback requests total; no real provider, user state or completed deliverable.'
+      : budgetMode
+        ? 'Actual native workflow and child executors stop at two cumulative model dispatches; one initial coordinator request seeds the isolated state before accounting starts. Partial evidence remains blocked, no writer starts, CLI exits 1 without observer termination. Loopback fixture, not a paid provider task or delivery success.'
+        : 'Actual installed CLI and native workflow tool, real child executors, isolated HTTP model fixture. Two read-only researchers, one writer, milestone auditor and final auditor; actual file read/write and persisted stages. Not live-provider autonomy, UI keyboard interaction, deep reverse-engineering or production acceptance.',
   };
   fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));

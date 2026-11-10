@@ -1190,6 +1190,24 @@ describe('runNonInteractive', () => {
     handleSlashCommandSpy.mockRestore();
   });
 
+  it('finishes a handled local slash command without sending its input to a model', async () => {
+    const commands = await import('./nonInteractiveCliCommands.js');
+    const spy = vi
+      .spyOn(commands, 'handleSlashCommand')
+      .mockResolvedValue(commands.LOCAL_SLASH_COMMAND_HANDLED);
+    try {
+      await runNonInteractive({
+        config: mockConfig,
+        settings: mockSettings,
+        input: '/boost cancel',
+        prompt_id: 'local-cancel',
+      });
+      expect(mockGeminiClient.sendMessageStream).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('should handle cancellation (Ctrl+C)', async () => {
     // Mock isTTY and setRawMode safely
     const originalIsTTY = process.stdin.isTTY;

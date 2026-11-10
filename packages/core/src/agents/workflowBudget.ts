@@ -27,6 +27,9 @@ const budgetSchema = limitsSchema.extend({
     .max(12)
     .default([]),
   stopReason: z.string().default(''),
+  accountingUnknown: z.boolean().default(false),
+  recoveryPath: z.string().optional(),
+  bindingRecoveryPath: z.string().optional(),
 });
 export type WorkflowBudget = z.infer<typeof budgetSchema>;
 export type WorkflowBudgetLimits = z.infer<typeof limitsSchema>;
@@ -36,6 +39,61 @@ interface Actor {
 }
 const actors = new AsyncLocalStorage<Actor>();
 const controllers = new Map<string, AbortController>();
+class DamagedBudgetError extends Error {}
+const unavailable =
+  'Historical workflow usage is unavailable. The cancelled task cannot resume or receive a new budget; create a scoped successor task.';
+function isMissing(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === 'ENOENT'
+  );
+}
+function damaged(error: unknown): boolean {
+  return error instanceof DamagedBudgetError || isMissing(error);
+}
+function pointerPath(root: string): string {
+  return path.join(root, 'agent-workflows', 'current.json');
+}
+function readJson(file: string, limit: number, message: string): unknown {
+  if (fs.statSync(file).size > limit) throw new DamagedBudgetError(message);
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (error) {
+    if (error instanceof SyntaxError) throw new DamagedBudgetError(message);
+    throw error;
+  }
+}
+function binding(root: string): { id: string; ownerPid?: number } | undefined {
+  const file = pointerPath(root);
+  if (!fs.existsSync(file)) return undefined;
+  const parsed = z
+    .object({
+      id: z.string().uuid(),
+      ownerPid: z.number().int().positive().optional(),
+    })
+    .safeParse(
+      readJson(
+        file,
+        4096,
+        'Workflow binding is damaged; cancel the affected workflow locally to preserve it.',
+      ),
+    );
+  if (!parsed.success)
+    throw new DamagedBudgetError(
+      'Workflow binding is damaged; cancel the affected workflow locally to preserve it.',
+    );
+  return parsed.data;
+}
+function quarantine(file: string, destination: string): void {
+  fs.renameSync(file, destination);
+}
+function checkpoint(root: string, record: AgentWorkflow): void {
+  record.budgetVersion = 1;
+  record.budgetOwnerPid = process.pid;
+  write(path.join(root, 'agent-workflows', `${record.id}.json`), record);
+}
 function budgetPath(root: string, id: string): string {
   z.string().uuid().parse(id);
   return path.join(root, 'agent-workflows', `${id}.budget.json`);
@@ -57,11 +115,34 @@ function save(root: string, budget: WorkflowBudget): void {
 }
 function read(root: string, id: string): WorkflowBudget {
   const file = budgetPath(root, id);
-  if (fs.statSync(file).size > 16384)
-    throw new Error('Workflow budget is too large.');
-  return budgetSchema.parse(JSON.parse(fs.readFileSync(file, 'utf8')));
+  const value = readJson(
+    file,
+    16384,
+    'Workflow budget is damaged; cancel it locally to preserve the original state.',
+  );
+  const parsed = budgetSchema.safeParse(value);
+  const fields = [
+    'maxRequests',
+    'maxFailedStages',
+    'maxImplementationRounds',
+    'state',
+    'requests',
+    'failedStages',
+    'implementationRounds',
+  ];
+  if (
+    !parsed.success ||
+    parsed.data.id !== id ||
+    typeof value !== 'object' ||
+    value === null ||
+    !fields.every((field) => Object.hasOwn(value, field))
+  )
+    throw new DamagedBudgetError(
+      'Workflow budget is damaged; cancel it locally to preserve the original state.',
+    );
+  return parsed.data;
 }
-function owns(budget: WorkflowBudget): void {
+function owns(budget: Pick<WorkflowBudget, 'ownerPid'>): void {
   if (budget.ownerPid === process.pid) return;
   try {
     process.kill(budget.ownerPid, 0);
@@ -83,7 +164,23 @@ export function workflowBudget(
   root: string,
   record: AgentWorkflow,
 ): WorkflowBudget {
-  if (fs.existsSync(budgetPath(root, record.id))) return read(root, record.id);
+  if (fs.existsSync(budgetPath(root, record.id))) {
+    const budget = read(root, record.id);
+    if (
+      (!record.budgetVersion || !record.budgetOwnerPid) &&
+      budget.ownerPid === process.pid
+    )
+      checkpoint(root, record);
+    return budget;
+  }
+  if (
+    record.budgetVersion ||
+    record.budgetUnavailable ||
+    binding(root)?.id === record.id
+  )
+    throw new DamagedBudgetError(
+      'Tracked workflow budget is missing; cancel the task locally. Its old usage must not be reset.',
+    );
   const rounds = record.milestones.map(() => 0);
   for (const report of record.reports) {
     const match = /^implement (\d+)\.(\d+)$/.exec(report.stage);
@@ -112,7 +209,19 @@ export function workflowBudget(
     ).length,
   });
   save(root, budget);
+  checkpoint(root, record);
   return budget;
+}
+export function workflowBudgetSummary(root: string, record: AgentWorkflow) {
+  const budget = workflowBudget(root, record);
+  return budget.accountingUnknown
+    ? {
+        ...budget,
+        requests: null,
+        failedStages: null,
+        implementationRounds: null,
+      }
+    : budget;
 }
 export function assertWorkflowBudgetOwnership(
   root: string,
@@ -162,6 +271,7 @@ export function assertWorkflowBudget(
   milestone?: number,
 ): WorkflowBudget {
   const budget = read(root, id);
+  if (budget.accountingUnknown) throw new Error(unavailable);
   if (budget.state !== 'active')
     throw new Error(
       budget.stopReason || 'Explicit workflow resume is required.',
@@ -176,6 +286,8 @@ export function activateWorkflowBudget(
 ): void {
   const budget = workflowBudget(root, record);
   owns(budget);
+  if (record.budgetUnavailable || budget.accountingUnknown)
+    throw new Error(unavailable);
   const next = record.approved
     ? record.milestones.findIndex((item) => !item.completed)
     : -1;
@@ -185,15 +297,13 @@ export function activateWorkflowBudget(
   budget.state = 'active';
   budget.stopReason = '';
   save(root, budget);
-  write(path.join(root, 'agent-workflows', 'current.json'), { id: record.id });
+  write(pointerPath(root), { id: record.id, ownerPid: process.pid });
+  if (!record.budgetVersion || record.budgetOwnerPid !== process.pid)
+    checkpoint(root, record);
 }
 export function hasOpenWorkflowBudget(root: string): boolean {
-  const pointer = path.join(root, 'agent-workflows', 'current.json');
-  if (!fs.existsSync(pointer)) return false;
-  const { id } = z
-    .object({ id: z.string().uuid() })
-    .parse(JSON.parse(fs.readFileSync(pointer, 'utf8')));
-  return read(root, id).state !== 'closed';
+  const pointer = binding(root);
+  return pointer ? read(root, pointer.id).state !== 'closed' : false;
 }
 export function setWorkflowBudget(
   root: string,
@@ -202,17 +312,70 @@ export function setWorkflowBudget(
 ): void {
   const budget = workflowBudget(root, record);
   owns(budget);
+  if (record.budgetUnavailable || budget.accountingUnknown)
+    throw new Error(unavailable);
   save(root, {
     ...budget,
     ...limitsSchema.parse(limits),
     ownerPid: process.pid,
   });
 }
-export function closeWorkflowBudget(root: string, record: AgentWorkflow): void {
-  const budget = workflowBudget(root, record);
+export function closeWorkflowBudget(
+  root: string,
+  record: AgentWorkflow,
+  recoverDamaged = false,
+): void {
+  let budget: WorkflowBudget;
+  try {
+    budget = workflowBudget(root, record);
+  } catch (error) {
+    if (!recoverDamaged || !damaged(error)) throw error;
+    if (record.budgetOwnerPid) owns({ ownerPid: record.budgetOwnerPid });
+    let pointer: ReturnType<typeof binding>;
+    try {
+      pointer = binding(root);
+    } catch (bindingError) {
+      if (!damaged(bindingError)) throw bindingError;
+    }
+    if (pointer?.id === record.id && pointer.ownerPid)
+      owns({ ownerPid: pointer.ownerPid });
+    const file = budgetPath(root, record.id);
+    const recoveryPath = fs.existsSync(file)
+      ? `${file}.corrupt-${randomUUID()}`
+      : record.budgetRecoveryPath;
+    record.budgetUnavailable = true;
+    record.budgetRecoveryPath = recoveryPath;
+    checkpoint(root, record); // Persist the unknown-usage marker before moving any evidence.
+    if (recoveryPath && fs.existsSync(file)) quarantine(file, recoveryPath);
+    budget = budgetSchema.parse({
+      id: record.id,
+      mode: record.mode,
+      ownerPid: process.pid,
+      state: 'closed',
+      accountingUnknown: true,
+      recoveryPath,
+      stopReason: unavailable,
+    });
+  }
   owns(budget);
   budget.state = 'closed';
   save(root, budget);
+  if (recoverDamaged) {
+    let pointer: ReturnType<typeof binding>;
+    try {
+      pointer = binding(root);
+    } catch (error) {
+      if (!damaged(error)) throw error;
+      const file = pointerPath(root);
+      const backup = `${file}.corrupt-${randomUUID()}`;
+      quarantine(file, backup);
+      budget.bindingRecoveryPath = backup;
+      save(root, budget);
+      write(file, { id: record.id, ownerPid: process.pid });
+    }
+    if (pointer?.id === record.id)
+      write(pointerPath(root), { id: record.id, ownerPid: process.pid });
+  }
 }
 export function reserveWorkflowRound(
   root: string,
@@ -254,11 +417,8 @@ export function consumeWorkflowRequest(root: string | undefined): void {
   if (!stateRoot) return;
   let id = actor?.id;
   if (!id) {
-    const pointer = path.join(stateRoot, 'agent-workflows', 'current.json');
-    if (!fs.existsSync(pointer)) return;
-    id = z
-      .object({ id: z.string().uuid() })
-      .parse(JSON.parse(fs.readFileSync(pointer, 'utf8'))).id;
+    id = binding(stateRoot)?.id;
+    if (!id) return;
   }
   const budget = read(stateRoot, id);
   if (budget.ownerPid !== process.pid) return;

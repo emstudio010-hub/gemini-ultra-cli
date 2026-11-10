@@ -11,6 +11,7 @@ import { z } from 'zod';
 import { latestSwarm } from './swarm.js';
 import {
   workflowBudget,
+  workflowBudgetSummary,
   activateWorkflowBudget,
   assertWorkflowBudget,
   assertWorkflowBudgetOwnership,
@@ -44,6 +45,10 @@ const workflowSchema = workflowPlanSchema.extend({
   ]),
   previousApprovalMode: z.string(),
   approved: z.boolean().default(false),
+  budgetVersion: z.literal(1).optional(),
+  budgetOwnerPid: z.number().int().positive().optional(),
+  budgetUnavailable: z.boolean().optional(),
+  budgetRecoveryPath: z.string().optional(),
   updatedAt: z.string(),
   stage: z.string().default(''),
   reports: z
@@ -92,7 +97,7 @@ export function agentWorkflowSummary(
       text: report.text.slice(0, 4000),
       truncated: report.text.length > 4000,
     })),
-    budget: workflowBudget(projectTempDir, record),
+    budget: workflowBudgetSummary(projectTempDir, record),
   };
 }
 export function readAgentWorkflow(
@@ -184,7 +189,6 @@ export function cancelAgentWorkflow(
   id: string,
 ): AgentWorkflow {
   const record = readAgentWorkflow(projectTempDir, id);
-  if (record.phase === 'completed') return record;
   if (active.has(workflowDir(projectTempDir))) {
     // The runner owns state until its children have settled.
     const running = active.get(workflowDir(projectTempDir))!;
@@ -197,8 +201,8 @@ export function cancelAgentWorkflow(
     throw new Error(
       'Workflow is running in another CLI process; cancel it from that session.',
     );
-  closeWorkflowBudget(projectTempDir, record);
-  record.phase = 'cancelled';
+  closeWorkflowBudget(projectTempDir, record, true);
+  if (record.phase !== 'completed') record.phase = 'cancelled';
   saveAgentWorkflow(projectTempDir, record);
   return record;
 }
@@ -409,7 +413,7 @@ export async function runAgentWorkflow(
       (error instanceof Error ? error.message : 'Workflow execution failed.');
     saveAgentWorkflow(projectTempDir, record);
     if (record.phase === 'cancelled')
-      closeWorkflowBudget(projectTempDir, record);
+      closeWorkflowBudget(projectTempDir, record, true);
     return record;
   } finally {
     active.delete(directory);
