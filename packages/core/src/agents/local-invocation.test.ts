@@ -454,8 +454,11 @@ describe('LocalSubagentInvocation', () => {
       expect(display.result).toBe('Done');
     });
 
-    it('should handle executor run failure', async () => {
-      const error = new Error('Model failed during execution.');
+    it.each([
+      'Model failed during execution.',
+      'Provider returned AbortedQuota: remaining credits exhausted.',
+    ])('should handle executor run failure: %s', async (message) => {
+      const error = new Error(message);
       mockExecutorInstance.run.mockRejectedValue(error);
 
       const result = await invocation.execute({
@@ -469,6 +472,7 @@ describe('LocalSubagentInvocation', () => {
       );
       const display = result.returnDisplay as SubagentProgress;
       expect(display.isSubagentProgress).toBe(true);
+      expect(display.state).toBe(SubagentState.ERROR);
       expect(display.recentActivity).toContainEqual(
         expect.objectContaining({
           type: 'thought',
@@ -500,24 +504,27 @@ describe('LocalSubagentInvocation', () => {
       );
     });
 
-    it('should handle abortion signal during execution', async () => {
-      const abortError = new Error('Aborted');
-      abortError.name = 'AbortError';
-      mockExecutorInstance.run.mockRejectedValue(abortError);
+    it.each(['AbortError', 'Error'])(
+      'should handle abortion signal during execution: %s',
+      async (name) => {
+        const abortError = new Error('Operator requested stop');
+        abortError.name = name;
+        mockExecutorInstance.run.mockRejectedValue(abortError);
 
-      const controller = new AbortController();
-      const executePromise = invocation.execute({
-        abortSignal: controller.signal,
-        updateOutput,
-      });
-      controller.abort();
-      await expect(executePromise).rejects.toThrow('Aborted');
+        const controller = new AbortController();
+        const executePromise = invocation.execute({
+          abortSignal: controller.signal,
+          updateOutput,
+        });
+        controller.abort(abortError);
+        await expect(executePromise).rejects.toThrow('Operator requested stop');
 
-      expect(mockExecutorInstance.run).toHaveBeenCalledWith(
-        params,
-        controller.signal,
-      );
-    });
+        expect(mockExecutorInstance.run).toHaveBeenCalledWith(
+          params,
+          controller.signal,
+        );
+      },
+    );
 
     it('should throw an error and bubble cancellation when execution returns ABORTED', async () => {
       const mockOutput = {

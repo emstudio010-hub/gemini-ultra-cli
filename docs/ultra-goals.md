@@ -417,3 +417,12 @@
 - E-095：本机双命令preview.25，入口f29b03b70a2a865576132bb34f636f860977e51d8f898e4ca0244e115aac9a95匹配Windows工件，已有缓存offline安装12秒。安装后6请求/3,929ms同ID恢复/read_file后自动压缩两次摘要、快照持久化并用于最终请求通过；文件与正文正确，无额外API容量字段。均fixture，没有付费模型调用。
 - 受影响文件严格ESLint、格式及核心/CLI类型构建通过；交接写入源码docs、工程目录和Obsidian，goal
   active。WI-048原长任务交付继续未验收；不以本地压缩流程通过替代真实摘要质量和复杂逆向。
+
+## 2026-11-10 有界压缩续接与取消分类
+
+- E-096：preview.25当前真实服务原生恢复E-077同ID、原八份源码和一致性笔记库，隔离容量64000/阈值0.5/输出8192，180秒观察器结束进程，180,185ms，无最终JSON/报告。前两次非流式压缩请求明确UND_ERR_HEADERS_TIMEOUT，来自隔离45000ms响应头设置；第三次HTTP200/36,703ms返回7,566字符首轮摘要，复核未完成，未持久化新快照。不把观察器截止当CLI自行崩溃。
+- 原checkpoint前缀和SHA不变，保存会话header保持原ID，原note整行比较一致、源码及真实供应商配置未变。原aggregate因缺最终JSON将sameSessionId/twoCompressorRequests置false，独立analysis从保存数据核实会话连续性；不将缺统计解释为未开始复核。general.maxAttempts=2仅限制主聊天，工具性BaseLlmClient默认5次，非全局2请求上限。已完成响应报告32,528
+  Token；超时及在途请求用量未知，不按0计费。
+- E-097/F-030：复用原researcher的Aborted子串候选，在当前两个本地调用入口确认普通Error文字含Aborted会误发CANCELLED并抛出。2个定向对照修前失败、正常错误2项通过；现按调用方signal.aborted或标准AbortError分类，错误正文不触发取消。批次catch有独立分类，不据此宣称旧批次完成/失败数量错误。
+- 默认重试策略、原超时/取消终止原因未改；有界真实续接失败保留，不再原样重跑。10项必要选择检查、严格lint和核心/CLI类型构建通过；新增取消断言首次缺SubagentState导入，原失败记录保留，补齐后全部通过，preview.26准备交付；goal
+  active。

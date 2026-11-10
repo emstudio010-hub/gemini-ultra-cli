@@ -331,8 +331,8 @@ ${output.result}`;
       debugLogger.error(`Subagent '${this.definition.name}' failed:`, error);
 
       const isAbort =
-        (error instanceof Error && error.name === 'AbortError') ||
-        errorMessage.includes('Aborted');
+        signal.aborted ||
+        (error instanceof Error && error.name === 'AbortError');
 
       // Mark any running items as error/cancelled
       for (const item of recentActivity) {

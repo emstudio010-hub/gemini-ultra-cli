@@ -7,6 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   AgentTerminateMode,
+  SubagentState,
   SubagentActivityErrorType,
   SUBAGENT_REJECTED_ERROR_PREFIX,
   SUBAGENT_CANCELLED_ERROR_MESSAGE,
@@ -537,8 +538,11 @@ describe('LocalSessionInvocation', () => {
       ).toBe(false);
     });
 
-    it('should handle executor errors', async () => {
-      const error = new Error('Model failed during execution.');
+    it.each([
+      'Model failed during execution.',
+      'Provider returned AbortedQuota: remaining credits exhausted.',
+    ])('should handle executor errors: %s', async (message) => {
+      const error = new Error(message);
       setupMockSession({ error });
       const params = { query: 'fail hard' };
       const signal = new AbortController().signal;
@@ -567,6 +571,28 @@ describe('LocalSessionInvocation', () => {
           content: `Error: ${error.message}`,
           status: 'error',
         }),
+      );
+    });
+
+    it('preserves cancellation with a plain Error signal reason', async () => {
+      const error = new Error('Operator requested stop');
+      setupMockSession({ error });
+      const controller = new AbortController();
+      const updateOutput = vi.fn();
+      const invocation = new LocalSessionInvocation(
+        testDefinition,
+        mockContext,
+        { query: 'cancel' },
+        mockMessageBus,
+      );
+      const running = invocation.execute({
+        abortSignal: controller.signal,
+        updateOutput,
+      });
+      controller.abort(error);
+      await expect(running).rejects.toThrow('Operator requested stop');
+      expect(updateOutput).toHaveBeenLastCalledWith(
+        expect.objectContaining({ state: SubagentState.CANCELLED }),
       );
     });
 
