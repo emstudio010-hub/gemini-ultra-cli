@@ -15,7 +15,7 @@ v24.22.2；校验场景使用本地模型fixture，真实逆向工具需另行�
 Release 下载），执行：
 
 ```sh
-npm install -g ./gemini-ultra-cli-1.0.0-preview.13.tgz
+npm install -g ./gemini-ultra-cli-1.0.0-preview.14.tgz
 gemini-ultra --version
 gemini-ultra
 ```
@@ -72,13 +72,13 @@ Release。每个安装包附带 `.sha256` 文件，便于传输后核对。
 Windows PowerShell 校验安装包：
 
 ```powershell
-Get-FileHash ./gemini-ultra-cli-1.0.0-preview.13.tgz -Algorithm SHA256
-Get-Content ./gemini-ultra-cli-1.0.0-preview.13.tgz.sha256
+Get-FileHash ./gemini-ultra-cli-1.0.0-preview.14.tgz -Algorithm SHA256
+Get-Content ./gemini-ultra-cli-1.0.0-preview.14.tgz.sha256
 ```
 
 macOS 使用
-`shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.13.tgz.sha256`；Linux 使用
-`sha256sum -c gemini-ultra-cli-1.0.0-preview.13.tgz.sha256`。
+`shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.14.tgz.sha256`；Linux 使用
+`sha256sum -c gemini-ultra-cli-1.0.0-preview.14.tgz.sha256`。
 
 ## 自定义逆向工具路径
 
@@ -217,3 +217,14 @@ Schema 标准小写。
 
 仅遗漏
 `complete_task`、且未耗尽执行额度时，补交有效结果仍可正常完成。用户在最后一轮取消时保持取消状态，不会记成成功或限制失败。
+
+## 内置快速搜索
+
+安装包内置固定版本 Ripgrep
+15.2.0，Windows、Linux、macOS 的 x64/ARM64 文件随包提供；搜索时自动选择本机版本，无需另装
+`rg`。构建时按清单校验二进制，包内保留来源、SHA-256 和许可证。Windows 生成的包也保留 Unix 可执行权限，便于跨系统传递安装包。
+
+运行时不会下载二进制或为此扫描文件。`grep_search`
+仍遵循工作区与忽略规则；显式关闭 `tools.useRipgrep`
+时保留原搜索回退。其他逆向工具仍通过 `/drill setup`
+在本机配置。实际运行的系统/架构范围以目标池记录为准。

@@ -4,143 +4,110 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * @fileoverview This script downloads pre-built ripgrep binaries for all supported
- * architectures and platforms. These binaries are checked into the repository
- * under packages/core/vendor/ripgrep.
- *
- * Maintainers should periodically run this script to upgrade the version
- * of ripgrep being distributed.
- *
- * Usage: npx tsx scripts/download-ripgrep-binaries.ts
- */
-
-import fs from 'node:fs';
-import fsPromises from 'node:fs/promises';
-import path from 'node:path';
-import { pipeline } from 'node:stream/promises';
-import { fileURLToPath } from 'node:url';
-import { createWriteStream } from 'node:fs';
-import { Readable } from 'node:stream';
-import type { ReadableStream } from 'node:stream/web';
+// Maintainer-only recovery of pinned assets. Packaging and installation do not
+// download a native executable at runtime.
+import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { z } from 'zod';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const CORE_VENDOR_DIR = path.join(__dirname, '../packages/core/vendor/ripgrep');
-const VERSION = 'v13.0.0-10';
+const root = fileURLToPath(
+  new URL('../packages/core/vendor/ripgrep/', import.meta.url),
+);
+const manifest = z
+  .object({
+    version: z.string().regex(/^\d+\.\d+\.\d+$/),
+    binaries: z.array(
+      z.object({
+        file: z.string().regex(/^rg-(darwin|linux|win32)-(arm64|x64)(\.exe)?$/),
+        sha256: z.string().regex(/^[a-f0-9]{64}$/),
+        archiveSha256: z.string().regex(/^[a-f0-9]{64}$/),
+        source: z.string().url(),
+        member: z.string().regex(/^ripgrep-[a-zA-Z0-9._-]+\/rg(\.exe)?$/),
+      }),
+    ),
+  })
+  .parse(JSON.parse(await readFile(path.join(root, 'manifest.json'), 'utf8')));
+const hash = (bytes: Uint8Array) =>
+  createHash('sha256').update(bytes).digest('hex');
+const scratch = await mkdtemp(
+  path.join(os.tmpdir(), 'ultra-ripgrep-download-'),
+);
+const licenses = ['COPYING', 'LICENSE-MIT', 'UNLICENSE'];
 
-interface Target {
-  platform: string;
-  arch: string;
-  file: string;
+function extract(archive: string, member: string): Buffer {
+  const isPosixZip = archive.endsWith('.zip') && process.platform !== 'win32';
+  return execFileSync(
+    isPosixZip ? 'unzip' : 'tar',
+    isPosixZip ? ['-p', archive, member] : ['-xOf', archive, member],
+    { maxBuffer: 16 * 1024 * 1024 },
+  );
 }
 
-const targets: Target[] = [
-  { platform: 'darwin', arch: 'arm64', file: 'aarch64-apple-darwin.tar.gz' },
-  { platform: 'darwin', arch: 'x64', file: 'x86_64-apple-darwin.tar.gz' },
-  {
-    platform: 'linux',
-    arch: 'arm64',
-    file: 'aarch64-unknown-linux-gnu.tar.gz',
-  },
-  { platform: 'linux', arch: 'x64', file: 'x86_64-unknown-linux-musl.tar.gz' },
-  { platform: 'win32', arch: 'x64', file: 'x86_64-pc-windows-msvc.zip' },
-];
-
-async function downloadBinary() {
-  await fsPromises.mkdir(CORE_VENDOR_DIR, { recursive: true });
-
-  for (const target of targets) {
-    const url = `https://github.com/microsoft/ripgrep-prebuilt/releases/download/${VERSION}/ripgrep-${VERSION}-${target.file}`;
-    const archivePath = path.join(CORE_VENDOR_DIR, target.file);
-    const binName = `rg-${target.platform}-${target.arch}${target.platform === 'win32' ? '.exe' : ''}`;
-    const finalBinPath = path.join(CORE_VENDOR_DIR, binName);
-
-    if (fs.existsSync(finalBinPath)) {
-      console.log(`[Cache] ${binName} already exists.`);
+try {
+  await mkdir(root, { recursive: true });
+  let missingLicense = false;
+  for (const file of licenses) {
+    try {
+      await readFile(path.join(root, file));
+    } catch {
+      missingLicense = true;
+    }
+  }
+  for (const binary of manifest.binaries) {
+    const prefix = `https://github.com/BurntSushi/ripgrep/releases/download/${manifest.version}/`;
+    if (!binary.source.startsWith(prefix))
+      throw new Error('Unexpected ripgrep source');
+    const destination = path.join(root, binary.file);
+    let cached = false;
+    try {
+      cached = hash(await readFile(destination)) === binary.sha256;
+    } catch {
+      /* Download missing assets. */
+    }
+    if (cached && !missingLicense) {
+      if (process.platform !== 'win32') await chmod(destination, 0o755);
+      console.log(`[Verified cache] ${binary.file}`);
       continue;
     }
-
-    console.log(`[Download] ${url} -> ${archivePath}`);
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch ${url}: ${response.statusText}`);
-    }
-
-    if (!response.body) {
-      throw new Error(`Response body is null for ${url}`);
-    }
-
-    const fileStream = createWriteStream(archivePath);
-
-    // Node 18+ global fetch response.body is a ReadableStream (web stream)
-    // pipeline(Readable.fromWeb(response.body), fileStream) works in Node 18+
-    await pipeline(
-      Readable.fromWeb(response.body as ReadableStream),
-      fileStream,
+    const response = await fetch(binary.source, {
+      signal: AbortSignal.timeout(60_000),
+    });
+    if (!response.ok)
+      throw new Error(`Ripgrep download failed: HTTP ${response.status}`);
+    const archiveBytes = new Uint8Array(await response.arrayBuffer());
+    if (hash(archiveBytes) !== binary.archiveSha256)
+      throw new Error('Ripgrep archive checksum mismatch');
+    const archive = path.join(
+      scratch,
+      path.basename(new URL(binary.source).pathname),
     );
-
-    console.log(`[Extract] Extracting ${archivePath}...`);
-    // Extract using shell commands for simplicity
-    if (target.file.endsWith('.tar.gz')) {
-      execFileSync('tar', ['-xzf', archivePath, '-C', CORE_VENDOR_DIR]);
-      // Microsoft's ripgrep release extracts directly to `rg` inside the current directory sometimes
-      const sourceBin = path.join(CORE_VENDOR_DIR, 'rg');
-      if (fs.existsSync(sourceBin)) {
-        await fsPromises.rename(sourceBin, finalBinPath);
-      } else {
-        // Fallback for sub-directory if it happens
-        const extractedDirName = `ripgrep-${VERSION}-${target.file.replace('.tar.gz', '')}`;
-        const fallbackSourceBin = path.join(
-          CORE_VENDOR_DIR,
-          extractedDirName,
-          'rg',
+    await writeFile(archive, archiveBytes);
+    const bytes = extract(archive, binary.member);
+    if (hash(bytes) !== binary.sha256)
+      throw new Error(`Ripgrep binary checksum mismatch: ${binary.file}`);
+    await writeFile(destination, bytes);
+    if (process.platform !== 'win32') await chmod(destination, 0o755);
+    if (missingLicense) {
+      for (const file of licenses)
+        await writeFile(
+          path.join(root, file),
+          extract(archive, binary.member.replace(/rg(\.exe)?$/, file)),
         );
-        if (fs.existsSync(fallbackSourceBin)) {
-          await fsPromises.rename(fallbackSourceBin, finalBinPath);
-          await fsPromises.rm(path.join(CORE_VENDOR_DIR, extractedDirName), {
-            recursive: true,
-            force: true,
-          });
-        } else {
-          throw new Error(
-            `Could not find extracted 'rg' binary for ${target.platform} ${target.arch}`,
-          );
-        }
-      }
-    } else if (target.file.endsWith('.zip')) {
-      execFileSync('unzip', ['-o', '-q', archivePath, '-d', CORE_VENDOR_DIR]);
-      const sourceBin = path.join(CORE_VENDOR_DIR, 'rg.exe');
-      if (fs.existsSync(sourceBin)) {
-        await fsPromises.rename(sourceBin, finalBinPath);
-      } else {
-        const extractedDirName = `ripgrep-${VERSION}-${target.file.replace('.zip', '')}`;
-        const fallbackSourceBin = path.join(
-          CORE_VENDOR_DIR,
-          extractedDirName,
-          'rg.exe',
-        );
-        if (fs.existsSync(fallbackSourceBin)) {
-          await fsPromises.rename(fallbackSourceBin, finalBinPath);
-          await fsPromises.rm(path.join(CORE_VENDOR_DIR, extractedDirName), {
-            recursive: true,
-            force: true,
-          });
-        } else {
-          throw new Error(
-            `Could not find extracted 'rg.exe' binary for ${target.platform} ${target.arch}`,
-          );
-        }
-      }
+      missingLicense = false;
     }
-
-    // Clean up archive
-    await fsPromises.unlink(archivePath);
-    console.log(`[Success] Saved to ${finalBinPath}`);
+    console.log(`[Verified download] ${binary.file}`);
   }
+} finally {
+  await rm(scratch, { recursive: true, force: true });
 }
-
-downloadBinary().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});

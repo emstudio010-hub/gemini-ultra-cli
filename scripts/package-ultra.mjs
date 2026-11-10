@@ -5,6 +5,7 @@ import {
   writeFile,
   access,
   readdir,
+  rename,
 } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -12,11 +13,15 @@ import process from 'node:process';
 import console from 'node:console';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { documentationFilter } from './ultra-release-assets.mjs';
+import { createRequire } from 'node:module';
+import {
+  copyRipgrepAssets,
+  documentationFilter,
+} from './ultra-release-assets.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.chdir(root);
-const version = process.env.GEMINI_ULTRA_RELEASE_VERSION || '1.0.0-preview.13';
+const version = process.env.GEMINI_ULTRA_RELEASE_VERSION || '1.0.0-preview.14';
 if (!/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/.test(version))
   throw new Error('Invalid release version');
 const runNode = (args, env = {}, cwd = root) =>
@@ -54,6 +59,10 @@ const graph = JSON.parse(await readFile('bundle/esbuild.json', 'utf8'));
 const bundleRoot = path.join(root, 'bundle');
 const bundleDest = path.join(staging, 'bundle');
 await mkdir(bundleDest, { recursive: true });
+const ripgrep = await copyRipgrepAssets(
+  path.join(root, 'packages/core/vendor/ripgrep'),
+  path.join(bundleDest, 'vendor/ripgrep'),
+);
 // Copy only this build's outputs. Never inherit files left in a developer's bundle/.
 for (const file of Object.keys(graph.outputs)) {
   const source = path.resolve(root, file);
@@ -104,7 +113,7 @@ await cp(
 );
 await writeFile(
   path.join(staging, 'THIRD-PARTY-NOTICES.md'),
-  '# Sources\n\nGemini CLI, Copyright Google LLC, Apache-2.0.\n\nMorphicons 2.0.2, Copyright Guillermo, MIT; see MORPHICONS-LICENSE.\n\nPrompt/rule and drill layout ideas reference YuJunZhiXue/dsh-purge 1.1.71: https://github.com/YuJunZhiXue/dsh-purge. No encrypted default prompt or host patches are included.\n',
+  `# Sources\n\nGemini CLI, Copyright Google LLC, Apache-2.0.\n\nMorphicons 2.0.2, Copyright Guillermo, MIT; see MORPHICONS-LICENSE.\n\nRipgrep ${ripgrep.version}, Copyright Andrew Gallant, MIT/Unlicense; see bundle/vendor/ripgrep/COPYING, LICENSE-MIT, UNLICENSE and manifest.json for the pinned official sources and checksums.\n\nPrompt/rule and drill layout ideas reference YuJunZhiXue/dsh-purge 1.1.71: https://github.com/YuJunZhiXue/dsh-purge. No encrypted default prompt or host patches are included.\n`,
 );
 // Preserve licenses of bundled dependencies instead of relying on development node_modules.
 const packageDirs = new Set();
@@ -201,6 +210,29 @@ execFileSync(
   { cwd: root, stdio: 'inherit' },
 );
 const archiveName = `gemini-ultra-cli-${version}.tgz`;
+// npm's tar implementation also normalizes executable modes when packaging on
+// Windows, where chmod cannot represent POSIX execute bits. Preserve npm's file
+// selection and change only the native binaries' modes in the final archive.
+const archivePath = path.join(output, archiveName);
+const executablePaths = new Set(
+  ripgrep.binaries.map(
+    (binary) => `package/bundle/vendor/ripgrep/${binary.file}`,
+  ),
+);
+const tar = createRequire(npmCli)('tar');
+const normalizedArchive = `${archivePath}.tmp`;
+tar.create(
+  {
+    file: normalizedArchive,
+    gzip: true,
+    sync: true,
+    onWriteEntry: (entry) => {
+      if (executablePaths.has(entry.path)) entry.mode = 0o755;
+    },
+  },
+  [`@${archivePath}`],
+);
+await rename(normalizedArchive, archivePath);
 const archiveHash = createHash('sha256')
   .update(await readFile(path.join(output, archiveName)))
   .digest('hex');

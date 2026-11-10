@@ -225,3 +225,11 @@
   `6c7ee252d3b9b72500d820c20ea030d9827f2bde8afa06a4c30f89ed74fda7fa`；macOS
   `8d994d5eaadc51503f04a6231302b989a84d9280bcf9eac87af0afcacbb60354`。
 - 下一阶段：核对安装包搜索性能。当前安装CLI提示Ripgrep不可用，源码发布脚本未见vendor/ripgrep拷贝；需确认实际工件、各平台二进制来源和解析路径，再修复，不扩大系统PATH信任范围。复杂真实逆向、多Agent长任务及长会话目标仍active。
+
+## 2026-11-10 搜索二进制分发缺口
+
+- F-015：源码有Ripgrep二进制，发布脚本未拷贝，安装后提示不可用并回退搜索。preview.13安装目录缺少bundle/vendor/ripgrep，定向核对记录installed-preview13-search-before.log；这是工件缺失，不是仅PATH设置问题。
+- 现发布包带六个平台/架构的官方Ripgrep15.2.0二进制、清单和许可证。构建核对二进制SHA-256，并将最终tgz中可执行权限固定为0755，避免Windows打包后Unix无法执行。运行时不增加下载、哈希扫描或扩大PATH信任。
+- 官方六份档案均已对照GitHub公布digest及各自.sha256核对；解出的二进制哈希写入清单。来源证据ripgrep-15.2-source-verification.json。维护下载脚本改为按固定清单恢复并验证档案和二进制。
+- 三平台既有安装链加入一次真实grep_search：检查清单与全部哈希，执行本机rg，再通过实际CLI搜索生成文本；不增加全量或冒烟测试。版本preview.14，构建和安装最终结果另记。
+- E-047/048：preview.13工件缺失已确认；官方15.2.0六档案及二进制来源核对通过。本地完整preview.14打包完成；424个tar条目的文件内容哈希与权限处理前一致，六个原生文件mode=0755。暂存bundle实际CLI搜索链通过，5次loopback请求、4工具成功、2,578ms，无Ripgrep回退；该项不是npm安装证据。首次异步tar重打包在Windows以未完成await退出，改用同一tar公开同步API后通过，原日志保留。

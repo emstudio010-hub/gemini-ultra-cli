@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { Buffer } from 'node:buffer';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   mkdtemp,
@@ -30,6 +30,36 @@ const packageRoot = path.dirname(path.dirname(entry));
 const metadata = JSON.parse(
   await readFile(path.join(packageRoot, 'package.json'), 'utf8'),
 );
+const ripgrepRoot = path.join(packageRoot, 'bundle/vendor/ripgrep');
+const ripgrepManifest = JSON.parse(
+  await readFile(path.join(ripgrepRoot, 'manifest.json'), 'utf8'),
+);
+assert.equal(ripgrepManifest.binaries.length, 6);
+for (const binary of ripgrepManifest.binaries) {
+  assert.equal(
+    createHash('sha256')
+      .update(await readFile(path.join(ripgrepRoot, binary.file)))
+      .digest('hex'),
+    binary.sha256,
+    `Bundled ripgrep checksum mismatch: ${binary.file}`,
+  );
+}
+for (const file of ['COPYING', 'LICENSE-MIT', 'UNLICENSE'])
+  await readFile(path.join(ripgrepRoot, file));
+const hostRipgrep = ripgrepManifest.binaries.find(
+  (binary) =>
+    binary.platform === process.platform && binary.arch === process.arch,
+);
+assert.ok(hostRipgrep, 'Missing bundled ripgrep for this platform');
+const ripgrepVersion = execFileSync(
+  path.join(ripgrepRoot, hostRipgrep.file),
+  ['--version'],
+  {
+    encoding: 'utf8',
+    timeout: 5000,
+  },
+).split(/\r?\n/)[0];
+assert.equal(ripgrepVersion.split(' ')[1], ripgrepManifest.version);
 const docsRoot = path.join(packageRoot, 'bundle', 'docs');
 for (const file of await readdir(docsRoot, {
   recursive: true,
@@ -144,19 +174,34 @@ const server = createServer(async (request, response) => {
           ),
           `Native import table missing: ${JSON.stringify(outputs)}`,
         );
+      message = call('grep_search', {
+        pattern: 'PORTABLE_SEARCH_NEEDLE',
+        dir_path: workspace,
+        include_pattern: 'evidence.txt',
+        fixed_strings: true,
+      });
+    } else if (index === 2 + nativeStep) {
+      assert.ok(
+        outputs.some(
+          (result) =>
+            JSON.stringify(result).includes('evidence.txt') &&
+            JSON.stringify(result).includes('PORTABLE_SEARCH_NEEDLE'),
+        ),
+        `Bundled search result missing: ${JSON.stringify(outputs)}`,
+      );
       message = call('drill_record_fact', {
         category: 'note',
         title: noteTitle,
         notes: noteContent,
       });
-    } else if (index === 2 + nativeStep) {
+    } else if (index === 3 + nativeStep) {
       assert.ok(
         outputs.some((result) => result?.success === true),
         `Note write result missing: ${JSON.stringify(results)}`,
       );
       message = call('drill_query_facts', { currentSessionOnly: true });
     } else {
-      assert.equal(index, 3 + nativeStep, 'Unexpected extra model request');
+      assert.equal(index, 4 + nativeStep, 'Unexpected extra model request');
       assert.ok(
         outputs.some(
           (result) =>
@@ -196,20 +241,25 @@ const server = createServer(async (request, response) => {
 try {
   await writeFile(sample, bytes);
   await writeFile(
+    path.join(workspace, 'evidence.txt'),
+    'Generated local source\nPORTABLE_SEARCH_NEEDLE\n',
+  );
+  await writeFile(
     path.join(home, '.gemini', 'settings.json'),
     JSON.stringify({
       security: { auth: { selectedType: 'gateway' } },
       privacy: { usageStatisticsEnabled: false },
       general: { enableAutoUpdate: false, enableAutoUpdateNotification: false },
-      model: { maxSessionTurns: 6 },
+      model: { maxSessionTurns: 7 },
       tools: {
         core: [
           'binary_triage',
           'drill_record_fact',
           'drill_query_facts',
+          'grep_search',
           ...(nativeTool ? ['binary_inspect'] : []),
         ],
-        useRipgrep: false,
+        useRipgrep: true,
       },
     }),
   );
@@ -317,10 +367,14 @@ try {
   assert.equal(timedOut, false, 'Installed CLI timed out');
   assert.deepEqual(failures, []);
   assert.equal(code, 0, stderr.slice(-2000));
-  assert.equal(seen.length, 4 + nativeStep);
+  assert.equal(seen.length, 5 + nativeStep);
+  assert.ok(
+    !stderr.includes('Ripgrep is not available'),
+    'CLI fell back from bundled ripgrep',
+  );
   const result = JSON.parse(stdout);
   assert.equal(result.response, 'PORTABLE_ANALYSIS_COMPLETE');
-  assert.equal(result.stats.tools.totalSuccess, 3 + nativeStep);
+  assert.equal(result.stats.tools.totalSuccess, 4 + nativeStep);
   assert.equal(
     createHash('sha256')
       .update(await readFile(sample))
@@ -359,6 +413,11 @@ try {
     sha256,
     productDocumentationOnly: true,
     nativeInspection: !!nativeTool,
+    bundledRipgrep: {
+      version: ripgrepVersion,
+      sha256: hostRipgrep.sha256,
+      verifiedBinaries: ripgrepManifest.binaries.length,
+    },
     scope:
       'Installed CLI, isolated profile, generated file and local HTTP model fixture. No live provider or deep reverse-engineering acceptance.',
   };
