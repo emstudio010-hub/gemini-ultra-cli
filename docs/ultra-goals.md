@@ -14,9 +14,9 @@
 | P1     | 多 Agent 有界排队、取消与结果可见           | 本地及当前模型通过   | 队列/取消fixture通过；真实双代理、6次工具、7次请求0错误，E-016；长期稳定性仍待观察                                 |
 | P1     | 内置红队工作流                              | 本地分析闭环通过     | 临时授权下redteam-analyst真实分析生成样本并归档，E-016；复杂逆向与外部目标未验收                                   |
 | P2     | 演练台 Morphicons 交互图标与强度动效        | 本地完成             | 使用 Morphicons 2.0.2；浏览器确认六档、图标、移动布局、减少动态效果与隐藏暂停                                      |
-| P0     | 安装到 CLI 本身并生成可分发安装包           | 本地完成             | 当前preview.13，GitHub Windows工件与本机入口匹配；E-046；已安装三Agent执行限制与部分结果传递通过                   |
+| P0     | 安装到 CLI 本身并生成可分发安装包           | 本地完成             | 当前preview.14，GitHub Windows工件与本机入口匹配；E-050；已安装本机原生搜索及分析归档链通过                        |
 | P1     | 其他电脑可以开展本地逆向                    | 三平台原生基础链通过 | preview.8的Windows/Linux x64、macOS arm64真实rabin2读取/归档/查询通过E-022/027/029；复杂反编译与其他工具仍待补     |
-| P1     | GitHub 三平台分发验收                       | 已通过               | 最新preview.13 run42734023367三平台success，独立构建/打包/安装，工件校验通过；E-045                                |
+| P1     | GitHub 三平台分发验收                       | 已通过               | 最新preview.14 run42736463249三平台success，独立构建/打包/安装及实际原生搜索，工件核对通过；E-049                  |
 | P1     | 真实供应商与长会话上线验收                  | 部分完成             | 当前Ess DeepSeek Flash真实工具与双代理闭环通过；其他模型、协议和长会话仍待验收                                     |
 
 ## 证据记录
@@ -233,3 +233,14 @@
 - 官方六份档案均已对照GitHub公布digest及各自.sha256核对；解出的二进制哈希写入清单。来源证据ripgrep-15.2-source-verification.json。维护下载脚本改为按固定清单恢复并验证档案和二进制。
 - 三平台既有安装链加入一次真实grep_search：检查清单与全部哈希，执行本机rg，再通过实际CLI搜索生成文本；不增加全量或冒烟测试。版本preview.14，构建和安装最终结果另记。
 - E-047/048：preview.13工件缺失已确认；官方15.2.0六档案及二进制来源核对通过。本地完整preview.14打包完成；424个tar条目的文件内容哈希与权限处理前一致，六个原生文件mode=0755。暂存bundle实际CLI搜索链通过，5次loopback请求、4工具成功、2,578ms，无Ripgrep回退；该项不是npm安装证据。首次异步tar重打包在Windows以未完成await退出，改用同一tar公开同步API后通过，原日志保留。
+
+- E-049：[preview.14运行42736463249](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/42736463249)三平台completed/success，功能提交6a6c2ef38821787bdca8cc8e6c1c5967d1f57416。各平台实际rg15.2.0和CLI
+  grep_search通过，5次fixture请求、4工具成功；三个工件内六个二进制的hash和0755权限均核对通过。
+- E-050：本机两个命令已安装Windows CI
+  preview.14，入口与工件一致；同一完整CLI搜索/分析/归档链通过，2,625ms，无Ripgrep回退。npm安装本次约2分钟，日志明确PTY依赖请求网络重试后用缓存，不与上述工具链耗时混淆。
+- Windows包SHA-256
+  `4edd59a76a750f9388b63736d3a71803b2f35710cdffe283482290e23a4ab4bf`；Linux
+  `552c1f5dd691d4282411262e5d16b3791c59d18f3f2a0fe0ec8446cdc9767f53`；macOS
+  `fa8b5d60a75f09e09ad18843223c726c2d85393f48654a1e1cc727b28925a10d`。
+- F-015搜索分发已完成本轮修复；仅Windows x64/Linux x64/macOS
+  arm64取得实际搜索运行证据，其他三种架构为官方文件与hash核对。下一阶段推进复杂真实多Agent任务及长会话，目标继续active。
