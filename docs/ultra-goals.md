@@ -664,3 +664,5 @@
 - E-150/F-041根因：42908273604
   Linux/macOS通过、Windows仍失败。临时仓库实证8.3短名经fs.realpathSync保持，而Git返回长名，native解析能展开；最终source/身份及fixture
   shell路径用realpathSync.native+平台relative。既有Windows用例改为真实cmd短名+混合盘符。worktree-path-alias-probe.json证明，保留旧失败，不无改动重跑。准备修正后的最终包。
+
+- E-150验证代码收尾：42909110107打包类型构建拒绝execFileSync的windowsVerbatimArguments类型，取消该候选。改用spawnSync原生支持项，保留实际短名用例；补查该单项、严格lint及core/CLI完整类型构建后再分发。错误属于新增验证实现，不当作跨平台业务通过。

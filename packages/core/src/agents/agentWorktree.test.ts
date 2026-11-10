@@ -6,7 +6,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import {
@@ -66,7 +66,7 @@ it('snapshots staged, unstaged and untracked files without changing source HEAD/
   const id = randomUUID();
   const sourceForTask =
     process.platform === 'win32'
-      ? execFileSync(
+      ? spawnSync(
           'cmd.exe',
           ['/d', '/c', `for %I in ("${source}") do @echo %~sI`],
           {
@@ -75,7 +75,7 @@ it('snapshots staged, unstaged and untracked files without changing source HEAD/
             windowsVerbatimArguments: true,
           },
         )
-          .trim()
+          .stdout.trim()
           .replace(/^[A-Z]:/, (drive) => drive.toLowerCase())
       : source;
   const state = prepareAgentWorktree(root, id, sourceForTask);
