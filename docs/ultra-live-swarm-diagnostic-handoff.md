@@ -1,6 +1,7 @@
 # Gemini Ultra CLI 真实Swarm交付与诊断交接
 
-日期：2026-11-11。本机当前preview.31；preview.32候选修复错误交接，包/安装结果后补。
+日期：2026-11-11。本机已安装 **preview.32**，产品源提交
+`72ef7ad310ffe5efa6af3c7bea731f6d067b357a`。本次真实任务未交付；后续离线修复结果分别记录。
 
 ## E-124 真实任务未交付
 
@@ -33,3 +34,32 @@ Evidence→Finding→Path：E-124真实length/无信息暂停和E-125修前复�
 
 preview.32通过现有三平台分发后，用本地HTTP输出上限响应触发实际已安装执行器，确认错误进入成员/板/协调者且不标完成。不自动再次付费审查；完整真实供应商自主交付、引用准确性、复杂逆向与隔离工作树仍待做。goal
 active，仅codex分支，不合并master或正式Release。
+
+## E-126 三平台分发
+
+[运行42884758726](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/42884758726)三平台completed/success，源72ef7ad310ffe5efa6af3c7bea731f6d067b357a。三个工件版本/源提交/校验和、安装记录、六rg
+hash/Unix权限与每平台20请求的现有native Swarm正常链均核对通过。
+
+| 平台        | 包SHA-256                                                        |
+| ----------- | ---------------------------------------------------------------- |
+| Windows x64 | aea674633d78f113219825219058caafff1c85cc24a64612a00ad5c1715df8b5 |
+| Linux x64   | 58e480f1cb805cd9deef9065587a345dd2f4cb60b3d037d5cae03a4ccd65d3d8 |
+| macOS arm64 | 93f5fa5f15540d7337273f90c93e4d2d7ad67e1e0b07c8342a7b5b77832cb0d7 |
+
+## E-127 安装及实际错误链
+
+本机已有缓存offline安装6秒，双命令preview.32，424包内文件与Windows
+CI工件逐一一致，入口7904d27c06729ab403b05f0d1b53f1be222dc39a9432f47464cbad0454f02a02。
+
+仅额外运行一次已安装CLI的diagnostic离线场景：4个loopback请求/1781ms/退出0，通过原生管理器、真实本地执行器、模拟服务finish_reason=length触发实际异常。成员author维持paused，具体结果为：
+
+```
+Subagent 'coder' failed. Error: OpenAI output token limit reached; response is incomplete.
+```
+
+原始具体诊断进入成员记录、追加板和协调者工具响应；Swarm仍active，不误写completed。该脚本只发起一次成员轮次，不证明真实模型将来必然遵守重试次数。没有进一步真实供应商调用；E-124未交付结论保持不变。
+
+补充证据：workflow-diagnostic-preview32-source-result.json、workflow-diagnostic-final-junit.xml、github-preview32-run.json、github-preview32-artifacts-result.json、global-install-github-preview32-full-result.json、installed-preview32-swarm-diagnostic.json及-output.txt。
+
+源码、工程报告与Obsidian交接已同步。后续先处理可执行的修正/请求预算和模型输出约束，使失败能够有界收尾，再安排有明确收益的真实工作验收；不重复原样付费试跑。完整自主交付/引用可靠性/复杂逆向仍未完成，整体goal
+active。
