@@ -1,0 +1,49 @@
+name: Ultra decompile platform diagnosis
+on:
+  push:
+    branches: ['codex/ultra-agent-native-analysis']
+    paths:
+      [
+        '.github/workflows/ultra-decompile-diagnostic.yml',
+        'scripts/verify-ultra-decompile.mjs',
+      ]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  diagnose:
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Fetch existing package and native tool
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api repos/$GITHUB_REPOSITORY/actions/runs/42912878896 > "$RUNNER_TEMP/package-run.json"
+          node --input-type=module -e 'import fs from "node:fs"; import assert from "node:assert/strict"; const run=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+"/package-run.json")); assert.equal(run.head_sha,"a89384433dcc086627eb207153ab6d0c9e689008"); assert.equal(run.status,"completed");'
+          gh run download 42912878896 --repo "$GITHUB_REPOSITORY" --name gemini-ultra-cli-macos-latest --dir release
+          (cd release && shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.40.tgz.sha256)
+          npm install --prefix "$RUNNER_TEMP/ultra-diagnostic" --ignore-scripts --no-audit --no-fund "$GITHUB_WORKSPACE/release/gemini-ultra-cli-1.0.0-preview.40.tgz"
+          mkdir "$RUNNER_TEMP/ghidra"
+          gh release download Ghidra_12.1.4_build --repo NationalSecurityAgency/ghidra --pattern ghidra_12.1.4_PUBLIC_20260921.zip --dir "$RUNNER_TEMP/ghidra"
+          printf '%s  %s\n' ddac49f903da9d5bac833e5cc79395098b9c33cfd3279be5f31bd00387d2d4db "$RUNNER_TEMP/ghidra/ghidra_12.1.4_PUBLIC_20260921.zip" | shasum -a 256 -c -
+          unzip -q "$RUNNER_TEMP/ghidra/ghidra_12.1.4_PUBLIC_20260921.zip" -d "$RUNNER_TEMP/ghidra"
+      - name: Preserve native failure diagnostics
+        run: node scripts/verify-ultra-decompile.mjs "$RUNNER_TEMP/ultra-diagnostic/node_modules/gemini-ultra-cli/bundle/gemini.js" diagnosis/decompile.json "$RUNNER_TEMP/ghidra/ghidra_12.1.4_PUBLIC"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ghidra-macos-diagnosis
+          path: diagnosis/**
+          if-no-files-found: warn
