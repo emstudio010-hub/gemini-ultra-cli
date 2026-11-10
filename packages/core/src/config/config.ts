@@ -55,6 +55,10 @@ import { UpdateTopicTool } from '../tools/topicTool.js';
 import { TopicState } from './topicState.js';
 import { AgentTool } from '../agents/agent-tool.js';
 import { SpawnSubagentsTool } from '../agents/spawn-subagents-tool.js';
+import {
+  DraftAgentWorkflowTool,
+  RunAgentWorkflowTool,
+} from '../agents/agentWorkflowTools.js';
 import { ExitPlanModeTool } from '../tools/exit-plan-mode.js';
 import { EnterPlanModeTool } from '../tools/enter-plan-mode.js';
 import {
@@ -4195,6 +4199,12 @@ export class Config implements McpContext, AgentLoopContext {
 
     maybeRegister(SpawnSubagentsTool, () =>
       registry.registerTool(new SpawnSubagentsTool(this, this.messageBus)),
+    );
+    maybeRegister(DraftAgentWorkflowTool, () =>
+      registry.registerTool(new DraftAgentWorkflowTool(this, this.messageBus)),
+    );
+    maybeRegister(RunAgentWorkflowTool, () =>
+      registry.registerTool(new RunAgentWorkflowTool(this, this.messageBus)),
     );
 
     // Register Gemini-Ultra Extended Tools (Image Gen, Deep Web, Diagrams, Memory Graph, Drill & Patch)

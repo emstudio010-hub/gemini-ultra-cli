@@ -31,6 +31,13 @@
 
 # Mode Transitions (into/out of Plan Mode)
 
+# Scoped workflow drafts write only internal planning artifacts; execution remains blocked.
+[[rule]]
+toolName = "draft_agent_workflow"
+decision = "allow"
+priority = 50
+modes = ["plan"]
+
 [[rule]]
 toolName = "enter_plan_mode"
 decision = "ask_user"

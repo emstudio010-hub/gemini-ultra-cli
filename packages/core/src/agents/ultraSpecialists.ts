@@ -97,7 +97,13 @@ export function ultraSpecialists(
         const tools = context.toolRegistry
           .getAllToolNames()
           .filter(
-            (name) => name !== 'spawn_subagents' && name !== AGENT_TOOL_NAME,
+            (name) =>
+              ![
+                'spawn_subagents',
+                AGENT_TOOL_NAME,
+                'run_agent_workflow',
+                'draft_agent_workflow',
+              ].includes(name),
           );
         return {
           tools: role.readOnly
@@ -113,4 +119,42 @@ export function ultraSpecialists(
       },
     };
   });
+}
+
+/** Separate structured verdict, so free-form praise cannot complete a workflow. */
+export function workflowAuditor(context: AgentLoopContext) {
+  const base = GeneralistAgent(context);
+  return {
+    ...base,
+    name: 'workflow-auditor',
+    displayName: 'Workflow Auditor',
+    processOutput: undefined,
+    description:
+      'Read-only independent workflow acceptance review with a structured verdict.',
+    outputConfig: {
+      outputName: 'verdict',
+      description:
+        'Independent acceptance verdict grounded in inspected artifacts.',
+      schema: z.object({
+        passed: z.boolean(),
+        summary: z.string().min(1),
+        evidence: z.array(z.string().min(1)).min(1),
+      }),
+    },
+    get toolConfig() {
+      return {
+        tools: context.toolRegistry
+          .getAllToolNames()
+          .filter(
+            (name) => readTools.has(name) && name !== 'drill_record_fact',
+          ),
+      };
+    },
+    get promptConfig() {
+      return {
+        ...base.promptConfig,
+        systemPrompt: `${base.promptConfig.systemPrompt}\nIndependently inspect actual files against the assigned acceptance criteria. Read only. Never infer that a required check passed from a writer's assertion alone. Distinguish fixture, static, live, and unavailable evidence. Unmet or unverified explicit requirements must return passed=false. Return passed, summary and concrete evidence paths through complete_task.`,
+      };
+    },
+  };
 }

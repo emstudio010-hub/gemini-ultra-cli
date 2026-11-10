@@ -79,6 +79,11 @@ import { bypassCommand } from '../ui/commands/bypassCommand.js';
 import { langCommand } from '../ui/commands/langCommand.js';
 import { localizeCommand } from './commandLocale.js';
 import { teamCommand } from '../ui/commands/teamCommand.js';
+import {
+  boostCommand,
+  teamworkCommand,
+  grillMeCommand,
+} from '../ui/commands/agentWorkflowCommands.js';
 import { redteamCommand } from '../ui/commands/redteamCommand.js';
 
 /**
@@ -217,6 +222,9 @@ export class BuiltinCommandLoader implements ICommandLoader {
       bypassCommand,
       langCommand,
       teamCommand,
+      boostCommand,
+      teamworkCommand,
+      grillMeCommand,
       redteamCommand,
       ...(this.config?.getFolderTrust() ? [permissionsCommand] : []),
       ...(this.config?.isPlanEnabled() ? [planCommand] : []),
@@ -268,6 +276,8 @@ export class BuiltinCommandLoader implements ICommandLoader {
         : []),
     ];
     handle?.end();
-    return allDefinitions.filter((cmd): cmd is SlashCommand => cmd !== null).map(localizeCommand);
+    return allDefinitions
+      .filter((cmd): cmd is SlashCommand => cmd !== null)
+      .map(localizeCommand);
   }
 }

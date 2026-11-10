@@ -5,6 +5,7 @@
  */
 
 export * from './src/index.js';
+export * from './src/agents/agentWorkflows.js';
 export { Storage } from './src/config/storage.js';
 export {
   DEFAULT_GEMINI_MODEL,
@@ -51,7 +52,11 @@ export { getExperiments } from './src/code_assist/experiments/experiments.js';
 export { ExperimentFlags } from './src/code_assist/experiments/flagNames.js';
 export { getErrorStatus, ModelNotFoundError } from './src/utils/httpErrors.js';
 export { getEffortOptions, parseEffort } from './src/i18n/effortOptions.js';
-export { readUltraRuntime, saveUltraRuntime, listCollaborationTasks } from './src/agents/ultraRuntime.js';
+export {
+  readUltraRuntime,
+  saveUltraRuntime,
+  listCollaborationTasks,
+} from './src/agents/ultraRuntime.js';
 export {
   readUltraPromptConfig,
   saveUltraPromptConfig,

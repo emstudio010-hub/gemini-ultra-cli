@@ -274,6 +274,8 @@ export const ALL_BUILTIN_TOOL_NAMES = [
   READ_MCP_RESOURCE_TOOL_NAME,
   LIST_MCP_RESOURCES_TOOL_NAME,
   'spawn_subagents',
+  'draft_agent_workflow',
+  'run_agent_workflow',
   'generate_image',
   'deep_web_fetch',
   'render_diagram',
@@ -296,6 +298,7 @@ export const ALL_BUILTIN_TOOL_NAMES = [
  * filtered by what tools are actually enabled in the current configuration.
  */
 export const PLAN_MODE_TOOLS = [
+  'draft_agent_workflow',
   GLOB_TOOL_NAME,
   GREP_TOOL_NAME,
   READ_FILE_TOOL_NAME,

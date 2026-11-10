@@ -15,7 +15,7 @@ v24.22.2；校验场景使用本地模型fixture，真实逆向工具需另行�
 Release 下载），执行：
 
 ```sh
-npm install -g ./gemini-ultra-cli-1.0.0-preview.29.tgz
+npm install -g ./gemini-ultra-cli-1.0.0-preview.30.tgz
 gemini-ultra --version
 gemini-ultra
 ```
@@ -111,13 +111,13 @@ Release。每个安装包附带 `.sha256` 文件，便于传输后核对。
 Windows PowerShell 校验安装包：
 
 ```powershell
-Get-FileHash ./gemini-ultra-cli-1.0.0-preview.29.tgz -Algorithm SHA256
-Get-Content ./gemini-ultra-cli-1.0.0-preview.29.tgz.sha256
+Get-FileHash ./gemini-ultra-cli-1.0.0-preview.30.tgz -Algorithm SHA256
+Get-Content ./gemini-ultra-cli-1.0.0-preview.30.tgz.sha256
 ```
 
 macOS 使用
-`shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.29.tgz.sha256`；Linux 使用
-`sha256sum -c gemini-ultra-cli-1.0.0-preview.29.tgz.sha256`。
+`shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.30.tgz.sha256`；Linux 使用
+`sha256sum -c gemini-ultra-cli-1.0.0-preview.30.tgz.sha256`。
 
 ## 自定义逆向工具路径
 
@@ -298,3 +298,32 @@ Schema 标准小写。
 同一任务持续读文件、搜索或调用其他工具时，压缩可在已完整返回的工具组之后进行，不必等下一条用户消息。尚未返回的并行调用及最新工具结果保留在同一段历史里；支持带ID和无ID的工具协议，不产生孤立的工具响应。
 
 会话并发额度降低后，下一次准入使用新额度；已经运行的任务继续收尾，等待任务不会趁某个旧槽位释放而越过新上限。子 Agent 的完成工具使用自己的结果定义，避免从父代理重复继承和覆盖。
+
+## Teamwork、Boost 与需求访谈
+
+preview.30 新增三个入口，参照 Google
+Antigravity 的公开工作流概念，使用本 CLI 的模型、权限、子 Agent 与本地状态实现；不需要安装 Antigravity 或复制开发者配置。
+
+- `/boost <任务>`：直接启动两条只读调查，再由一个 coder 实施、独立 auditor 检查。每个里程碑最多两轮修正和审查，最后另做整体审查；未通过则保留结果并阻塞，不自动无限重试。
+- `/teamwork <目标>`：在只读计划模式中对齐范围、约束和验收条件，保存里程碑草案。`/teamwork approve`
+  确认当前草案后调用原生执行链；已完成的里程碑在恢复时跳过。
+- `/grill-me <需求>`（别名 `/grillme`、`/需求对齐`）：先读代码，再通过现有
+  `ask_user`
+  逐题提问，推荐答案在前。无参数时先澄清当前工作区的目标。对齐后保存草案，`/grill-me finish`
+  结束访谈并把约定交给主 Agent 继续处理。
+
+三者均支持
+`status`、`resume`、`cancel`。状态和取消子命令在模型忙碌时也可使用。取消保留已返回报告，等已启动子任务结束清理后才释放工作区；另一个 CLI 进程中的任务需在其原会话取消。进程被强制结束后，可显式
+`resume`
+从已持久化的阶段恢复；中断阶段可能重新调查，但已完成的里程碑不会再次实施。
+
+状态位于项目临时目录的 `agent-workflows/<ID>.json`，`status`
+显示 ID 与里程碑。草案不会自动批准自身；模型的 draft 工具不能启动执行。访谈结束或取消时恢复进入访谈前的权限模式；若原本就在计划模式，该模式仍适用。`/team`
+继续设置会话并发额度；新工作流遵循该额度。
+
+调查有独立上下文，可以并行；实现阶段共享当前工作区并串行运行，跨 CLI 进程也使用工作区锁。当前没有为每个 worker 自动创建 Git
+worktree，不应当作 Antigravity 的隔离工作树实现。独立审查员只能读取工件，采用结构化通过/不通过判定；没有证据的明确验收条件应判不通过。模型判定仍需真实任务验收，不能仅凭结构化字段宣称生产就绪。每次原生执行有20分钟上限，达到上限保留进度并阻塞，可由用户显式恢复。
+
+原始阶段报告按项目保存，主会话只接收有长度上限的近期摘要与原始记录路径，避免大量并行报告撑满上下文。测试范围始终遵循用户要求，只运行必要检查。
+
+参考：[Teamwork](https://antigravity.google/docs/teamwork/)、[Boost](https://antigravity.google/docs/boost/)、[Grill me](https://antigravity.google/docs/commands/grill-me/)。本项目为独立实现。

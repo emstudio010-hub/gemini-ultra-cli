@@ -37,6 +37,18 @@ const descriptions: Record<string, [string, string]> = {
   drill: ['打开演练台控制中心', 'Open the drill control center'],
   redteam: ['切换授权红队工作流', 'Configure the authorized red-team workflow'],
   team: ['设置多代理协作模式', 'Configure multi-agent collaboration'],
+  boost: [
+    '启动难题调查、实施与独立复核',
+    'Investigate, implement and independently review a difficult task',
+  ],
+  teamwork: [
+    '对齐需求并按里程碑协作推进',
+    'Scope and execute a milestone-based team workflow',
+  ],
+  'grill-me': [
+    '逐题澄清需求并保存约定',
+    'Clarify requirements one question at a time',
+  ],
   branch: ['分支与上下文管理', 'Manage branches and context'],
   taste: ['设置写作和代码偏好', 'Configure writing and coding preferences'],
   inspect: ['查看当前系统状态', 'Inspect the current system state'],
