@@ -15,7 +15,7 @@ v24.22.2；校验场景使用本地模型fixture，真实逆向工具需另行�
 Release 下载），执行：
 
 ```sh
-npm install -g ./gemini-ultra-cli-1.0.0-preview.21.tgz
+npm install -g ./gemini-ultra-cli-1.0.0-preview.22.tgz
 gemini-ultra --version
 gemini-ultra
 ```
@@ -51,6 +51,8 @@ gemini-ultra
 
 如确需调整，可设置 GEMINI_ULTRA_STREAM_IDLE_MS，单位毫秒，最小 1000；未设置或非法时使用默认值。model.requestTimeoutMs 管理响应头等待，与这个流进展期限不同。
 
+外接 HTTP 错误会保留状态码，并遵循现有的有界重试策略；临时 429/5xx 可重试，400 等请求错误直接报告。请求完成、超时或取消时会终止对应网络流，包括 DevTools 日志的响应副本，避免旧连接持续占用。
+
 ## 跨电脑逆向环境
 
 支持从 PATH 查找工具；也可将命令包装器加入 PATH。建议：Ghidra +
@@ -82,13 +84,13 @@ Release。每个安装包附带 `.sha256` 文件，便于传输后核对。
 Windows PowerShell 校验安装包：
 
 ```powershell
-Get-FileHash ./gemini-ultra-cli-1.0.0-preview.21.tgz -Algorithm SHA256
-Get-Content ./gemini-ultra-cli-1.0.0-preview.21.tgz.sha256
+Get-FileHash ./gemini-ultra-cli-1.0.0-preview.22.tgz -Algorithm SHA256
+Get-Content ./gemini-ultra-cli-1.0.0-preview.22.tgz.sha256
 ```
 
 macOS 使用
-`shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.21.tgz.sha256`；Linux 使用
-`sha256sum -c gemini-ultra-cli-1.0.0-preview.21.tgz.sha256`。
+`shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.22.tgz.sha256`；Linux 使用
+`sha256sum -c gemini-ultra-cli-1.0.0-preview.22.tgz.sha256`。
 
 ## 自定义逆向工具路径
 

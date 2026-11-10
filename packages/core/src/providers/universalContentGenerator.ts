@@ -24,6 +24,7 @@ import { withUltraPrompt } from './ultraPromptConfig.js';
 import { LoggingContentGenerator } from '../core/loggingContentGenerator.js';
 import { providerUsage } from './providerUsage.js';
 import { isRecord } from '../utils/markdownUtils.js';
+import type { HttpError } from '../utils/httpErrors.js';
 import {
   chatSchema,
   responsesSchema,
@@ -416,6 +417,20 @@ export class UniversalContentGenerator implements ContentGenerator {
     return limit;
   }
 
+  private httpError(message: string, status: number): HttpError {
+    return Object.assign(new Error(message), { status });
+  }
+
+  private streamSignal(
+    request: GenerateContentParameters,
+    controller: AbortController,
+  ): AbortSignal {
+    const callerSignal = request.config?.abortSignal;
+    return callerSignal
+      ? AbortSignal.any([callerSignal, controller.signal])
+      : controller.signal;
+  }
+
   private chatOutputLimit(
     request: GenerateContentParameters,
   ): Record<string, number> {
@@ -463,8 +478,9 @@ export class UniversalContentGenerator implements ContentGenerator {
 
     if (!res.ok) {
       const errText = await res.text();
-      throw new Error(
+      throw this.httpError(
         `OpenAI Provider [${provider.name}] HTTP ${res.status}: ${errText}`,
+        res.status,
       );
     }
 
@@ -518,6 +534,7 @@ export class UniversalContentGenerator implements ContentGenerator {
     provider: ExternalProviderProfile,
     request: GenerateContentParameters,
   ): AsyncGenerator<GenerateContentResponse> {
+    const abortController = new AbortController();
     const url = `${provider.baseUrl}/chat/completions`;
     const messages = this.formatOpenAIMessages(request);
     const tools = this.formatOpenAITools(request);
@@ -545,13 +562,14 @@ export class UniversalContentGenerator implements ContentGenerator {
       method: 'POST',
       headers,
       body: JSON.stringify(payload),
-      signal: request.config?.abortSignal,
+      signal: this.streamSignal(request, abortController),
     });
 
     if (!res.ok) {
       const errText = await res.text();
-      throw new Error(
+      throw this.httpError(
         `OpenAI Provider [${provider.name}] Stream HTTP ${res.status}: ${errText}`,
+        res.status,
       );
     }
 
@@ -561,7 +579,11 @@ export class UniversalContentGenerator implements ContentGenerator {
     >();
     let completed = false;
     let usage: GenerateContentResponseUsageMetadata | undefined;
-    for await (const { data: dataStr } of this.readSse(res, () => completed)) {
+    for await (const { data: dataStr } of this.readSse(
+      res,
+      abortController,
+      () => completed,
+    )) {
       if (dataStr === '[DONE]') {
         completed = true;
         break;
@@ -643,6 +665,7 @@ export class UniversalContentGenerator implements ContentGenerator {
 
   private async *readSse(
     res: Response,
+    abortController: AbortController,
     finished?: () => boolean,
   ): AsyncGenerator<{ event?: string; data: string }> {
     if (!res.body) throw new Error('No response body for stream');
@@ -722,7 +745,10 @@ export class UniversalContentGenerator implements ContentGenerator {
         if (done) break;
       }
     } finally {
-      await reader.cancel().catch(() => {});
+      // Abort the fetch as well as its reader so cloned logging branches close.
+      // A source may leave cancel() pending; cleanup must not block completion.
+      abortController.abort();
+      void reader.cancel().catch(() => {});
       reader.releaseLock();
     }
   }
@@ -802,6 +828,7 @@ export class UniversalContentGenerator implements ContentGenerator {
     provider: ExternalProviderProfile,
     request: GenerateContentParameters,
   ): AsyncGenerator<GenerateContentResponse> {
+    const abortController = new AbortController();
     const url = `${provider.baseUrl}/responses`;
     const effort = ProviderManager.getInstance().getReasoningEffort();
     const tools = this.formatOpenAITools(request)?.map((t) => ({
@@ -837,11 +864,12 @@ export class UniversalContentGenerator implements ContentGenerator {
         ...(provider.customHeaders || {}),
       },
       body: JSON.stringify(payload),
-      signal: request.config?.abortSignal,
+      signal: this.streamSignal(request, abortController),
     });
     if (!res.ok) {
-      throw new Error(
+      throw this.httpError(
         `OpenAI Responses [${provider.name}] HTTP ${res.status}: ${await res.text()}`,
+        res.status,
       );
     }
 
@@ -851,7 +879,7 @@ export class UniversalContentGenerator implements ContentGenerator {
     >();
     let completed = false;
     let usage: GenerateContentResponseUsageMetadata | undefined;
-    for await (const { data } of this.readSse(res)) {
+    for await (const { data } of this.readSse(res, abortController)) {
       if (data === '[DONE]') continue;
       const ev = parseProviderJson(
         data,
@@ -1000,6 +1028,7 @@ export class UniversalContentGenerator implements ContentGenerator {
     provider: ExternalProviderProfile,
     request: GenerateContentParameters,
   ): AsyncGenerator<GenerateContentResponse> {
+    const abortController = new AbortController();
     const url = `${provider.baseUrl}/messages`;
     const effort = ProviderManager.getInstance().getReasoningEffort();
     const maxTokens =
@@ -1035,11 +1064,12 @@ export class UniversalContentGenerator implements ContentGenerator {
         ...(provider.customHeaders || {}),
       },
       body: JSON.stringify(payload),
-      signal: request.config?.abortSignal,
+      signal: this.streamSignal(request, abortController),
     });
     if (!res.ok) {
-      throw new Error(
+      throw this.httpError(
         `Anthropic [${provider.name}] HTTP ${res.status}: ${await res.text()}`,
+        res.status,
       );
     }
 
@@ -1054,7 +1084,7 @@ export class UniversalContentGenerator implements ContentGenerator {
     >();
     let completed = false;
     let usageData: Record<string, unknown> = {};
-    for await (const { data } of this.readSse(res)) {
+    for await (const { data } of this.readSse(res, abortController)) {
       const ev = parseProviderJson(data, anthropicSchema, 'Anthropic stream');
       const startUsage: unknown =
         ev.type === 'message_start' ? ev.message?.usage : undefined;
@@ -1171,8 +1201,9 @@ export class UniversalContentGenerator implements ContentGenerator {
       signal: request.config?.abortSignal,
     });
     if (!res.ok) {
-      throw new Error(
+      throw this.httpError(
         `Gemini [${provider.name}] HTTP ${res.status}: ${await res.text()}`,
+        res.status,
       );
     }
     const value: unknown = await res.json();
@@ -1186,6 +1217,7 @@ export class UniversalContentGenerator implements ContentGenerator {
     provider: ExternalProviderProfile,
     request: GenerateContentParameters,
   ): AsyncGenerator<GenerateContentResponse> {
+    const abortController = new AbortController();
     const res = await fetch(this.geminiUrl(provider, request.model, true), {
       method: 'POST',
       headers: {
@@ -1193,15 +1225,16 @@ export class UniversalContentGenerator implements ContentGenerator {
         ...(provider.customHeaders || {}),
       },
       body: JSON.stringify(this.geminiBody(request)),
-      signal: request.config?.abortSignal,
+      signal: this.streamSignal(request, abortController),
     });
     if (!res.ok) {
-      throw new Error(
+      throw this.httpError(
         `Gemini [${provider.name}] HTTP ${res.status}: ${await res.text()}`,
+        res.status,
       );
     }
     let completed = false;
-    for await (const { data } of this.readSse(res)) {
+    for await (const { data } of this.readSse(res, abortController)) {
       const raw = parseProviderJson(data, geminiSchema, 'Gemini stream');
       if (raw.error)
         throw new Error(`Gemini stream error: ${JSON.stringify(raw.error)}`);

@@ -13,6 +13,9 @@ import type { ContentGenerator } from '../core/contentGenerator.js';
 import { LlmRole } from '../telemetry/llmRole.js';
 import { ProviderManager } from './providerManager.js';
 import { UniversalContentGenerator } from './universalContentGenerator.js';
+import { getErrorStatus } from '../utils/httpErrors.js';
+import { isRetryableError } from '../utils/retry.js';
+import type { ProviderProtocol } from './providerTypes.js';
 
 describe('Provider stream completion and recovery', () => {
   let directory: string;
@@ -55,6 +58,150 @@ describe('Provider stream completion and recovery', () => {
     ProviderManager.resetInstance();
     rmSync(directory, { recursive: true, force: true });
   });
+
+  it.each([
+    { protocol: 'openai-chat' as const, stream: false },
+    { protocol: 'openai-chat' as const, stream: true },
+    { protocol: 'openai-responses' as const, stream: true },
+    { protocol: 'anthropic' as const, stream: true },
+    { protocol: 'gemini' as const, stream: false },
+    { protocol: 'gemini' as const, stream: true },
+  ])(
+    'preserves HTTP status for existing retry classification: $protocol / stream=$stream',
+    async ({ protocol, stream }) => {
+      const manager = ProviderManager.getInstance();
+      const provider = manager.getActiveProvider();
+      if (!provider) throw new Error('Missing fixture provider');
+      manager.upsertProvider({ ...provider, protocol });
+      for (const status of [429, 503, 400]) {
+        vi.stubGlobal(
+          'fetch',
+          vi
+            .fn()
+            .mockResolvedValue(
+              new Response('{"error":"fixture failure"}', { status }),
+            ),
+        );
+        let error: unknown;
+        try {
+          if (stream) {
+            const chunks = await generator.generateContentStream(
+              request,
+              'fixture',
+              LlmRole.UTILITY_TOOL,
+            );
+            for await (const chunk of chunks) void chunk;
+          } else {
+            await generator.generateContent(
+              request,
+              'fixture',
+              LlmRole.UTILITY_TOOL,
+            );
+          }
+        } catch (failure) {
+          error = failure;
+        }
+        expect(getErrorStatus(error)).toBe(status);
+        expect(isRetryableError(error)).toBe(status !== 400);
+        expect(String(error)).toContain('fixture failure');
+      }
+    },
+  );
+
+  it.each<ProviderProtocol>([
+    'openai-chat',
+    'openai-responses',
+    'anthropic',
+    'gemini',
+  ])(
+    'releases completed streams without waiting for cancellation: %s',
+    async (protocol) => {
+      const manager = ProviderManager.getInstance();
+      const provider = manager.getActiveProvider();
+      if (!provider) throw new Error('Missing fixture provider');
+      manager.upsertProvider({ ...provider, protocol });
+      const caller = new AbortController();
+      let releaseCancel: (() => void) | undefined;
+      const cancel = vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            releaseCancel = resolve;
+          }),
+      );
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          if (protocol === 'openai-chat') {
+            controller.enqueue(
+              frame({
+                choices: [
+                  { delta: { content: 'Ready' }, finish_reason: 'stop' },
+                ],
+              }),
+            );
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+          } else if (protocol === 'openai-responses') {
+            controller.enqueue(
+              frame({ type: 'response.output_text.delta', delta: 'Ready' }),
+            );
+            controller.enqueue(
+              frame({ type: 'response.completed', response: {} }),
+            );
+          } else if (protocol === 'anthropic') {
+            controller.enqueue(
+              frame({
+                type: 'content_block_delta',
+                index: 0,
+                delta: { type: 'text_delta', text: 'Ready' },
+              }),
+            );
+            controller.enqueue(frame({ type: 'message_stop' }));
+          } else {
+            controller.enqueue(
+              frame({
+                candidates: [
+                  {
+                    content: { role: 'model', parts: [{ text: 'Ready' }] },
+                    finishReason: 'STOP',
+                  },
+                ],
+              }),
+            );
+          }
+        },
+        cancel,
+      });
+      const fetchMock = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(new Response(body));
+      vi.stubGlobal('fetch', fetchMock);
+      const stream = await generator.generateContentStream(
+        { ...request, config: { abortSignal: caller.signal } },
+        'fixture',
+        LlmRole.UTILITY_TOOL,
+      );
+      const chunks: GenerateContentResponse[] = [];
+      let ended = false;
+      const consume = (async () => {
+        for await (const chunk of stream) chunks.push(chunk);
+        ended = true;
+      })();
+      await vi.advanceTimersByTimeAsync(10);
+      const endedBeforeCancellationResolved = ended;
+      releaseCancel?.();
+      await consume;
+      expect(endedBeforeCancellationResolved).toBe(true);
+      expect(body.locked).toBe(false);
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(fetchMock.mock.calls[0][1]?.signal?.aborted).toBe(true);
+      expect(caller.signal.aborted).toBe(false);
+      expect(
+        chunks
+          .flatMap((chunk) => chunk.candidates?.[0]?.content?.parts ?? [])
+          .map((part) => part.text ?? '')
+          .join(''),
+      ).toBe('Ready');
+    },
+  );
 
   it.each(
     (['openai-chat', 'openai-responses', 'anthropic'] as const).flatMap(
