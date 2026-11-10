@@ -88,6 +88,13 @@ jobs:
             & unzip -q $archive -d $toolDirectory
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
+          if ($IsMacOS) {
+            Push-Location (Join-Path $toolDirectory 'ghidra_12.1.4_PUBLIC/support/gradle')
+            & ./gradlew :Decompiler:buildNatives --max-workers=2 --no-daemon *> (Join-Path $env:GITHUB_WORKSPACE 'artifacts/ultra-release/decompile-native-build.log')
+            $nativeBuildCode = $LASTEXITCODE
+            Pop-Location
+            if ($nativeBuildCode -ne 0) { exit $nativeBuildCode }
+          }
           $entry = Join-Path $env:RUNNER_TEMP 'ultra-install/node_modules/gemini-ultra-cli/bundle/gemini.js'
           node scripts/verify-ultra-decompile.mjs $entry artifacts/ultra-release/decompile-verification.json (Join-Path $toolDirectory 'ghidra_12.1.4_PUBLIC')
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -108,6 +115,7 @@ jobs:
             artifacts/ultra-release/decompile-verification.json
             artifacts/ultra-release/decompile-verification-output.txt
             artifacts/ultra-release/decompile-verification-artifacts/**
+            artifacts/ultra-release/decompile-native-build.log
             artifacts/ultra-release/swarm-budget-verification.json
             artifacts/ultra-release/swarm-budget-verification-output.txt
             artifacts/ultra-release/swarm-recovery-verification.json

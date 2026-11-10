@@ -17,6 +17,10 @@ const metadata = JSON.parse(
   fs.readFileSync(path.join(path.dirname(entry), '../package.json'), 'utf8'),
 );
 const label = path.basename(reportPath, '.json');
+const retainedArtifacts = path.join(
+  path.dirname(reportPath),
+  label + '-artifacts',
+);
 assert.match(label, /^[a-zA-Z0-9._-]+$/);
 fs.mkdirSync(path.dirname(reportPath), { recursive: true });
 const scratch = fs.mkdtempSync(
@@ -110,6 +114,16 @@ const server = createServer(async (req, res) => {
       result = results.find(
         (item) => item?.completed === true && item?.codeArtifact,
       );
+      if (!result) {
+        for (const item of results) {
+          const evidence = item?.error?.match(/Evidence directory: (.+)$/)?.[1];
+          if (
+            evidence &&
+            path.resolve(evidence).startsWith(path.resolve(scratch) + path.sep)
+          )
+            fs.cpSync(evidence, retainedArtifacts, { recursive: true });
+        }
+      }
       assert.ok(result, JSON.stringify(results));
       assert.equal(result.sampleSha256, sampleSha256);
       assert.equal(result.address, '00400090');
@@ -284,10 +298,6 @@ try {
     child.once('close', resolve);
   });
   clearTimeout(timer);
-  const retainedArtifacts = path.join(
-    path.dirname(reportPath),
-    label + '-artifacts',
-  );
   if (result)
     fs.cpSync(path.dirname(result.codeArtifact), retainedArtifacts, {
       recursive: true,

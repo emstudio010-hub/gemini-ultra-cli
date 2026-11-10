@@ -383,4 +383,7 @@ preview.40 新增原生工具
 Java堆、60秒自动分析、30秒单函数反编译、120秒进程上限；错误/超时保留日志，不标为完整。
 
 结果包含函数名/地址、语言/编译器、样本SHA、伪代码SHA和工件路径。完整伪代码保存在项目临时目录
-`decompilations/<ID>/decompiled.c`，附report.json及analysis.log；`maxChars`只截断返回预览，不丢弃完整工件。伪代码是工具推导，不等于原始源码、全文件分析或真实运行结果。未恢复原始类型或调用约定时，需结合指令及证据进一步确认。
+`decompilations/<ID>/decompiled.c`，附report.json及analysis.log；`maxChars`只截断返回预览，不丢弃完整工件。伪代码是工具推导，不等于原始源码、全文件分析或真实运行结果。未恢复原始类型或调用约定时，需结合指令及证据进一步确认。官方Ghidra通用包不包含macOS和Linux
+ARM的部分原生组件。只有Java与Utility.jar不足以反编译；巡检会检查对应平台的decompiler。在这些电脑上按Ghidra
+GettingStarted.md安装C/C++工具链后，到Ghidra安装目录的support/gradle运行 ./gradlew
+:Decompiler:buildNatives，成功后Ghidra会优先使用build/os下的组件。CLI不会擅自编译或改动本机工具安装。

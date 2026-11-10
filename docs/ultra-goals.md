@@ -679,3 +679,7 @@
 - 本机Ghidra12.1.4/JDK21实际还原自建ELF循环/校验/条件返回，原样本未变；源码CLI链3个loopback请求/15281ms/退出0，实际decompile后读完整工件。4项边界、严格相关lint、core/CLI类型通过；最后finally回收补齐后仅重查相关4项，无付费/全量/冒烟。PIE默认重定位的地址失败保留并补基址诊断，不误认文件偏移或r2地址相同。
 - preview.40待三平台最终包原生Ghidra核对与本机安装。WI-056复杂格式/关联/动态逆向和WI-054真实完整自主交付/引用继续，goal
   active，不合并master/正式Release。交接docs/ultra-ghidra-decompile-handoff.md。
+
+- F-042/E-154候选：42912878896
+  Win/Linux原生Ghidra通过，macOS失败。原fixture未留内部日志，42913639623仅复用同一macOS包并保留日志，实证缺os/mac_arm_64/decompile；官方GettingStarted.md明确macOS/Linux
+  ARM需构建原生组件。新增native存在/执行权限巡检、缺依赖清晰诊断及失败关键日志摘要；4项原用例补缺native分支并通过，类型构建通过。42914177196仅在runner临时目录按官方:Decompiler:buildNatives构建后重查旧包，不改本机工具、不跑真实模型。

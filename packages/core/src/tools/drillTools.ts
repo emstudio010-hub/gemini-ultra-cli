@@ -11,6 +11,7 @@ import * as path from 'node:path';
 import { DrillStore } from '../drill/drillStore.js';
 import { readDrillGrant } from '../drill/drillGrant.js';
 import { ToolErrorType } from './tool-error.js';
+import { discoverGhidraDecompiler } from './ghidraRuntime.js';
 import type { Config } from '../config/config.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import {
@@ -167,9 +168,12 @@ export async function runDrillPreflight(): Promise<DrillPreflightResult> {
       path.join(ghidraHome, 'Ghidra/Framework/Utility/lib/Utility.jar'),
     );
   tools['ghidra-decompiler'] = {
-    available: ghidraDetected && tools['java'].available,
+    available:
+      ghidraDetected &&
+      tools['java'].available &&
+      discoverGhidraDecompiler(ghidraHome).available,
     pathOrStatus: ghidraDetected
-      ? `${ghidraHome}; native Java required; compatibility checked on use`
+      ? `${discoverGhidraDecompiler(ghidraHome).pathOrStatus}; JDK compatibility checked on use`
       : 'Set GEMINI_ULTRA_GHIDRA_HOME to the installation root and configure JAVA_HOME or GEMINI_ULTRA_TOOL_JAVA',
   };
 

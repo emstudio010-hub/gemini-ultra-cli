@@ -43,6 +43,18 @@ decompile-sample.elf、binary-decompile-source-result.json、decompile-source-ar
 
 ## 分发与剩余目标
 
+定向42914177196完成：官方Gradle :Decompiler:buildNatives在macOS
+arm64成功，2m4s/6任务；同一a893844候选旧包实际反编译链21520ms、3个loopback请求、退出0，样本/完整伪代码hash及循环分支检查通过。确认缺原生组件这一根因，而不是通过改预期掩盖失败。证据ghidra-macos-native-42914177196/decompile.json、decompile-artifacts与native-build.log。补齐原生依赖检测/错误摘要/失败工件留存后，最终同源候选再由三平台包核对。
+
+F-042：首次候选运行42912878896的Windows/Linux原生反编译通过，macOS导入/分析/脚本成功但未生成结果。保留失败日志的fixture补齐后，仅复用该macOS包在42913639623诊断，实证官方通用包缺失os/mac_arm_64/decompile。官方GettingStarted.md的Building
+Native Components明确需用户构建macOS/Linux
+ARM组件；不是地址或路径别名问题。新增原生组件存在/可执行检查，覆盖build/os及os目录；/drill
+setup不再仅凭Utility.jar和Java宣称就绪。缺组件返回官方support/gradle的:Decompiler:buildNatives方法，工具不擅自修改本机安装。实际调用失败会摘要关键ERROR/Exception行并保留完整日志；fixture失败时也保留原生analysis.log。
+
+定向诊断提交在既有codex/ultra-agent-native-analysis分支，以私有Git
+index构建，未改本地source
+index或master。42914177196复用同一旧macOS包和固定hash官方工具，仅在runner临时目录按官方Gradle任务构建Decompiler原生组件后再执行原链；不重建Windows/Linux，不重复真实付费任务。最终候选待该原因修复核实后生成。
+
 preview.40准备三平台最终包原生验证。官方Ghidra12.1.4包ghidra_12.1.4_PUBLIC_20260921.zip，发布API
 digest为ddac49f903da9d5bac833e5cc79395098b9c33cfd3279be5f31bd00387d2d4db；CI先核对hash，再临时解压，Java21由setup-java固定主版本提供。工具不随CLI分发，也不安装进用户电脑；其他电脑需独立配置工具与模型。用户产品说明位于docs/ultra-install.md，包含新反编译及已交付的成员选模/工作树用法。
 

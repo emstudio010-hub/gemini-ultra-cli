@@ -13,6 +13,7 @@ import type { Config } from '../config/config.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { checkBinary } from './drillTools.js';
 import { ghidraDecompileScript } from './ghidraDecompileScript.js';
+import { discoverGhidraDecompiler } from './ghidraRuntime.js';
 import { ToolErrorType } from './tool-error.js';
 import {
   BaseDeclarativeTool,
@@ -87,6 +88,9 @@ export async function decompileBinary(
     'Ghidra/Framework/Utility/lib/Utility.jar',
   );
   await fs.access(utility);
+  const nativeDecompiler = discoverGhidraDecompiler(ghidraHome);
+  if (!nativeDecompiler.available)
+    throw new Error(nativeDecompiler.pathOrStatus);
   const properties = await fs.readFile(
     path.join(ghidraHome, 'Ghidra/application.properties'),
     'utf8',
@@ -236,7 +240,15 @@ export async function decompileBinary(
   } catch (error) {
     signal.throwIfAborted();
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`${message} Evidence directory: ${artifactDirectory}`);
+    const clues = diagnostics
+      .split(/\r?\n/)
+      .filter((line) => /ERROR|Exception|Caused by:/.test(line))
+      .slice(-5)
+      .join('\n')
+      .slice(0, 1600);
+    throw new Error(
+      `${message}${clues ? `\n${clues}` : ''} Evidence directory: ${artifactDirectory}`,
+    );
   } finally {
     try {
       if (artifactsCreated)

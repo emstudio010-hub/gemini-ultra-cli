@@ -53,6 +53,22 @@ beforeEach(async () => {
     path.join(ghidra, 'support/launch.properties'),
     'VMARGS=-Djava.system.class.loader=ghidra.GhidraClassLoader\n',
   );
+  const cpu = process.arch === 'arm64' ? 'arm_64' : 'x86_64';
+  const nativePlatform = `${process.platform === 'win32' ? 'win' : process.platform === 'darwin' ? 'mac' : 'linux'}_${cpu}`;
+  const native = path.join(
+    ghidra,
+    'Ghidra/Features/Decompiler/os',
+    nativePlatform,
+  );
+  await fs.mkdir(native, { recursive: true });
+  await fs.writeFile(
+    path.join(
+      native,
+      process.platform === 'win32' ? 'decompile.exe' : 'decompile',
+    ),
+    'fixture native',
+    { mode: 0o755 },
+  );
   vi.stubEnv('GEMINI_ULTRA_GHIDRA_HOME', ghidra);
   vi.stubEnv('GEMINI_ULTRA_TOOL_JAVA', process.execPath);
   sample = path.join(root, 'literal & sample.bin');
@@ -169,6 +185,23 @@ it('fails before launch on cancellation or missing native JDK and preserves the 
       new AbortController().signal,
     ),
   ).rejects.toThrow('native Java');
+  expect(execute).not.toHaveBeenCalled();
+  await fs.rm(
+    path.join(
+      process.env['GEMINI_ULTRA_GHIDRA_HOME']!,
+      'Ghidra/Features/Decompiler/os',
+    ),
+    { recursive: true },
+  );
+  vi.stubEnv('GEMINI_ULTRA_TOOL_JAVA', process.execPath);
+  await expect(
+    decompileBinary(
+      { filePath: sample },
+      root,
+      root,
+      new AbortController().signal,
+    ),
+  ).rejects.toThrow('Missing executable Ghidra decompiler');
   expect(execute).not.toHaveBeenCalled();
   expect(await fs.readFile(sample, 'utf8')).toBe('immutable sample');
 });
