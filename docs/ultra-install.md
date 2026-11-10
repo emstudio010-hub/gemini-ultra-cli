@@ -6,6 +6,11 @@
 
 ## 安装发布包
 
+当前预览源码在
+[codex/ultra-agent-portable 分支](https://github.com/emstudio010-hub/gemini-ultra-cli/tree/codex/ultra-agent-portable)。[GitHub三平台构建](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/42724176448)提供对应系统的Artifact，下载并解压后得到tgz和.sha256文件。已验证的runner为Windows
+x64、Linux x64和macOS arm64，Node
+v24.22.2；校验场景使用本地模型fixture，真实逆向工具需另行配置。
+
 取得维护者提供的 `gemini-ultra-cli-*.tgz`（发布后也可从此项目 GitHub
 Release 下载），执行：
 
@@ -42,6 +47,13 @@ JDK、radare2/rabin2、Python；Android 分析可加 JADX；调试工具依平�
 查看环境变量说明。每台电脑独立配置模型、工具路径和演练授权。外部网络测试应明确目标与授权范围；Bypass 仅表示审批方式。
 
 ## 从源码生成分发包
+
+功能分支尚未合并到master，首次检出请使用：
+
+```sh
+git clone --branch codex/ultra-agent-portable https://github.com/emstudio010-hub/gemini-ultra-cli.git
+cd gemini-ultra-cli
+```
 
 ```sh
 npm ci --ignore-scripts

@@ -20,6 +20,11 @@ gemini-ultra
 后运行
 `npm run package:ultra`。安装包不依赖开发机目录；每台电脑独立配置模型和逆向工具。外接供应商无需 Google 登录，下方保留的上游说明适用于原生 Google 通道。
 
+当前预览源码在
+[codex/ultra-agent-portable 分支](https://github.com/emstudio010-hub/gemini-ultra-cli/tree/codex/ultra-agent-portable)。[三平台构建及安装工件](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/42724176448)已通过 Windows
+x64、Linux x64 和 macOS
+arm64；下载对应系统的Artifact并解压，取得其中的tgz和校验文件。真实外部工具及复杂逆向的验收范围见目标池。
+
 ## 上游 Gemini CLI 文档
 
 [![Gemini CLI CI](https://github.com/google-gemini/gemini-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/google-gemini/gemini-cli/actions/workflows/ci.yml)
