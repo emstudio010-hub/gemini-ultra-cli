@@ -10,7 +10,13 @@ export type ProviderProtocol =
   | 'anthropic'
   | 'gemini';
 
-export type ReasoningEffortLevel = 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
+export type ReasoningEffortLevel =
+  | 'low'
+  | 'medium'
+  | 'high'
+  | 'xhigh'
+  | 'max'
+  | 'ultra';
 
 export interface ExternalProviderProfile {
   /** Unique identifier (slug of name) */
@@ -27,6 +33,8 @@ export interface ExternalProviderProfile {
   models: string[];
   /** Currently selected default model for this provider */
   defaultModel?: string;
+  /** Optional output token limit; individual generation requests take priority. */
+  maxOutputTokens?: number;
   /** Supported image generation models (e.g. dall-e-3, flux-1, recraft-v3, imagen-3) */
   imageModels?: string[];
   /** Default image generation model */

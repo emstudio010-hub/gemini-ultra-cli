@@ -67,6 +67,60 @@ describe('ProviderManager', () => {
     expect(mgr.getReasoningEffort()).toBe('xhigh');
   });
 
+  it('persists, preserves and explicitly clears the optional output limit', () => {
+    const mgr = new ProviderManager(tmpFile);
+    const input = {
+      name: 'Budget',
+      baseUrl: 'https://fixture.invalid/v1',
+      apiKey: '',
+      models: ['fixture'],
+    };
+    const provider = mgr.upsertProvider({ ...input, maxOutputTokens: 32768 });
+    expect(
+      new ProviderManager(tmpFile).getProvider(provider.id)?.maxOutputTokens,
+    ).toBe(32768);
+    mgr.upsertProvider({ ...input, id: provider.id, models: ['changed'] });
+    expect(mgr.getProvider(provider.id)?.maxOutputTokens).toBe(32768);
+    mgr.upsertProvider({
+      ...input,
+      id: provider.id,
+      maxOutputTokens: undefined,
+    });
+    expect(
+      new ProviderManager(tmpFile).getProvider(provider.id)?.maxOutputTokens,
+    ).toBeUndefined();
+    expect(fs.readFileSync(tmpFile, 'utf8')).not.toContain('maxOutputTokens');
+  });
+
+  it('rejects invalid output limits without changing saved configuration', () => {
+    const mgr = new ProviderManager(tmpFile);
+    const input = {
+      name: 'Budget',
+      baseUrl: 'https://fixture.invalid/v1',
+      apiKey: '',
+    };
+    const provider = mgr.upsertProvider({ ...input, maxOutputTokens: 32768 });
+    const original = fs.readFileSync(tmpFile, 'utf8');
+    for (const limit of [
+      0,
+      -1,
+      1.5,
+      NaN,
+      Infinity,
+      Number.MAX_SAFE_INTEGER + 1,
+    ]) {
+      expect(() =>
+        mgr.upsertProvider({
+          ...input,
+          id: provider.id,
+          maxOutputTokens: limit,
+        }),
+      ).toThrow('Invalid provider configuration');
+      expect(mgr.getProvider(provider.id)?.maxOutputTokens).toBe(32768);
+      expect(fs.readFileSync(tmpFile, 'utf8')).toBe(original);
+    }
+  });
+
   it.each([
     '{"providers":[{"apiKey":"private-fixture"}]}',
     '{"private-fixture":',

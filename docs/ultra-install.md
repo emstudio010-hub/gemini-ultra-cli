@@ -15,7 +15,7 @@ v24.22.2；校验场景使用本地模型fixture，真实逆向工具需另行�
 Release 下载），执行：
 
 ```sh
-npm install -g ./gemini-ultra-cli-1.0.0-preview.19.tgz
+npm install -g ./gemini-ultra-cli-1.0.0-preview.20.tgz
 gemini-ultra --version
 gemini-ultra
 ```
@@ -40,6 +40,10 @@ gemini-ultra
    的静态初筛不依赖 IDA 或 Ghidra。深入反编译需要用户安装至少一种对应工具。
 5. `/drill` 或 `/演练台`
    打开本地控制中心，管理提示词、规则、模型与协作状态。`/drill stop` 关闭。
+
+## 可选输出上限
+
+进入 /provider，选择「输出上限」即可按供应商设置正整数 Token 数。留空恢复现有默认行为；任务自己指定的上限优先。可用范围依模型和供应商而定，此设置不代表该供应商已支持任意长度。设置保存在个人供应商配置中，安装或升级不会覆盖它。
 
 ## 跨电脑逆向环境
 
@@ -72,13 +76,13 @@ Release。每个安装包附带 `.sha256` 文件，便于传输后核对。
 Windows PowerShell 校验安装包：
 
 ```powershell
-Get-FileHash ./gemini-ultra-cli-1.0.0-preview.19.tgz -Algorithm SHA256
-Get-Content ./gemini-ultra-cli-1.0.0-preview.19.tgz.sha256
+Get-FileHash ./gemini-ultra-cli-1.0.0-preview.20.tgz -Algorithm SHA256
+Get-Content ./gemini-ultra-cli-1.0.0-preview.20.tgz.sha256
 ```
 
 macOS 使用
-`shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.19.tgz.sha256`；Linux 使用
-`sha256sum -c gemini-ultra-cli-1.0.0-preview.19.tgz.sha256`。
+`shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.20.tgz.sha256`；Linux 使用
+`sha256sum -c gemini-ultra-cli-1.0.0-preview.20.tgz.sha256`。
 
 ## 自定义逆向工具路径
 

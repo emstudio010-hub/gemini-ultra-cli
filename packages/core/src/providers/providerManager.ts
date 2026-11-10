@@ -99,6 +99,7 @@ const providersSchema = z.object({
         protocol: protocolSchema.optional(),
         models: z.array(modelId).default([]),
         defaultModel: modelId.optional(),
+        maxOutputTokens: z.number().int().positive().safe().optional(),
         imageModels: z.array(modelId).optional(),
         defaultImageModel: modelId.optional(),
         customHeaders: z.record(z.string()).optional(),
@@ -252,6 +253,7 @@ export class ProviderManager {
     protocol?: ProviderProtocol;
     models?: string[];
     defaultModel?: string;
+    maxOutputTokens?: number;
     imageModels?: string[];
     defaultImageModel?: string;
     customHeaders?: Record<string, string>;
@@ -329,6 +331,12 @@ export class ProviderManager {
       protocol,
       models: mergedModels,
       defaultModel,
+      maxOutputTokens: Object.prototype.hasOwnProperty.call(
+        input,
+        'maxOutputTokens',
+      )
+        ? input.maxOutputTokens
+        : existing?.maxOutputTokens,
       imageModels: mergedImageModels,
       defaultImageModel:
         input.defaultImageModel ||

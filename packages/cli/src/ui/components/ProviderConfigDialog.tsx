@@ -38,6 +38,7 @@ type MenuPage =
   | 'select-protocol-option'
   | 'select-models-checklist'
   | 'edit-image-model'
+  | 'edit-output-limit'
   | 'confirm-delete';
 
 const PROTOCOLS: Array<{ id: ProviderProtocol; name: string; desc: string }> = [
@@ -109,6 +110,7 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
 
   // Image model buffer
   const [imageModelInput, setImageModelInput] = useState('');
+  const [outputLimitInput, setOutputLimitInput] = useState('');
 
   const [statusMessage, setStatusMessage] = useState('');
   const [editingProviderId, setEditingProviderId] = useState<string | null>(
@@ -175,8 +177,15 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
       ),
     },
     {
+      id: 'edit-output-limit',
+      label: t(
+        '9. [输出上限] - 设置生成的 Token 上限，留空使用默认值',
+        '9. [Output Limit] - Set output token limit, empty for default',
+      ),
+    },
+    {
       id: 'exit',
-      label: t('9. [保存并返回终端]', '9. [Save and Return to Terminal]'),
+      label: t('10. [保存并返回终端]', '10. [Save and Return to Terminal]'),
     },
   ];
 
@@ -325,6 +334,13 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
               setPage('edit-image-model');
             } else if (selected === 'add-new') {
               startEditBasics();
+            } else if (selected === 'edit-output-limit') {
+              if (!focusedProvider) return true;
+              setOutputLimitInput(
+                focusedProvider.maxOutputTokens?.toString() ?? '',
+              );
+              setStatusMessage('');
+              setPage('edit-output-limit');
             } else if (selected === 'delete') {
               if (focusedProvider) setPage('confirm-delete');
             } else if (selected === 'lang') {
@@ -593,6 +609,60 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
         }
 
         // ------------------------------------------------------------------
+        // Output limit is optional and does not add a step to provider creation.
+        // ------------------------------------------------------------------
+        if (page === 'edit-output-limit') {
+          if (isEnter(key)) {
+            const value = outputLimitInput.trim();
+            const limit = value ? Number(value) : undefined;
+            if (
+              value &&
+              (!/^[0-9]+$/.test(value) ||
+                !Number.isSafeInteger(limit) ||
+                Number(value) <= 0)
+            ) {
+              setStatusMessage(
+                t(
+                  '请输入正整数，或留空使用默认值。',
+                  'Enter a positive integer, or leave empty for default.',
+                ),
+              );
+              return true;
+            }
+            if (focusedProvider) {
+              mgr.upsertProvider({
+                ...focusedProvider,
+                maxOutputTokens: limit,
+                setActive: activeProvider?.id === focusedProvider.id,
+              });
+              setProviders(mgr.listProviders());
+              setStatusMessage(
+                t('✓ 输出上限已更新。', '✓ Output limit updated.'),
+              );
+              setPage('main-menu');
+            }
+            return true;
+          }
+          if (key.name === 'backspace') {
+            setOutputLimitInput((p) => p.slice(0, -1));
+            setStatusMessage('');
+            return true;
+          }
+          if (key.sequence && !key.ctrl) {
+            const pasted = key.sequence
+              .replaceAll('\x1b', '')
+              .replace(/[\r\n]/g, '')
+              .replace(/\[20[01]~/g, '');
+            if (pasted) {
+              setOutputLimitInput((p) => p + pasted);
+              setStatusMessage('');
+            }
+            return true;
+          }
+          return false;
+        }
+
+        // ------------------------------------------------------------------
         // 6. EDIT IMAGE MODEL
         // ------------------------------------------------------------------
         if (page === 'edit-image-model') {
@@ -721,6 +791,7 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
               t('› 模型清单多选勾选', '› Model Checklist')}
             {page === 'edit-image-model' &&
               t('› 生图模型参数设置', '› Image Generation Model')}
+            {page === 'edit-output-limit' && t('› 输出上限', '› Output Limit')}
             {page === 'confirm-delete' &&
               t('› 确认删除供应商', '› Confirm Deletion')}
           </Text>
@@ -740,7 +811,15 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
           borderStyle="single"
           borderColor={theme.border.default}
         >
-          <Text color={theme.status.success}>{statusMessage}</Text>
+          <Text
+            color={
+              page === 'edit-output-limit'
+                ? theme.status.error
+                : theme.status.success
+            }
+          >
+            {statusMessage}
+          </Text>
         </Box>
       ) : null}
 
@@ -1128,6 +1207,34 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
       )}
 
       {/* PAGE 6: IMAGE MODEL */}
+      {page === 'edit-output-limit' && (
+        <Box flexDirection="column">
+          <Text bold color={theme.text.primary}>
+            {t('输出上限', 'Output Limit')} · {focusedProvider?.name}
+          </Text>
+          <Text color={theme.text.secondary}>
+            {t(
+              '输入正整数 Token 数，留空沿用默认值。任务自己的上限优先。',
+              'Enter a positive token count, or leave empty for default. Task limits take priority.',
+            )}
+          </Text>
+          <Text color={theme.text.secondary}>
+            {t(
+              '可用上限取决于模型与供应商。',
+              'Available limits depend on the model and provider.',
+            )}
+          </Text>
+          <Box marginTop={1}>
+            <Text color={theme.text.accent}>&gt; </Text>
+            <Text color={theme.text.primary}>{outputLimitInput}</Text>
+            <Text color={theme.text.secondary}>_</Text>
+          </Box>
+          <Text color={theme.ui.comment}>
+            {t('[Enter] 保存 | [Esc] 取消返回', '[Enter] Save | [Esc] Cancel')}
+          </Text>
+        </Box>
+      )}
+
       {page === 'edit-image-model' && (
         <Box flexDirection="column">
           <Box marginBottom={1}>

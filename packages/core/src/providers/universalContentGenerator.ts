@@ -154,7 +154,11 @@ export class UniversalContentGenerator implements ContentGenerator {
     }
 
     const { provider, modelId } = resolution;
-    const modifiedRequest = { ...request, model: modelId };
+    const modifiedRequest = this.withProviderDefaults(
+      request,
+      provider,
+      modelId,
+    );
 
     return this.externalGenerator(provider).generateContent(
       modifiedRequest,
@@ -181,7 +185,11 @@ export class UniversalContentGenerator implements ContentGenerator {
     }
 
     const { provider, modelId } = resolution;
-    const modifiedRequest = { ...request, model: modelId };
+    const modifiedRequest = this.withProviderDefaults(
+      request,
+      provider,
+      modelId,
+    );
 
     return this.externalGenerator(provider).generateContentStream(
       modifiedRequest,
@@ -191,6 +199,26 @@ export class UniversalContentGenerator implements ContentGenerator {
   }
 
   // --- OpenAI Chat Completions Adapter (/v1/chat/completions) ---
+
+  private withProviderDefaults(
+    request: GenerateContentParameters,
+    provider: ExternalProviderProfile,
+    model: string,
+  ): GenerateContentParameters {
+    return {
+      ...request,
+      model,
+      ...(request.config?.maxOutputTokens === undefined &&
+      provider.maxOutputTokens !== undefined
+        ? {
+            config: {
+              ...request.config,
+              maxOutputTokens: provider.maxOutputTokens,
+            },
+          }
+        : {}),
+    };
+  }
 
   private formatOpenAIMessages(
     request: GenerateContentParameters,

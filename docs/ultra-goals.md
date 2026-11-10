@@ -305,3 +305,10 @@
 - E-072：[preview.19运行42761930268](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/42761930268)三平台completed/success，功能提交07173eb57df0a5f686bf62aa10beb338fa32554b。三个工件版本、安装报告、SHA-256及六个rg文件hash/0755核对通过。
 - E-073：本机双命令preview.19、入口与Windows CI包一致。已安装OpenAI Chat HTTP fixture上述分片链通过，2请求/2,149ms/退出0，真实落盘、最终正文及usage完整、无重试。使用deepseek/deepseek-v4.1-flash模型名称但端点为本地fixture，不是真实服务。观察到两次默认主请求均未发送显式max_tokens/max_completion_tokens；供应商默认上限是否导致无正文仍是假设，后续先核对输出预算及实际终止信息，不凭此直接归因。
 - Windows包SHA-256 `2b5d433cc3d1717b68fde6bed314e0166569900c9c34120bcd80b6450586d0d3`；Linux `76df20ebecb8c10e471c3a39e6922fd311bfb578b3a772b708891f54f47520a6`；macOS `ca340b7731f51ab732ba130159263c7d8cfe5c4ce577164c3bf72c6a4dca172a`。本机已有缓存offline安装11秒，不代表无缓存新电脑离线安装。完整交付与复杂逆向仍未验收，整体目标active。
+
+## 2026-11-10 可选输出上限
+
+- E-074：新增按供应商保存的 maxOutputTokens 和 /provider「输出上限」菜单。留空沿用现有默认，任务显式上限优先；普通参数编辑及演练台保存未传此字段时保留旧值，明确 undefined 清除。严格校验正安全整数，拒绝非法值时内存与原文件不变。两个公开生成入口统一注入，不改变四协议的参数命名与既有 Anthropic 推理预算。
+- 12项必要定向检查通过，覆盖保存/重载/保留/清除/非法值，以及四协议、Chat两种Token参数、流式/非流式的默认和覆盖行为；六个改动TypeScript文件严格lint、核心/CLI类型构建通过。首次两个Anthropic断言把现有高强度默认24192误写为8192，已修正检查预期，产品默认未改。原检查日志保留。
+- 开发bundle的实际Windows ConPTY输入通过：打开菜单、0就地报错、32768保存、重开读回、留空清除、正常退出，10,789ms。没有模型请求；不新增首次供应商创建步骤、不做全量或冒烟。
+- preview.20分发与安装尚待本阶段后续核对；真实thinking-only是否与输出预算有关仍未证实，不根据本地参数检查宣布真实交付修复。整体目标active。
