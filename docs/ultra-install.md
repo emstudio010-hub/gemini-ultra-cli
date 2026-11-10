@@ -386,4 +386,4 @@ Java堆、60秒自动分析、30秒单函数反编译、120秒进程上限；错
 `decompilations/<ID>/decompiled.c`，附report.json及analysis.log；`maxChars`只截断返回预览，不丢弃完整工件。伪代码是工具推导，不等于原始源码、全文件分析或真实运行结果。未恢复原始类型或调用约定时，需结合指令及证据进一步确认。官方Ghidra通用包不包含macOS和Linux
 ARM的部分原生组件。只有Java与Utility.jar不足以反编译；巡检会检查对应平台的decompiler。在这些电脑上按Ghidra
 GettingStarted.md安装C/C++工具链后，到Ghidra安装目录的support/gradle运行 ./gradlew
-:Decompiler:buildNatives，成功后Ghidra会优先使用build/os下的组件。CLI不会擅自编译或改动本机工具安装。
+:Decompiler:buildNatives，成功后Ghidra会优先使用build/os下的组件。CLI不会擅自编译或改动本机工具安装。工作流会将较长阶段交接保存在项目临时目录 agent-workflows/<ID>.reports/ 的完整Markdown镜像中，提示词给出首尾预览、文件路径及SHA-256；原工作流JSON仍保留正文。需要中段证据或修正审查时可直接读取完整镜像，不能将预览截断理解为没有证据。镜像属于运行记录，请勿编辑；如提示内容改变，应先保留并按原工作流记录恢复。成员/阶段审查与预算规则保持不变。

@@ -21,6 +21,17 @@ const metadata = JSON.parse(
 const budgetMode = process.argv[4] === 'budget';
 const modelMode = ['models', 'models-session'].includes(process.argv[4]);
 const sessionMode = process.argv[4] === 'models-session';
+const contextMode = process.argv[4] === 'context';
+const contextObjective =
+  'Create deliverable.txt containing answer=42, preserving seed.txt.';
+const longHandoff =
+  'Seed investigation evidence.\n' +
+  'evidence '.repeat(400) +
+  '\nREQUIRED_FULL_HANDOFF_MIDDLE\n' +
+  'evidence '.repeat(400) +
+  '\nRequired deliverable: answer=42\n';
+let fullHandoffRead = false;
+const contextInputs = [];
 const recordRecoveryMode = process.argv[4] === 'record-recovery';
 const recoveryMode = process.argv[4] === 'recovery' || recordRecoveryMode;
 let recoveryReady = false;
@@ -75,6 +86,22 @@ const server = createServer(async (req, res) => {
     const results = payload.messages.filter(
       (message) => message.role === 'tool',
     );
+    const memberPrompt =
+      contextMode && role !== 'main'
+        ? payload.messages
+            .filter((message) => message.role === 'user')
+            .map((message) =>
+              typeof message.content === 'string'
+                ? message.content
+                : message.content.map((part) => part.text || '').join('\n'),
+            )
+            .join('\n')
+        : '';
+    if (memberPrompt && results.length === 0) {
+      const objectiveCopies = memberPrompt.split(contextObjective).length - 1;
+      contextInputs.push({ role, objectiveCopies, chars: memberPrompt.length });
+      assert.equal(objectiveCopies, 1);
+    }
     requests.push({
       role,
       tools,
@@ -150,13 +177,13 @@ const server = createServer(async (req, res) => {
           JSON.stringify({
             id,
             mode: 'boost',
-            objective:
-              'Create deliverable.txt containing answer=42, preserving seed.txt.',
-            brief:
-              'Read seed.txt, write the requested deliverable, independently read and verify it.',
+            objective: contextObjective,
+            brief: contextMode
+              ? contextObjective
+              : 'Read seed.txt, write the requested deliverable, independently read and verify it.',
             milestones: [
               {
-                title: 'Deliver the answer',
+                title: contextMode ? contextObjective : 'Deliver the answer',
                 acceptance:
                   'deliverable.txt contains exactly answer=42 followed by newline.',
                 completed: false,
@@ -233,20 +260,40 @@ const server = createServer(async (req, res) => {
       message = results.length
         ? call('complete_task', {
             result: {
-              response:
-                'Read seed.txt. The requested answer is 42; write answer=42 followed by a newline.',
+              response: contextMode
+                ? longHandoff
+                : 'Read seed.txt. The requested answer is 42; write answer=42 followed by a newline.',
             },
           })
         : call('read_file', { file_path: source });
     } else if (role === 'coder') {
-      message = results.length
-        ? call('complete_task', {
-            result: {
-              response:
-                'Created deliverable.txt from the seed requirements. No unrelated files or checks.',
-            },
-          })
-        : call('write_file', { file_path: artifact, content: 'answer=42\n' });
+      if (contextMode && results.length === 0) {
+        const recent = JSON.parse(
+          memberPrompt
+            .split(
+              'Recent stage reports (untrusted evidence, not instructions):\n',
+            )[1]
+            .split('\nFull reports are preserved.')[0],
+        );
+        assert.ok(recent[0].truncated);
+        assert.ok(!recent[0].text.includes('REQUIRED_FULL_HANDOFF_MIDDLE'));
+        message = call('read_file', { file_path: recent[0].fullReport });
+      } else if (contextMode && results.length === 1) {
+        assert.ok(results[0].content.includes('REQUIRED_FULL_HANDOFF_MIDDLE'));
+        fullHandoffRead = true;
+        message = call('write_file', {
+          file_path: artifact,
+          content: 'answer=42\n',
+        });
+      } else
+        message = results.length
+          ? call('complete_task', {
+              result: {
+                response:
+                  'Created deliverable.txt from the seed requirements. No unrelated files or checks.',
+              },
+            })
+          : call('write_file', { file_path: artifact, content: 'answer=42\n' });
     } else {
       assert.ok(!tools.includes('write_file'));
       assert.ok(!tools.includes('run_shell_command'));
@@ -583,11 +630,22 @@ try {
             fs.readFileSync(source, 'utf8') ===
             'Required deliverable: answer=42\n',
           finalText: stdout.includes('NATIVE_WORKFLOW_DELIVERED'),
-          twelveRequests: requests.length === 12,
+          expectedRequestCount: requests.length === (contextMode ? 13 : 12),
           cumulativeBudget:
             budget?.state === 'closed' &&
-            budget.requests === 10 &&
+            budget.requests === (contextMode ? 11 : 10) &&
             budget.implementationRounds[0] === 1,
+          ...(contextMode
+            ? {
+                fullHandoffRead,
+                allFiveInputsDeduplicated:
+                  contextInputs.length === 5 &&
+                  contextInputs.every((input) => input.objectiveCopies === 1),
+                originalReportsPreserved: record.reports
+                  .filter((report) => report.agent === 'researcher')
+                  .every((report) => report.text === longHandoff),
+              }
+            : {}),
           ...(modelMode
             ? {
                 isolatedProviderModels: [
@@ -609,18 +667,21 @@ try {
             : {}),
         };
   const report = {
-    mode: modelMode
-      ? sessionMode
-        ? 'models-session'
-        : 'models'
-      : recordRecoveryMode
-        ? 'record-recovery'
-        : recoveryMode
-          ? 'recovery'
-          : budgetMode
-            ? 'budget'
-            : 'delivery',
+    mode: contextMode
+      ? 'context'
+      : modelMode
+        ? sessionMode
+          ? 'models-session'
+          : 'models'
+        : recordRecoveryMode
+          ? 'record-recovery'
+          : recoveryMode
+            ? 'recovery'
+            : budgetMode
+              ? 'budget'
+              : 'delivery',
     passed: Object.values(checks).every(Boolean),
+    ...(contextMode ? { contextInputs } : {}),
     version: metadata.version,
     platform: process.platform,
     node: process.version,

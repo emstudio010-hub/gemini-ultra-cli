@@ -62,6 +62,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node scripts/verify-ultra-workflow.mjs $entry artifacts/ultra-release/workflow-model-session-verification.json models-session
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/verify-ultra-workflow.mjs $entry artifacts/ultra-release/workflow-context-verification.json context
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node scripts/verify-ultra-workflow.mjs $entry artifacts/ultra-release/workflow-budget-verification.json budget
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node scripts/verify-ultra-workflow.mjs $entry artifacts/ultra-release/workflow-recovery-verification.json recovery
@@ -124,6 +126,8 @@ jobs:
             artifacts/ultra-release/workflow-verification-output.txt
             artifacts/ultra-release/workflow-model-session-verification.json
             artifacts/ultra-release/workflow-model-session-verification-output.txt
+            artifacts/ultra-release/workflow-context-verification.json
+            artifacts/ultra-release/workflow-context-verification-output.txt
             artifacts/ultra-release/workflow-budget-verification.json
             artifacts/ultra-release/workflow-budget-verification-output.txt
             artifacts/ultra-release/workflow-recovery-verification.json
