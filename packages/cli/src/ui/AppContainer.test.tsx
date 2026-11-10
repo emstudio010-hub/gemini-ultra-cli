@@ -433,6 +433,7 @@ describe('AppContainer State Management', () => {
     mockedUseSlashCommandProcessor.mockReturnValue({
       handleSlashCommand: vi.fn(),
       slashCommands: [],
+      areCommandsReady: true,
       pendingHistoryItems: [],
       commandContext: {},
       shellConfirmationRequest: null,
@@ -2161,6 +2162,7 @@ describe('AppContainer State Management', () => {
       mockedUseSlashCommandProcessor.mockReturnValue({
         handleSlashCommand: mockHandleSlashCommand,
         slashCommands: [],
+        areCommandsReady: true,
         pendingHistoryItems: [],
         commandContext: {},
         shellConfirmationRequest: null,
@@ -2632,6 +2634,7 @@ describe('AppContainer State Management', () => {
       mockedUseSlashCommandProcessor.mockReturnValue({
         handleSlashCommand: vi.fn(),
         slashCommands: [],
+        areCommandsReady: true,
         pendingHistoryItems: [],
         commandContext: {},
         shellConfirmationRequest: null,
