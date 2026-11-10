@@ -1,6 +1,7 @@
 # Gemini Ultra CLI Swarm 状态恢复交接
 
-日期：2026-11-11。候选 preview.36；本机目前仍 preview.35。
+日期：2026-11-11。本机双命令已安装 preview.36，产品源提交
+`5c3ac52db14af282852ee4e5fb04cd3859be6554`。
 
 ## E-140 / F-038
 
@@ -48,3 +49,31 @@ E-140 严格读取、独立拥有者/未知标记、本地指定 ID 保留取消
 WI-066
 Swarm 计数和状态/绑定恢复本地完成，preview.36 待分发安装。WI-067 后续处理 workflow 记录本体损坏的本地可取消路径，保持未知用量不自动清零。整个板文件损坏的读取/浏览、所有拥有者信息同时丢失、权限错误不在本轮扩大验收。WI-054 真实供应商完整自主交付/引用可靠性、WI-056 复杂逆向、隔离工作树及成员独立模型继续；goal
 active，不合并 master、不发布正式 Release。
+
+## E-141 三平台最终工件
+
+[运行42897457849](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/42897457849)
+completed/success，产品源5c3ac52db14af282852ee4e5fb04cd3859be6554。三个包的SHA/版本/源运行、安装记录和六rg二进制hash/Unix权限逐一核对。Swarm正常20请求/预算3请求/新增恢复2请求，以及工作流正常12请求/预算3请求/恢复2请求均通过，模型只用loopback
+fixture。
+
+| 平台        | 包SHA-256                                                        | Swarm恢复时长 | cancel/resume/普通会话 |
+| ----------- | ---------------------------------------------------------------- | ------------- | ---------------------- |
+| Windows x64 | f382ddbeb1f389acda7a313e6f7e0412e448fe621ce49244c2008334fb281ee8 | 9207ms        | 0 / 42 / 0             |
+| Linux x64   | b3f82c1f158fa27f4e346bde21d609b431b72c38922a5a35343ee2d4db7c7efc | 3068ms        | 0 / 42 / 0             |
+| macOS arm64 | 4f8429cd819d76a999a2c3f88eccf6bdbc0eee68f44bc522cce310e2f5aa6ec7 | 4017ms        | 0 / 42 / 0             |
+
+每平台实际CLI新增恢复链：初始坏状态退出1；指定ID取消/拒绝旧任务恢复无模型请求，普通会话恢复后发1请求，加最初隔离坏状态seed合计2请求。成员和索引备份字节匹配，板未改，未知旧用量与cancelled保留，无工件和伪造完成。隔离时长不作跨平台性能基准，不替代真实供应商自主交付。
+
+## E-142 本机安装
+
+仅一次offline已有缓存安装6932ms/退出0；gemini-ultra和gemini-ultra-cli均1.0.0-preview.36，424包内文件与Windows
+CI包逐一匹配。入口SHA为6e89987b8289cddf3352797faac23c82365b8deb218a02fe39aa90a3135af6f4。preview.35原包保留，不重复相同Windows
+CI包已运行的fixture，不改个人供应商配置、数据库或逆向工具。
+
+工程证据：github-preview36-run.json、github-preview36-artifacts-result.json、github-run-42897457849/各平台/swarm-recovery-verification.json和对应输出；global-preview36-install-result.json、global-install-github-preview36-full-result.json。WI-066交付，goal继续active，仅codex分支，不合并master、不发布正式Release。
+
+## E-143 / F-039 下一阶段已复现
+
+reproduce-workflow-record-corruption.mjs生成隔离工作流后只破坏原ID.json记录本体，完整预算/拥有者账本保留。取消失败；无关teamwork查询也失败，因为latestAgentWorkflow在过滤模式前先解析所有记录。原坏字节保留、0模型请求，workflow-record-corruption-before.json记录reproduced=true。
+
+WI-067接续指定ID保留取消及坏历史记录不阻断其他模式的查询；没有真实用户数据损坏结论。WI-054真实完整自主交付/引用可靠性、WI-056复杂逆向、隔离工作树和成员独立模型仍待做，不因fixture通过关闭总目标。
