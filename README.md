@@ -7,7 +7,7 @@ CLI 的增强版，提供外接模型供应商、中英文界面、六档推理�
 下载此仓库发布的安装包后执行：
 
 ```sh
-npm install -g ./gemini-ultra-cli-1.0.0-preview.8.tgz
+npm install -g ./gemini-ultra-cli-1.0.0-preview.9.tgz
 gemini-ultra
 ```
 
@@ -21,7 +21,7 @@ gemini-ultra
 `npm run package:ultra`。安装包不依赖开发机目录；每台电脑独立配置模型和逆向工具。外接供应商无需 Google 登录，下方保留的上游说明适用于原生 Google 通道。
 
 当前预览源码在
-[codex/ultra-agent-portable 分支](https://github.com/emstudio010-hub/gemini-ultra-cli/tree/codex/ultra-agent-portable)。[三平台构建及安装工件](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/42724176448)已通过 Windows
+[codex/ultra-agent-portable 分支](https://github.com/emstudio010-hub/gemini-ultra-cli/tree/codex/ultra-agent-portable)。[三平台构建及安装工件](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/workflows/ultra-package.yml?query=branch%3Acodex%2Fultra-agent-portable)已通过 Windows
 x64、Linux x64 和 macOS
 arm64；下载对应系统的Artifact并解压，取得其中的tgz和校验文件。真实外部工具及复杂逆向的验收范围见目标池。
 

@@ -7,7 +7,7 @@
 ## 安装发布包
 
 当前预览源码在
-[codex/ultra-agent-portable 分支](https://github.com/emstudio010-hub/gemini-ultra-cli/tree/codex/ultra-agent-portable)。[GitHub三平台构建](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/42724176448)提供对应系统的Artifact，下载并解压后得到tgz和.sha256文件。已验证的runner为Windows
+[codex/ultra-agent-portable 分支](https://github.com/emstudio010-hub/gemini-ultra-cli/tree/codex/ultra-agent-portable)。[GitHub三平台构建](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/workflows/ultra-package.yml?query=branch%3Acodex%2Fultra-agent-portable)提供对应系统的Artifact，下载并解压后得到tgz和.sha256文件。已验证的runner为Windows
 x64、Linux x64和macOS arm64，Node
 v24.22.2；校验场景使用本地模型fixture，真实逆向工具需另行配置。
 
@@ -15,7 +15,7 @@ v24.22.2；校验场景使用本地模型fixture，真实逆向工具需另行�
 Release 下载），执行：
 
 ```sh
-npm install -g ./gemini-ultra-cli-1.0.0-preview.8.tgz
+npm install -g ./gemini-ultra-cli-1.0.0-preview.9.tgz
 gemini-ultra --version
 gemini-ultra
 ```
@@ -69,13 +69,13 @@ Release。每个安装包附带 `.sha256` 文件，便于传输后核对。
 Windows PowerShell 校验安装包：
 
 ```powershell
-Get-FileHash ./gemini-ultra-cli-1.0.0-preview.8.tgz -Algorithm SHA256
-Get-Content ./gemini-ultra-cli-1.0.0-preview.8.tgz.sha256
+Get-FileHash ./gemini-ultra-cli-1.0.0-preview.9.tgz -Algorithm SHA256
+Get-Content ./gemini-ultra-cli-1.0.0-preview.9.tgz.sha256
 ```
 
 macOS 使用
-`shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.8.tgz.sha256`；Linux 使用
-`sha256sum -c gemini-ultra-cli-1.0.0-preview.8.tgz.sha256`。
+`shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.9.tgz.sha256`；Linux 使用
+`sha256sum -c gemini-ultra-cli-1.0.0-preview.9.tgz.sha256`。
 
 ## 自定义逆向工具路径
 
@@ -118,11 +118,37 @@ MiB。缺工具、异常JSON、超时或溢出均返回错误，不伪装成分�
 `binary_triage` 的 `highRiskApis` 仅为字符串候选；应使用 `binary_inspect`
 的实际导入表复核。该工具也可供只读子代理和计划模式调用；静态元数据不等于完整反编译或行为验证。
 
+## 已核对的原生工具安装
+
+Windows x64、Debian 12 x64和macOS arm64已使用官方radare2
+6.2.2完成已安装CLI的原生导入读取、归档和查询；模型响应为本地fixture，样本未执行。包不携带radare2，其他发行版和架构应选择相应安装方式。
+
+Debian 12 x64示例，从官方发布页下载并核对本轮实际使用的包：
+
+```sh
+curl -fL -o radare2_6.2.2_amd64.deb https://github.com/radareorg/radare2/releases/download/6.2.2/radare2_6.2.2_amd64.deb
+printf '%s  %s\n' '09234e4139bf8dfcbb7fc1fdb2519859ad516e63c19d3c27d92aaecdf463b1ad' 'radare2_6.2.2_amd64.deb' | sha256sum -c -
+sudo dpkg -i ./radare2_6.2.2_amd64.deb
+rabin2 -v
+```
+
+macOS
+arm64可从[官方6.2.2发布页](https://github.com/radareorg/radare2/releases/tag/6.2.2)下载
+`radare2-arm64-6.2.2.pkg` 并安装。本轮核对的SHA-256为
+`6d674844aacb3c72de0fd1e01353d6dd03d4235a3629b607d1fe74c98e2a5f24`；安装后用
+`rabin2 -v` 和 `/drill setup`
+检查当前电脑的实际路径。Windows选择原生rabin2.exe，安装位置不固定。
+
+Node 22.19.0的Linux x64原生链也已单独核对；三平台runner使用Node
+24.22.2。这些记录属于preview.8运行时代码，本轮后续版本的修复与验收见目标池。
+
 ## 笔记与事实查询
 
 `drill_record_fact` 的 `note`
 单独保存技术观察，不会生成带有假哈希的二进制工件。`binary` 用于样本，`vuln`
 用于发现；`info` 严重度仍属于发现。笔记正文和证据分别保留，演练台同时显示。
+
+数据库被占用或写入失败时，归档工具会返回结构化错误，按失败记录；释放写锁后可重试，不把未落盘的事实计为成功。
 
 `drill_query_facts` 的 `currentSessionOnly`
 同时约束普通列表与关键词搜索。没有全文索引或关键词不是合法全文表达式时，使用字面搜索；无匹配时返回空列表。普通列表按时间返回最新50条。

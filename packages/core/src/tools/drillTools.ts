@@ -198,7 +198,10 @@ export function recordFactTool(
       });
       return { success: true, id };
     }
-    return { success: false, error: 'Invalid category: use vuln, binary or note.' };
+    return {
+      success: false,
+      error: 'Invalid category: use vuln, binary or note.',
+    };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     return { success: false, error: msg };
@@ -320,6 +323,14 @@ class DrillRecordFactInvocation extends BaseToolInvocation<
       returnDisplay: res.success
         ? `✓ 已归档演练事实 #${res.id}: [${this.params.category}] ${this.params.title}`
         : `归档失败: ${res.error}`,
+      ...(res.success
+        ? {}
+        : {
+            error: {
+              message: res.error || 'Failed to record the drill fact.',
+              type: ToolErrorType.EXECUTION_FAILED,
+            },
+          }),
     };
   }
 }

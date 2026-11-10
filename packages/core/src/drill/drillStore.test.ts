@@ -10,7 +10,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { DrillStore } from './drillStore.js';
-import { recordFactTool } from '../tools/drillTools.js';
+import { recordFactTool, DrillRecordFactTool } from '../tools/drillTools.js';
+import { makeFakeConfig } from '../test-utils/config.js';
+import { createMockMessageBus } from '../test-utils/mock-message-bus.js';
+import { ToolErrorType } from '../tools/tool-error.js';
 
 describe('Drill fact categories and search boundaries', () => {
   let directory: string;
@@ -26,6 +29,42 @@ describe('Drill fact categories and search boundaries', () => {
   afterEach(() => {
     DrillStore.resetInstance();
     rmSync(directory, { recursive: true, force: true });
+  });
+
+  it('reports a write lock as a tool failure and recovers once the lock is released', async () => {
+    const tool = new DrillRecordFactTool(
+      makeFakeConfig({
+        sessionId: 'alpha',
+        cwd: directory,
+        targetDir: directory,
+        usageStatisticsEnabled: false,
+      }),
+      createMockMessageBus(),
+    );
+    const lock = new DatabaseSync(database);
+    lock.exec('BEGIN IMMEDIATE');
+    const params = { category: 'note', title: 'Locked observation' } as const;
+    try {
+      const failed = await tool.buildAndExecute(
+        params,
+        new AbortController().signal,
+      );
+      expect(failed.error).toMatchObject({
+        type: ToolErrorType.EXECUTION_FAILED,
+      });
+      expect(failed.llmContent).toContain('"success":false');
+      expect(store.queryFacts('alpha')).toHaveLength(0);
+    } finally {
+      lock.exec('ROLLBACK');
+      lock.close();
+    }
+    const recovered = await tool.buildAndExecute(
+      params,
+      new AbortController().signal,
+    );
+    expect(recovered.error).toBeUndefined();
+    expect(recovered.llmContent).toContain('"success":true');
+    expect(store.queryFacts('alpha')).toHaveLength(1);
   });
 
   it('persists notes separately and preserves binary and informational findings', () => {
