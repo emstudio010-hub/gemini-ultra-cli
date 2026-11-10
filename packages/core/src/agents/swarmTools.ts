@@ -105,7 +105,7 @@ export class ManageSwarmTool extends BaseDeclarativeTool<
     super(
       ManageSwarmTool.Name,
       'Manage Swarm',
-      'Coordinate a /swarm created by the user: add named local workers with public ownership/acceptance briefs, post @mentions, await active turns, remove members or finish after independent verification. Returns immediately when adding workers; use wait instead of model polling. Writers and verifiers share a workspace and are serialized; read-only researchers can run concurrently.',
+      'Coordinate a /swarm created by the user: add named local workers with public ownership/acceptance briefs, post @mentions, await active turns, remove members or finish after independent verification. Task-wide model dispatch, failed-turn and wake budgets are cumulative across all names and resumes. A blocked swarm needs the user to change /swarm budget and resume or cancel; do not bypass limits using successor members or another workflow. Returns immediately when adding workers; use wait instead of model polling. Writers and verifiers share a workspace and are serialized; read-only researchers can run concurrently.',
       Kind.Agent,
       {
         type: 'object',

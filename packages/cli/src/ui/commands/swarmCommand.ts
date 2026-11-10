@@ -13,6 +13,7 @@ import {
   postSwarmMessage,
   cancelSwarm,
   resumeSwarm,
+  setSwarmBudget,
 } from '@google/gemini-cli-core';
 import {
   CommandKind,
@@ -58,7 +59,34 @@ async function action(
         const snapshot = swarmSnapshot(root, swarm.id);
         context.ui.addItem({
           type: MessageType.INFO,
-          text: `Swarm ${snapshot.phase}\n${snapshot.objective}\n${snapshot.members.map((member) => `@${member.name}: ${member.state}`).join('\n')}\n${snapshot.boardPath}`,
+          text: `Swarm ${snapshot.phase}\n${snapshot.objective}\n${i18n.t('累计预算', 'Cumulative budget')}: ${JSON.stringify(snapshot.budget)}\n${snapshot.stopReason}\n${snapshot.members.map((member) => `@${member.name}: ${member.state}`).join('\n')}\n${snapshot.boardPath}`,
+        });
+        return;
+      }
+      if (operation === 'budget') {
+        const values = args.trim().split(/\s+/);
+        if (
+          values.length !== 3 ||
+          values.some((value) => !/^[1-9]\d*$/.test(value))
+        )
+          throw new Error(
+            i18n.t(
+              '用法：/swarm budget <模型调度上限> <失败轮数上限> <总唤醒上限>，例如 120 2 40。累计用量不会清零。',
+              'Usage: /swarm budget <model-dispatch-limit> <failed-turn-limit> <total-turn-limit>, e.g. 120 2 40. Cumulative usage is retained.',
+            ),
+          );
+        const [maxRequests, maxFailedTurns, maxTurns] = values.map(Number);
+        setSwarmBudget(root, swarm.id, {
+          maxRequests,
+          maxFailedTurns,
+          maxTurns,
+        });
+        context.ui.addItem({
+          type: MessageType.INFO,
+          text: i18n.t(
+            '预算已保存；累计用量保留。受阻蜂群可用 /swarm resume 恢复。',
+            'Budget saved; cumulative usage retained. Use /swarm resume to continue a blocked swarm.',
+          ),
         });
         return;
       }
@@ -102,8 +130,8 @@ async function action(
         context.ui.addItem({
           type: MessageType.INFO,
           text: i18n.t(
-            '用法：/swarm <任务>；/swarm board|status|message|resume|cancel',
-            'Usage: /swarm <task>; /swarm board|status|message|resume|cancel',
+            '用法：/swarm <任务>；/swarm board|status|budget|message|resume|cancel',
+            'Usage: /swarm <task>; /swarm board|status|budget|message|resume|cancel',
           ),
         });
         return;
@@ -132,6 +160,7 @@ async function action(
 const operations: Array<[string, string, string]> = [
   ['board', '打开实时留言与成员看板', 'Open the live board and roster'],
   ['status', '查看蜂群状态', 'Show swarm status'],
+  ['budget', '设置累计执行预算', 'Set cumulative execution limits'],
   [
     'message',
     '公开留言并提及成员',
@@ -153,7 +182,7 @@ export const swarmCommand: SlashCommand = {
     },
     kind: CommandKind.BUILT_IN,
     isSafeConcurrent: ['board', 'status', 'message', 'cancel'].includes(name),
-    autoExecute: name !== 'message',
+    autoExecute: !['message', 'budget'].includes(name),
     action: (context, args) => action(context, args, name),
   })),
 };

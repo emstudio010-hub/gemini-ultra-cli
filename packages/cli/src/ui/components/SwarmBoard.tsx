@@ -95,6 +95,21 @@ export function SwarmBoard({
       ) : (
         <>
           <Text wrap="truncate-end">{safe(view.swarm?.objective || '')}</Text>
+          {view.swarm && (
+            <Text color={theme.text.secondary}>
+              {locale === 'zh'
+                ? '模型调度 / 失败轮数 / 唤醒轮数'
+                : 'Model dispatches / Failed turns / Member turns'}
+              : {view.swarm.budget.requests}/{view.swarm.budget.maxRequests} ·{' '}
+              {view.swarm.budget.failedTurns}/{view.swarm.budget.maxFailedTurns}{' '}
+              · {view.swarm.budget.turns}/{view.swarm.budget.maxTurns}
+            </Text>
+          )}
+          {view.swarm?.stopReason && (
+            <Text color={theme.status.error}>
+              {safe(view.swarm.stopReason)}
+            </Text>
+          )}
           <Text color={theme.text.secondary}>
             {view.swarm?.members
               .map((member) => `@${member.name} [${member.state}]`)

@@ -15,6 +15,9 @@ import {
   currentSwarmActor,
   postSwarmMessage,
   resumeSwarm,
+  setSwarmBudget,
+  consumeSwarmRequest,
+  SwarmEngine,
 } from './swarm.js';
 
 let root: string;
@@ -25,6 +28,131 @@ afterEach(() => {
   fs.rmSync(root, { recursive: true, force: true });
 });
 const signal = () => new AbortController().signal;
+
+it('blocks after two failed turns across renamed members and retains spent limits across cancel/resume', async () => {
+  const swarm = createSwarm(root, 'Bound the failing task');
+  let calls = 0;
+  const engine = getSwarmEngine(root, swarm.id, async () => {
+    calls++;
+    return { completed: false, text: 'Output token limit reached.' };
+  });
+  engine.add('author', 'coder', 'Deliver a report');
+  await engine.wait(signal());
+  engine.remove('author');
+  engine.add('replacement', 'coder', 'Deliver the same report');
+  await engine.wait(signal());
+  expect(calls).toBe(2);
+  expect(readSwarm(root, swarm.id)).toMatchObject({
+    phase: 'blocked',
+    budget: { failedTurns: 2, turns: 2 },
+  });
+  expect(() => engine.add('third', 'coder', 'Try again')).toThrow('blocked');
+  expect(() => engine.finish()).toThrow('blocked');
+  await expect(resumeSwarm(root, swarm.id)).rejects.toThrow('still exhausted');
+  engine.cancel();
+  await expect(resumeSwarm(root, swarm.id)).rejects.toThrow('still exhausted');
+  setSwarmBudget(root, swarm.id, {
+    maxRequests: 120,
+    maxFailedTurns: 3,
+    maxTurns: 40,
+  });
+  await resumeSwarm(root, swarm.id);
+  expect(readSwarm(root, swarm.id).budget.failedTurns).toBe(2);
+  engine.post('coordinator', '@replacement One user-authorized correction');
+  await engine.wait(signal());
+  expect(calls).toBe(3);
+  expect(readSwarm(root, swarm.id).phase).toBe('blocked');
+});
+
+it('counts successful turns task-wide and migrates legacy spent turns without resetting them', async () => {
+  const swarm = createSwarm(root, 'Bound successful chatter');
+  setSwarmBudget(root, swarm.id, {
+    maxRequests: 10,
+    maxFailedTurns: 2,
+    maxTurns: 1,
+  });
+  const runner = async () => ({ completed: true, text: 'Read source.' });
+  const engine = getSwarmEngine(root, swarm.id, runner);
+  engine.add('reader', 'researcher', 'Read once');
+  await engine.wait(signal());
+  const recovered = new SwarmEngine(root, swarm.id, runner);
+  recovered.add('replacement', 'researcher', 'Read again');
+  expect(readSwarm(root, swarm.id)).toMatchObject({
+    phase: 'blocked',
+    budget: { turns: 1 },
+  });
+
+  const file = path.join(root, 'swarms', swarm.id, 'members.json');
+  const legacy = { ...readSwarm(root, swarm.id), budget: undefined };
+  fs.writeFileSync(file, JSON.stringify(legacy));
+  expect(readSwarm(root, swarm.id).budget.turns).toBe(1);
+});
+
+it('aborts a concurrently running peer when the shared failure allowance is exhausted', async () => {
+  const swarm = createSwarm(root, 'Stop peers on exhaustion');
+  setSwarmBudget(root, swarm.id, {
+    maxRequests: 10,
+    maxFailedTurns: 1,
+    maxTurns: 10,
+  });
+  let peerAborted = false;
+  const engine = getSwarmEngine(
+    root,
+    swarm.id,
+    async (_agent, _prompt, memberSignal) => {
+      if (currentSwarmActor()!.name === 'slow') {
+        await new Promise<void>((resolve) =>
+          memberSignal.addEventListener(
+            'abort',
+            () => {
+              peerAborted = true;
+              resolve();
+            },
+            { once: true },
+          ),
+        );
+        return { completed: false, text: 'Peer cancelled.' };
+      }
+      return { completed: false, text: 'Concrete provider failure.' };
+    },
+  );
+  engine.add('slow', 'researcher', 'Wait for cancellation');
+  engine.add('failing', 'researcher', 'Fail once');
+  await engine.wait(signal());
+  expect(peerAborted).toBe(true);
+  expect(readSwarm(root, swarm.id)).toMatchObject({
+    phase: 'blocked',
+    budget: { failedTurns: 1 },
+  });
+});
+
+it('reserves cumulative main dispatches and stops a native member before another provider call', async () => {
+  const swarm = createSwarm(root, 'Share model dispatches');
+  setSwarmBudget(root, swarm.id, {
+    maxRequests: 2,
+    maxFailedTurns: 2,
+    maxTurns: 10,
+  });
+  consumeSwarmRequest(root);
+  let dispatched = false;
+  const engine = getSwarmEngine(root, swarm.id, async () => {
+    consumeSwarmRequest(undefined); // Native actor carries the project/id through AsyncLocalStorage.
+    consumeSwarmRequest(undefined);
+    dispatched = true;
+    return { completed: true, text: 'Should not run.' };
+  });
+  // The member's second dispatch is denied after main + member share two reservations.
+  engine.add('author', 'coder', 'Continue');
+  await engine.wait(signal());
+  expect(dispatched).toBe(false);
+  expect(readSwarm(root, swarm.id)).toMatchObject({
+    phase: 'blocked',
+    budget: { requests: 2 },
+  });
+  expect(() => consumeSwarmRequest(root)).toThrow('budget exhausted');
+  engine.cancel();
+  expect(() => consumeSwarmRequest(root)).not.toThrow();
+});
 
 it('posts publicly under native member identity and only wakes an idle peer on an exact mention', async () => {
   const swarm = createSwarm(root, 'Investigate two questions');

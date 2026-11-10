@@ -12,7 +12,8 @@ import { spawn } from 'node:child_process';
 
 const entry = path.resolve(process.argv[2]);
 const reportPath = path.resolve(process.argv[3]);
-const diagnosticMode = process.argv[4] === 'diagnostic';
+const budgetMode = process.argv[4] === 'budget';
+const diagnosticMode = process.argv[4] === 'diagnostic' || budgetMode;
 const metadata = JSON.parse(
   fs.readFileSync(
     path.join(path.dirname(path.dirname(entry)), 'package.json'),
@@ -109,6 +110,9 @@ const server = createServer(async (req, res) => {
             revision: 0,
             ownerPid: child.pid,
             members: [],
+            ...(budgetMode
+              ? { budget: { maxRequests: 2, maxFailedTurns: 2, maxTurns: 10 } }
+              : {}),
           }),
         );
         fs.writeFileSync(
@@ -388,53 +392,71 @@ try {
         .filter(Boolean)
         .map((line) => JSON.parse(line))
     : [];
-  const checks = diagnosticMode
+  const checks = budgetMode
     ? {
-        normalExit: exitCode === 0 && !timedOut,
+        boundedExit: exitCode !== 0 && !timedOut,
         noFixtureMismatch: failures.length === 0,
-        pausedWithConcreteDiagnostic:
-          state?.members[0]?.state === 'paused' &&
-          state.members[0].result.includes(
-            'OpenAI output token limit reached; response is incomplete.',
-          ),
-        notMisreportedAsComplete: state?.phase === 'active',
-        singlePausedTurn:
-          requests.length === 4 && state?.members[0]?.turns === 1,
-        finalText: stdout.includes('NATIVE_SWARM_DIAGNOSTIC_RETAINED'),
-      }
-    : {
-        normalExit: exitCode === 0 && !timedOut,
-        noFixtureMismatch: failures.length === 0,
-        nativeCompletion: state?.phase === 'completed',
-        exactDelivery:
-          fs.existsSync(artifact) &&
-          /^answer=42\r?\n$/.test(fs.readFileSync(artifact, 'utf8')),
-        seedUnchanged:
-          fs.readFileSync(source, 'utf8') ===
-          'Required deliverable: answer=42\n',
-        mentionsWakeIdleMember:
-          state?.members.find((member) => member.name === 'analyst')?.turns ===
-          2,
-        noIdlePolling: requests.length === 20,
-        assignedPublicIdentity:
-          board.some(
-            (post) =>
-              post.sender === 'analyst' && post.text.startsWith('@coordinator'),
-          ) &&
-          board.some(
-            (post) =>
-              post.sender === 'builder' && post.text.startsWith('@coordinator'),
-          ),
-        monotonicBoard: board.every((post, index) => post.seq === index + 1),
-        currentIndependentVerdict: state?.members.some(
-          (member) =>
-            member.agent === 'workflow-auditor' &&
-            member.verifiedRevision === state.revision,
+        nativeBudgetBlock:
+          state?.phase === 'blocked' &&
+          state.stopReason.includes('model dispatch budget exhausted'),
+        cumulativeDispatches: state?.budget?.requests === 2,
+        noExtraProviderCall: requests.length === 3, // Initial coordinator response creates the isolated seed before accounting starts.
+        singleMemberTurn:
+          state?.members[0]?.turns === 1 && state.members[0].state === 'paused',
+        errorReported: (stdout + stderr).includes(
+          'model dispatch budget exhausted',
         ),
-        finalText: stdout.includes('NATIVE_SWARM_DELIVERED'),
-      };
+        neverCompleted: !stdout.includes('NATIVE_SWARM_DELIVERED'),
+      }
+    : diagnosticMode
+      ? {
+          normalExit: exitCode === 0 && !timedOut,
+          noFixtureMismatch: failures.length === 0,
+          pausedWithConcreteDiagnostic:
+            state?.members[0]?.state === 'paused' &&
+            state.members[0].result.includes(
+              'OpenAI output token limit reached; response is incomplete.',
+            ),
+          notMisreportedAsComplete: state?.phase === 'active',
+          singlePausedTurn:
+            requests.length === 4 && state?.members[0]?.turns === 1,
+          finalText: stdout.includes('NATIVE_SWARM_DIAGNOSTIC_RETAINED'),
+        }
+      : {
+          normalExit: exitCode === 0 && !timedOut,
+          noFixtureMismatch: failures.length === 0,
+          nativeCompletion: state?.phase === 'completed',
+          exactDelivery:
+            fs.existsSync(artifact) &&
+            /^answer=42\r?\n$/.test(fs.readFileSync(artifact, 'utf8')),
+          seedUnchanged:
+            fs.readFileSync(source, 'utf8') ===
+            'Required deliverable: answer=42\n',
+          mentionsWakeIdleMember:
+            state?.members.find((member) => member.name === 'analyst')
+              ?.turns === 2,
+          noIdlePolling: requests.length === 20,
+          assignedPublicIdentity:
+            board.some(
+              (post) =>
+                post.sender === 'analyst' &&
+                post.text.startsWith('@coordinator'),
+            ) &&
+            board.some(
+              (post) =>
+                post.sender === 'builder' &&
+                post.text.startsWith('@coordinator'),
+            ),
+          monotonicBoard: board.every((post, index) => post.seq === index + 1),
+          currentIndependentVerdict: state?.members.some(
+            (member) =>
+              member.agent === 'workflow-auditor' &&
+              member.verifiedRevision === state.revision,
+          ),
+          finalText: stdout.includes('NATIVE_SWARM_DELIVERED'),
+        };
   const report = {
-    mode: diagnosticMode ? 'diagnostic' : 'delivery',
+    mode: budgetMode ? 'budget' : diagnosticMode ? 'diagnostic' : 'delivery',
     passed: Object.values(checks).every(Boolean),
     version: metadata.version,
     platform: process.platform,
@@ -451,9 +473,11 @@ try {
     actualDeliveryHex: fs.existsSync(artifact)
       ? fs.readFileSync(artifact).toString('hex')
       : null,
-    scope: diagnosticMode
-      ? 'Installed CLI and real local executor receiving a loopback provider output-limit response. Checks the concrete error reaches the paused member, board and coordinator, without marking completion. Not a live-provider task or proof the model respects retry budgets.'
-      : 'Installed CLI, actual native swarm service, real local child executors, public board and member identity, mention-triggered wake, actual file writes/reads and current independent verifier gate. Model responses are loopback fixtures. Not live-provider autonomy, terminal keyboard/visual acceptance or complex reverse engineering.',
+    scope: budgetMode
+      ? 'Native main/member executor budget with a loopback output-limit response: the initial coordinator request creates the isolated seed, then two cumulative dispatches are allowed and the next is blocked before the provider. CLI exits nonzero, member stays paused and the task stays blocked. Not a live-provider delivery or HTTP retry billing counter.'
+      : diagnosticMode
+        ? 'Installed CLI and real local executor receiving a loopback provider output-limit response. Checks the concrete error reaches the paused member, board and coordinator, without marking completion. Not a live-provider task or proof the model respects retry budgets.'
+        : 'Installed CLI, actual native swarm service, real local child executors, public board and member identity, mention-triggered wake, actual file writes/reads and current independent verifier gate. Model responses are loopback fixtures. Not live-provider autonomy, terminal keyboard/visual acceptance or complex reverse engineering.',
   };
   fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));

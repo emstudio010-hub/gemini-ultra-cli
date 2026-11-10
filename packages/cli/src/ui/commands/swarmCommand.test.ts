@@ -1,0 +1,49 @@
+/**
+ * @license
+ * Copyright 2026 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { afterEach, beforeEach, expect, it } from 'vitest';
+import {
+  createSwarm,
+  readSwarm,
+  consumeSwarmRequest,
+  type Config,
+} from '@google/gemini-cli-core';
+import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { swarmCommand } from './swarmCommand.js';
+
+let root: string;
+beforeEach(() => {
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'ultra-swarm-command-'));
+});
+afterEach(() => {
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+it('changes only cumulative limits locally, rejects malformed input and never submits a paid prompt', async () => {
+  const swarm = createSwarm(root, 'Deliver a scoped task');
+  consumeSwarmRequest(root);
+  const config = {
+    storage: { getProjectTempDir: () => root },
+  } as unknown as Config;
+  const context = createMockCommandContext({
+    services: { agentContext: { config } },
+  });
+  const budget = swarmCommand.subCommands!.find(
+    (command) => command.name === 'budget',
+  )!;
+  expect(await budget.action!(context, '24 2 8')).toBeUndefined();
+  expect(readSwarm(root, swarm.id).budget).toMatchObject({
+    maxRequests: 24,
+    maxFailedTurns: 2,
+    maxTurns: 8,
+    requests: 1,
+  });
+  expect(await budget.action!(context, '2x 0 -1')).toBeUndefined();
+  expect(readSwarm(root, swarm.id).budget.maxRequests).toBe(24);
+  expect(budget.autoExecute).toBe(false);
+});

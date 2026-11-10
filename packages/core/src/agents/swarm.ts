@@ -21,16 +21,30 @@ const memberSchema = z.object({
   result: z.string().max(12000).default(''),
   verifiedRevision: z.number().int().optional(),
 });
+const budgetSchema = z.object({
+  maxRequests: z.number().int().min(1).max(10000).default(120),
+  maxFailedTurns: z.number().int().min(1).max(100).default(2),
+  maxTurns: z.number().int().min(1).max(1000).default(40),
+  requests: z.number().int().nonnegative().default(0),
+  failedTurns: z.number().int().nonnegative().default(0),
+  turns: z.number().int().nonnegative().default(0),
+});
 const swarmSchema = z.object({
   id: z.string().uuid(),
   objective: z.string().trim().min(1).max(16000),
-  phase: z.enum(['active', 'completed', 'cancelled']),
+  phase: z.enum(['active', 'blocked', 'completed', 'cancelled']),
+  budget: budgetSchema.default({}),
+  stopReason: z.string().default(''),
   revision: z.number().int().nonnegative().default(0),
   ownerPid: z.number().int().positive(),
   members: z.array(memberSchema).max(12).default([]),
 });
 export type Swarm = z.infer<typeof swarmSchema>;
 export type SwarmMember = z.infer<typeof memberSchema>;
+export type SwarmBudgetLimits = Pick<
+  Swarm['budget'],
+  'maxRequests' | 'maxFailedTurns' | 'maxTurns'
+>;
 export interface SwarmPost {
   seq: number;
   sender: string;
@@ -73,7 +87,19 @@ export function readSwarm(root: string, id: string): Swarm {
   // Twelve schema-valid UTF-8 member briefs and results can exceed 256 KiB.
   if (fs.statSync(file).size > 2 * 1024 * 1024)
     throw new Error('Swarm state is too large.');
-  return swarmSchema.parse(JSON.parse(fs.readFileSync(file, 'utf8')));
+  const raw: unknown = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const swarm = swarmSchema.parse(raw);
+  // Existing records already spent these turns. Migration must not grant them again.
+  if (typeof raw === 'object' && raw !== null && !('budget' in raw)) {
+    swarm.budget.turns = swarm.members.reduce(
+      (sum, member) => sum + member.turns,
+      0,
+    );
+    swarm.budget.failedTurns = swarm.members.filter(
+      (member) => member.state === 'paused' && member.result,
+    ).length;
+  }
+  return swarm;
 }
 function saveSwarm(root: string, value: Swarm): void {
   writeJson(
@@ -138,7 +164,7 @@ function appendPost(
   }
 }
 export function createSwarm(root: string, objective: string): Swarm {
-  if (latestSwarm(root)?.phase === 'active')
+  if (['active', 'blocked'].includes(latestSwarm(root)?.phase ?? ''))
     throw new Error(
       'Resolve the active swarm with finish or cancel before starting another.',
     );
@@ -182,6 +208,86 @@ function engineKey(root: string, id: string) {
   return directory(root, id);
 }
 const writerQueues = new Map<string, Promise<void>>();
+
+function exhaustedBudget(swarm: Swarm): string | undefined {
+  const budget = swarm.budget;
+  if (budget.requests >= budget.maxRequests) return 'model dispatch';
+  if (budget.failedTurns >= budget.maxFailedTurns) return 'failed-turn';
+  if (budget.turns >= budget.maxTurns) return 'member-turn';
+  return undefined;
+}
+function blockSwarm(root: string, swarm: Swarm, limit: string): void {
+  if (swarm.phase !== 'active') return;
+  swarm.phase = 'blocked';
+  swarm.stopReason = `Swarm ${limit} budget exhausted. Results retained. Use /swarm budget <requests> <failed-turns> <turns> to increase limits, then /swarm resume; or /swarm cancel.`;
+  for (const member of swarm.members)
+    if (['working', 'queued'].includes(member.state)) member.state = 'paused';
+  saveSwarm(root, swarm);
+  // Abort other in-flight members, including those queued for the writer lock.
+  engines.get(engineKey(root, swarm.id))?.stopMembers();
+  appendPost(root, swarm.id, 'monitor', swarm.stopReason);
+}
+
+/** Reserve a model dispatch before delegating to any provider. SDK-internal HTTP
+ * retries are not observable here; application-level retries reserve again. */
+export function consumeSwarmRequest(root: string | undefined): void {
+  const actor = currentSwarmActor();
+  if (!root && !actor) return;
+  const stateRoot = actor?.root ?? root!;
+  const swarm = actor ? readSwarm(stateRoot, actor.id) : latestSwarm(stateRoot);
+  if (!swarm || swarm.ownerPid !== process.pid) return;
+  if (swarm.phase === 'blocked') throw new Error(swarm.stopReason);
+  if (swarm.phase !== 'active') {
+    if (actor)
+      throw new Error(`Swarm is ${swarm.phase}; member calls are stopped.`);
+    return;
+  }
+  // A final allowed turn may finish using the remaining requests.
+  const limit =
+    swarm.budget.requests >= swarm.budget.maxRequests
+      ? 'model dispatch'
+      : swarm.budget.failedTurns >= swarm.budget.maxFailedTurns
+        ? 'failed-turn'
+        : undefined;
+  if (limit) {
+    blockSwarm(stateRoot, swarm, limit);
+    throw new Error(swarm.stopReason);
+  }
+  swarm.budget.requests++;
+  saveSwarm(stateRoot, swarm);
+}
+
+/** Only exposed by the local slash command, never as a model tool. Counters are cumulative. */
+export function setSwarmBudget(
+  root: string,
+  id: string,
+  limits: SwarmBudgetLimits,
+): void {
+  const swarm = readSwarm(root, id);
+  if (swarm.ownerPid !== process.pid) {
+    try {
+      process.kill(swarm.ownerPid, 0);
+      throw new Error('Change the budget from the owning CLI session.');
+    } catch (error) {
+      if (!isProcessMissing(error)) throw error;
+    }
+    swarm.ownerPid = process.pid;
+    for (const member of swarm.members)
+      if (['working', 'queued'].includes(member.state)) member.state = 'paused';
+  }
+  if (swarm.phase === 'completed')
+    throw new Error('A completed swarm cannot change its budget.');
+  swarm.budget = budgetSchema.parse({ ...swarm.budget, ...limits });
+  saveSwarm(root, swarm);
+  appendPost(
+    root,
+    id,
+    'coordinator',
+    `User set cumulative budget limits: ${JSON.stringify(limits)}. Counters were not reset.`,
+  );
+  const limit = exhaustedBudget(swarm);
+  if (limit) blockSwarm(root, swarm, limit);
+}
 
 /** Event-driven native members. Waiting has no timers and makes no model requests. */
 export class SwarmEngine {
@@ -254,6 +360,7 @@ export class SwarmEngine {
       );
     const post = appendPost(this.root, this.id, sender, text);
     for (const member of readSwarm(this.root, this.id).members) {
+      if (readSwarm(this.root, this.id).phase !== 'active') break;
       if (
         member.name !== sender &&
         member.state !== 'killed' &&
@@ -283,6 +390,9 @@ export class SwarmEngine {
     for (const member of swarm.members)
       if (member.state !== 'killed') member.state = 'paused';
     saveSwarm(this.root, swarm);
+    this.stopMembers();
+  }
+  stopMembers(): void {
     for (const run of this.running.values()) run.controller.abort();
   }
   async wait(signal: AbortSignal): Promise<void> {
@@ -344,15 +454,21 @@ export class SwarmEngine {
     const swarm = this.activeState();
     const member = swarm.members.find((entry) => entry.name === name);
     if (!member || member.state === 'killed') return;
+    const limit = exhaustedBudget(swarm);
+    if (limit) {
+      blockSwarm(this.root, swarm, limit);
+      return;
+    }
     if (member.turns >= 20) {
       member.state = 'paused';
       member.result =
-        'Member reached the 20-turn wake budget; add a scoped successor with a new name.';
+        'Member reached the 20-turn wake budget; task-wide counters are retained for all successors.';
       saveSwarm(this.root, swarm);
       return;
     }
     member.state = 'queued';
     member.turns++;
+    swarm.budget.turns++;
     saveSwarm(this.root, swarm);
     const controller = new AbortController();
     // Defer to a microtask so the running entry exists before any callback posts.
@@ -447,6 +563,15 @@ export class SwarmEngine {
         )
           member.verifiedRevision = revision;
       }
+      if (
+        swarm.phase === 'active' &&
+        !signal.aborted &&
+        (!result.completed ||
+          (member.agent === 'workflow-auditor' &&
+            member.verifiedRevision !== revision))
+      ) {
+        swarm.budget.failedTurns++;
+      }
       saveSwarm(this.root, swarm);
       appendPost(
         this.root,
@@ -454,6 +579,8 @@ export class SwarmEngine {
         name,
         `${member.state}: ${result.text}`.slice(0, 4000),
       );
+      if (swarm.budget.failedTurns >= swarm.budget.maxFailedTurns)
+        blockSwarm(this.root, swarm, 'failed-turn');
     } catch (error) {
       const swarm = readSwarm(this.root, this.id);
       const member = swarm.members.find((entry) => entry.name === name)!;
@@ -461,6 +588,9 @@ export class SwarmEngine {
       member.result = (
         error instanceof Error ? error.message : 'Member execution failed.'
       ).slice(0, 12000);
+      // Peer cancellation and a blocked task do not spend another failure allowance.
+      if (swarm.phase === 'active' && !signal.aborted)
+        swarm.budget.failedTurns++;
       saveSwarm(this.root, swarm);
       appendPost(
         this.root,
@@ -468,6 +598,8 @@ export class SwarmEngine {
         name,
         `paused: ${member.result}`.slice(0, 4000),
       );
+      if (swarm.budget.failedTurns >= swarm.budget.maxFailedTurns)
+        blockSwarm(this.root, swarm, 'failed-turn');
     } finally {
       try {
         await release?.();
@@ -527,7 +659,7 @@ export async function resumeSwarm(root: string, id: string): Promise<void> {
   const engine = engines.get(engineKey(root, id));
   if (engine) await engine.wait(new AbortController().signal);
   const swarm = readSwarm(root, id);
-  if (swarm.phase !== 'cancelled') return;
+  if (swarm.phase === 'completed') return;
   if (swarm.ownerPid !== process.pid) {
     try {
       process.kill(swarm.ownerPid, 0);
@@ -535,8 +667,18 @@ export async function resumeSwarm(root: string, id: string): Promise<void> {
     } catch (error) {
       if (!isProcessMissing(error)) throw error;
     }
+    swarm.ownerPid = process.pid;
+    for (const member of swarm.members)
+      if (['working', 'queued'].includes(member.state)) member.state = 'paused';
+    saveSwarm(root, swarm);
   }
+  const limit = exhaustedBudget(swarm);
+  if (limit)
+    throw new Error(
+      `Swarm ${limit} budget is still exhausted; /swarm budget must increase the limit before resume.`,
+    );
   swarm.phase = 'active';
+  swarm.stopReason = '';
   swarm.ownerPid = process.pid;
   saveSwarm(root, swarm);
   appendPost(

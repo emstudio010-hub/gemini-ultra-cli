@@ -46,6 +46,8 @@ jobs:
           $entry = Join-Path $env:RUNNER_TEMP 'ultra-install/node_modules/gemini-ultra-cli/bundle/gemini.js'
           node scripts/verify-ultra-swarm.mjs $entry artifacts/ultra-release/swarm-verification.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/verify-ultra-swarm.mjs $entry artifacts/ultra-release/swarm-budget-verification.json budget
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v4
         with:
           name: gemini-ultra-cli-${{ matrix.os }}
@@ -55,4 +57,6 @@ jobs:
             artifacts/ultra-release/install-verification.json
             artifacts/ultra-release/swarm-verification.json
             artifacts/ultra-release/swarm-verification-output.txt
+            artifacts/ultra-release/swarm-budget-verification.json
+            artifacts/ultra-release/swarm-budget-verification-output.txt
           if-no-files-found: error
