@@ -68,7 +68,18 @@ function workflowCommand(
         );
         return;
       }
-      let record = latestAgentWorkflow(root, mode);
+      const requestedCancellation = operation === 'cancel' ? args.trim() : '';
+      let record = requestedCancellation
+        ? cancelAgentWorkflow(root, requestedCancellation, mode)
+        : latestAgentWorkflow(root, mode, (id) => {
+            context.ui.addItem({
+              type: MessageType.WARNING,
+              text: i18n.t(
+                `工作流记录损坏：${id}。可用对应模式的 cancel <ID> 保留并取消；原文件未修改。`,
+                `Damaged workflow record: ${id}. Use its mode's cancel <ID> to preserve and cancel; original file unchanged.`,
+              ),
+            });
+          });
       const restoreApproval = (entry: AgentWorkflow) => {
         if (config.getApprovalMode() === ApprovalMode.PLAN) {
           const previous = Object.values(ApprovalMode).find(
@@ -92,7 +103,8 @@ function workflowCommand(
         if (!record)
           throw new Error(i18n.t('请先创建任务。', 'Create a task first.'));
         if (operation === 'cancel') {
-          record = cancelAgentWorkflow(root, record.id);
+          if (!requestedCancellation)
+            record = cancelAgentWorkflow(root, record.id, mode);
           restoreApproval(record);
           info(
             i18n.t(
@@ -105,6 +117,13 @@ function workflowCommand(
               i18n.t(
                 `旧用量不可确认，原状态已保留：${record.budgetRecoveryPath || '账本缺失'}。请创建新任务；不能恢复此旧任务。`,
                 `Historical usage is unavailable; original state retained: ${record.budgetRecoveryPath || 'ledger missing'}. Create a new task; this task cannot resume.`,
+              ),
+            );
+          if (record.recordUnavailable)
+            info(
+              i18n.t(
+                `原任务记录不可用，原文件已保留：${record.recordRecoveryPath || '记录缺失'}。累计预算保留；请创建新任务，不能恢复此记录。`,
+                `Original task record unavailable; preserved at: ${record.recordRecoveryPath || 'record missing'}. Cumulative budget retained; create a new task instead of resuming this record.`,
               ),
             );
           return;
@@ -261,14 +280,17 @@ function workflowCommand(
           status: ['查看阶段与里程碑', 'Show stages and milestones'],
           budget: ['设置累计执行预算', 'Set cumulative execution limits'],
           resume: ['恢复已保存任务', 'Resume the saved workflow'],
-          cancel: ['取消并保留结果', 'Cancel and retain results'],
+          cancel: [
+            '取消并保留结果，可指定任务 ID',
+            'Cancel and retain results; optional workflow ID',
+          ],
           approve: ['按已对齐的草案执行', 'Execute the scoped draft'],
           finish: ['结束访谈并继续任务', 'Finish the interview and continue'],
         };
         return I18nManager.getInstance().t(...labels[name]);
       },
       kind: CommandKind.BUILT_IN,
-      autoExecute: name !== 'budget',
+      autoExecute: !['budget', 'cancel'].includes(name),
       isSafeConcurrent: name === 'status' || name === 'cancel',
       action: (context, args) => action(context, args, name),
     })),

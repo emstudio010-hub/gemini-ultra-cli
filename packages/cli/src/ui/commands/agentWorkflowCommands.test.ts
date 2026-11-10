@@ -115,3 +115,27 @@ it('updates only local cumulative limits and refuses a depleted resume without s
   expect(await budget.action!(context, '0 bad -1')).toBeUndefined();
   expect(workflowBudget(root, record).maxRequests).toBe(3);
 });
+
+it('cancels an explicitly identified damaged record locally before attempting latest lookup', async () => {
+  const { context } = commandContext();
+  await boostCommand.action!(context, 'Keep the original requirements');
+  const record = latestAgentWorkflow(root, 'boost')!;
+  fs.writeFileSync(
+    path.join(root, 'agent-workflows', `${record.id}.json`),
+    '{broken-original-record',
+  );
+  const cancel = boostCommand.subCommands!.find(
+    (command) => command.name === 'cancel',
+  )!;
+  expect(await cancel.action!(context, record.id)).toBeUndefined();
+  const cancelled = latestAgentWorkflow(root, 'boost')!;
+  expect(cancelled).toMatchObject({
+    id: record.id,
+    phase: 'cancelled',
+    recordUnavailable: true,
+  });
+  expect(fs.readFileSync(cancelled.recordRecoveryPath!, 'utf8')).toBe(
+    '{broken-original-record',
+  );
+  expect(cancel.autoExecute).toBe(false);
+});

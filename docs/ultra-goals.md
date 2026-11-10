@@ -594,3 +594,9 @@
 - E-141：preview.36源5c3ac52db14af282852ee4e5fb04cd3859be6554/run42897457849三平台completed/success；包版本/SHA/安装和六rg身份/权限核对。Swarm正常20请求/预算3/恢复2，工作流正常12/预算3/恢复2通过；新增Swarm取消0/恢复42/普通会话0，坏成员/索引字节与板保留，只loopback模型。
 - E-142：offline缓存安装6932ms/退出0；双命令preview.36，424文件逐一匹配Windows CI包，旧包保留。未重复相同fixture/付费任务，WI-066交付，goal active。
 - E-143/F-039：生成的坏workflow记录本体使cancel和无关teamwork查询失败，原预算/拥有者完整；原字节保留/0模型请求，证据workflow-record-corruption-before.json。WI-067继续指定ID保留取消与坏历史记录查询隔离。真实自主交付/引用、复杂逆向、隔离worktree/成员独立模型继续。
+
+## 2026-11-11 原工作流记录恢复
+
+- E-144/F-039：坏历史记录不再阻断其他模式查询；CLI提示ID。同模式当前坏任务禁止静默回落，旧任务恢复不能覆盖其他活绑定。/boost|teamwork|grill-me cancel ID绕过latest先核对独立账本的模式/拥有者；保存recordUnavailable标记再备份原记录，cancelled占位不伪造原需求/报告/完成。
+- 已知累计预算保留，原记录不可用的旧任务禁止resume或新增额度；运行中保存先核对原磁盘记录，调查期损坏不会被旧内存覆盖，成员收尾后再恢复。28相关core+4 CLI、lint/type/格式通过；实际CLI恢复链7599ms/2个loopback请求，cancel0/resume42/普通会话0；2调度/1失败/1实施的fixture预置值未重置，无真实调用/业务交付。
+- WI-067本地完成，preview.37准备分发安装。WI-068下一步推进成员独立模型选择与配置便利性，工作树隔离仍保留；真实自主交付/引用、复杂逆向继续，goal active。

@@ -19,7 +19,8 @@ const metadata = JSON.parse(
   ),
 );
 const budgetMode = process.argv[4] === 'budget';
-const recoveryMode = process.argv[4] === 'recovery';
+const recordRecoveryMode = process.argv[4] === 'record-recovery';
+const recoveryMode = process.argv[4] === 'recovery' || recordRecoveryMode;
 let recoveryReady = false;
 const scratch = fs.mkdtempSync(
   path.join(os.tmpdir(), 'ultra-native-workflow-'),
@@ -168,8 +169,24 @@ const server = createServer(async (req, res) => {
         if (recoveryMode) {
           fs.writeFileSync(
             path.join(directory, `${id}.budget.json`),
-            '{broken-budget',
+            recordRecoveryMode
+              ? JSON.stringify({
+                  id,
+                  mode: 'boost',
+                  ownerPid: child.pid,
+                  state: 'active',
+                  maxRequests: 240,
+                  maxFailedStages: 4,
+                  maxImplementationRounds: 2,
+                  requests: 2,
+                  failedStages: 1,
+                  implementationRounds: [1],
+                  stopReason: '',
+                })
+              : '{broken-budget',
           );
+          if (recordRecoveryMode)
+            fs.writeFileSync(recordFile, '{broken-original-workflow-record');
           fs.writeFileSync(
             path.join(directory, 'current.json'),
             '{broken-binding',
@@ -413,7 +430,9 @@ try {
       });
       return commandExit;
     };
-    await runCommand('/boost cancel');
+    await runCommand(
+      recordRecoveryMode ? `/boost cancel ${id}` : '/boost cancel',
+    );
     await runCommand('/boost resume');
     requestsBeforeContinue = requests.length;
     recoveryReady = true;
@@ -442,19 +461,31 @@ try {
           recoveryRuns[0]?.exitCode === 0 &&
           recoveryRuns[0]?.requestCount === 1,
         oldResumeRejected:
-        recoveryRuns[1]?.exitCode === 42 &&
+          recoveryRuns[1]?.exitCode === 42 &&
           recoveryRuns[1]?.requestCount === 1 &&
           recoveryRuns[1].output.includes(
-            'Historical workflow usage is unavailable',
+            recordRecoveryMode
+              ? 'Original workflow record is unavailable'
+              : 'Historical workflow usage is unavailable',
           ),
-        cancelledWithUnknownUsage:
-          record?.phase === 'cancelled' &&
-          record.budgetUnavailable === true &&
-          budget?.accountingUnknown === true &&
-          budget.state === 'closed',
-        ledgerPreserved:
-          !!budget?.recoveryPath &&
-          fs.readFileSync(budget.recoveryPath, 'utf8') === '{broken-budget',
+        cancelledWithUnknownUsage: recordRecoveryMode
+          ? record?.phase === 'cancelled' &&
+            record.recordUnavailable === true &&
+            budget?.recordUnavailable === true &&
+            budget.state === 'closed'
+          : record?.phase === 'cancelled' &&
+            record.budgetUnavailable === true &&
+            budget?.accountingUnknown === true &&
+            budget.state === 'closed',
+        ledgerPreserved: recordRecoveryMode
+          ? budget?.requests === 2 &&
+            budget.failedStages === 1 &&
+            budget.implementationRounds[0] === 1 &&
+            budget.accountingUnknown === false &&
+            fs.readFileSync(budget.recordRecoveryPath, 'utf8') ===
+              '{broken-original-workflow-record'
+          : !!budget?.recoveryPath &&
+            fs.readFileSync(budget.recoveryPath, 'utf8') === '{broken-budget',
         bindingPreserved:
           !!budget?.bindingRecoveryPath &&
           fs.readFileSync(budget.bindingRecoveryPath, 'utf8') ===
@@ -511,7 +542,13 @@ try {
             budget.implementationRounds[0] === 1,
         };
   const report = {
-    mode: recoveryMode ? 'recovery' : budgetMode ? 'budget' : 'delivery',
+    mode: recordRecoveryMode
+      ? 'record-recovery'
+      : recoveryMode
+        ? 'recovery'
+        : budgetMode
+          ? 'budget'
+          : 'delivery',
     passed: Object.values(checks).every(Boolean),
     version: metadata.version,
     platform: process.platform,
@@ -528,11 +565,13 @@ try {
     actualDeliveryHex: fs.existsSync(artifact)
       ? fs.readFileSync(artifact).toString('hex')
       : null,
-    scope: recoveryMode
-      ? 'Isolated generated corrupt ledger and binding: initial CLI failure, actual headless /boost cancel without a model call, old resume rejected without a model call, then ordinary conversation restored. Both corrupt files preserved byte for byte. Two loopback requests total; no real provider, user state or completed deliverable.'
-      : budgetMode
-        ? 'Actual native workflow and child executors stop at two cumulative model dispatches; one initial coordinator request seeds the isolated state before accounting starts. Partial evidence remains blocked, no writer starts, CLI exits 1 without observer termination. Loopback fixture, not a paid provider task or delivery success.'
-        : 'Actual installed CLI and native workflow tool, real child executors, isolated HTTP model fixture. Two read-only researchers, one writer, milestone auditor and final auditor; actual file read/write and persisted stages. Not live-provider autonomy, UI keyboard interaction, deep reverse-engineering or production acceptance.',
+    scope: recordRecoveryMode
+      ? 'Generated corrupt original workflow record and binding with an intact independent ledger. Actual local cancel by ID preserves both bad files and known fixture-seeded usage (2 dispatches, 1 failed stage, 1 implementation). Old resume rejected without model calls; ordinary conversation restored. Two loopback requests total, not a real-provider delivery or billing counter.'
+      : recoveryMode
+        ? 'Isolated generated corrupt ledger and binding: initial CLI failure, actual headless /boost cancel without a model call, old resume rejected without a model call, then ordinary conversation restored. Both corrupt files preserved byte for byte. Two loopback requests total; no real provider, user state or completed deliverable.'
+        : budgetMode
+          ? 'Actual native workflow and child executors stop at two cumulative model dispatches; one initial coordinator request seeds the isolated state before accounting starts. Partial evidence remains blocked, no writer starts, CLI exits 1 without observer termination. Loopback fixture, not a paid provider task or delivery success.'
+          : 'Actual installed CLI and native workflow tool, real child executors, isolated HTTP model fixture. Two read-only researchers, one writer, milestone auditor and final auditor; actual file read/write and persisted stages. Not live-provider autonomy, UI keyboard interaction, deep reverse-engineering or production acceptance.',
   };
   fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));

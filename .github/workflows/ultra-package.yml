@@ -60,6 +60,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node scripts/verify-ultra-workflow.mjs $entry artifacts/ultra-release/workflow-recovery-verification.json recovery
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/verify-ultra-workflow.mjs $entry artifacts/ultra-release/workflow-record-recovery-verification.json record-recovery
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v4
         with:
           name: gemini-ultra-cli-${{ matrix.os }}
@@ -79,4 +81,6 @@ jobs:
             artifacts/ultra-release/workflow-budget-verification-output.txt
             artifacts/ultra-release/workflow-recovery-verification.json
             artifacts/ultra-release/workflow-recovery-verification-output.txt
+            artifacts/ultra-release/workflow-record-recovery-verification.json
+            artifacts/ultra-release/workflow-record-recovery-verification-output.txt
           if-no-files-found: error

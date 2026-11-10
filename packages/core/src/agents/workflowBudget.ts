@@ -30,6 +30,8 @@ const budgetSchema = limitsSchema.extend({
   accountingUnknown: z.boolean().default(false),
   recoveryPath: z.string().optional(),
   bindingRecoveryPath: z.string().optional(),
+  recordUnavailable: z.boolean().default(false),
+  recordRecoveryPath: z.string().optional(),
 });
 export type WorkflowBudget = z.infer<typeof budgetSchema>;
 export type WorkflowBudgetLimits = z.infer<typeof limitsSchema>;
@@ -42,6 +44,32 @@ const controllers = new Map<string, AbortController>();
 class DamagedBudgetError extends Error {}
 const unavailable =
   'Historical workflow usage is unavailable. The cancelled task cannot resume or receive a new budget; create a scoped successor task.';
+const recordUnavailable =
+  'Original workflow record is unavailable. This cancelled task cannot resume or receive a new budget; create a scoped successor task.';
+export function readWorkflowBudgetById(
+  root: string,
+  id: string,
+): WorkflowBudget {
+  return read(root, id);
+}
+export function markWorkflowRecordUnavailable(
+  root: string,
+  id: string,
+  recoveryPath?: string,
+): WorkflowBudget {
+  const budget = read(root, id);
+  owns(budget);
+  budget.recordUnavailable = true;
+  budget.recordRecoveryPath = recoveryPath ?? budget.recordRecoveryPath;
+  save(root, budget);
+  return budget;
+}
+export function currentWorkflowBudget(
+  root: string,
+): WorkflowBudget | undefined {
+  const pointer = binding(root);
+  return pointer ? read(root, pointer.id) : undefined;
+}
 function isMissing(error: unknown): boolean {
   return (
     typeof error === 'object' &&
@@ -271,6 +299,7 @@ export function assertWorkflowBudget(
   milestone?: number,
 ): WorkflowBudget {
   const budget = read(root, id);
+  if (budget.recordUnavailable) throw new Error(recordUnavailable);
   if (budget.accountingUnknown) throw new Error(unavailable);
   if (budget.state !== 'active')
     throw new Error(
@@ -286,6 +315,13 @@ export function activateWorkflowBudget(
 ): void {
   const budget = workflowBudget(root, record);
   owns(budget);
+  const current = currentWorkflowBudget(root);
+  if (current && current.id !== record.id && current.state !== 'closed')
+    throw new Error(
+      'Resolve the other pending workflow before resuming this task.',
+    );
+  if (record.recordUnavailable || budget.recordUnavailable)
+    throw new Error(recordUnavailable);
   if (record.budgetUnavailable || budget.accountingUnknown)
     throw new Error(unavailable);
   const next = record.approved
@@ -312,6 +348,8 @@ export function setWorkflowBudget(
 ): void {
   const budget = workflowBudget(root, record);
   owns(budget);
+  if (record.recordUnavailable || budget.recordUnavailable)
+    throw new Error(recordUnavailable);
   if (record.budgetUnavailable || budget.accountingUnknown)
     throw new Error(unavailable);
   save(root, {
