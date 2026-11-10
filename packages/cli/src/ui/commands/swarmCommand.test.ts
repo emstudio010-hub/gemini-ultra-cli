@@ -26,6 +26,31 @@ afterEach(() => {
   fs.rmSync(root, { recursive: true, force: true });
 });
 
+it('exports a saved Swarm by ID without relying on its latest binding or submitting a prompt', async () => {
+  const swarm = createSwarm(root, 'Retain historical member results');
+  fs.writeFileSync(
+    path.join(root, 'swarms/latest.json'),
+    '{unrelated damaged binding',
+  );
+  const config = {
+    storage: { getProjectTempDir: () => root },
+  } as unknown as Config;
+  const context = createMockCommandContext({
+    services: { agentContext: { config } },
+  });
+  const reports = swarmCommand.subCommands!.find(
+    (command) => command.name === 'reports',
+  )!;
+  const source = path.join(root, 'swarms', swarm.id, 'members.json');
+  const before = fs.readFileSync(source);
+  expect(await reports.action!(context, swarm.id)).toBeUndefined();
+  expect(reports.autoExecute).toBe(false);
+  expect(fs.readFileSync(source)).toEqual(before);
+  expect(
+    fs.readdirSync(path.join(root, 'agent-reports', swarm.id)),
+  ).toHaveLength(1);
+});
+
 it('changes only cumulative limits locally, rejects malformed input and never submits a paid prompt', async () => {
   const swarm = createSwarm(root, 'Deliver a scoped task');
   consumeSwarmRequest(root);

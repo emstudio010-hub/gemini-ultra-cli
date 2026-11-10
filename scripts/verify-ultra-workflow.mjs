@@ -474,7 +474,8 @@ try {
   );
   const recoveryRuns = [];
   let requestsBeforeContinue;
-  if (recoveryMode && recordFile) {
+  let localReportIndex;
+  if ((recoveryMode || contextMode) && recordFile) {
     const runCommand = async (input) => {
       child = spawn(
         process.execPath,
@@ -525,19 +526,46 @@ try {
       });
       return commandExit;
     };
-    await runCommand(
-      recordRecoveryMode ? `/boost cancel ${id}` : '/boost cancel',
-    );
-    await runCommand('/boost resume');
-    requestsBeforeContinue = requests.length;
-    recoveryReady = true;
-    await runCommand(
-      'Continue ordinary conversation after the cancelled fixture.',
-    );
-    fs.appendFileSync(
-      reportPath.replace(/\.json$/, '') + '-output.txt',
-      '\nLOCAL RECOVERY\n' + JSON.stringify(recoveryRuns, null, 2),
-    );
+    if (contextMode) {
+      const before = fs.readFileSync(recordFile);
+      const code = await runCommand(`/boost reports ${id}`);
+      assert.equal(code, 0);
+      assert.equal(requests.length, 13);
+      assert.deepEqual(fs.readFileSync(recordFile), before);
+      const exported = path.join(
+        path.dirname(path.dirname(recordFile)),
+        'agent-reports',
+        id,
+      );
+      const snapshot = fs.readdirSync(exported)[0];
+      localReportIndex = path.join(exported, snapshot, 'index.md');
+      const manifest = JSON.parse(
+        fs.readFileSync(path.join(exported, snapshot, 'manifest.json'), 'utf8'),
+      );
+      assert.equal(manifest.reports.length, 5);
+      assert.equal(
+        fs.readFileSync(path.join(exported, snapshot, '001.md'), 'utf8'),
+        longHandoff,
+      );
+      fs.appendFileSync(
+        reportPath.replace(/\.json$/, '') + '-output.txt',
+        '\nLOCAL REPORTS\n' + JSON.stringify(recoveryRuns, null, 2),
+      );
+    } else {
+      await runCommand(
+        recordRecoveryMode ? `/boost cancel ${id}` : '/boost cancel',
+      );
+      await runCommand('/boost resume');
+      requestsBeforeContinue = requests.length;
+      recoveryReady = true;
+      await runCommand(
+        'Continue ordinary conversation after the cancelled fixture.',
+      );
+      fs.appendFileSync(
+        reportPath.replace(/\.json$/, '') + '-output.txt',
+        '\nLOCAL RECOVERY\n' + JSON.stringify(recoveryRuns, null, 2),
+      );
+    }
   }
   const record =
     recordFile && fs.existsSync(recordFile)
@@ -644,6 +672,10 @@ try {
                 originalReportsPreserved: record.reports
                   .filter((report) => report.agent === 'researcher')
                   .every((report) => report.text === longHandoff),
+                completeReportsExportedLocally:
+                  !!localReportIndex &&
+                  fs.existsSync(localReportIndex) &&
+                  recoveryRuns[0]?.requestCount === 13,
               }
             : {}),
           ...(modelMode
@@ -681,7 +713,9 @@ try {
               ? 'budget'
               : 'delivery',
     passed: Object.values(checks).every(Boolean),
-    ...(contextMode ? { contextInputs } : {}),
+    ...(contextMode
+      ? { contextInputs, localReportIndex, localReportRuns: recoveryRuns }
+      : {}),
     version: metadata.version,
     platform: process.platform,
     node: process.version,

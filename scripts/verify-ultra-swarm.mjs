@@ -596,6 +596,24 @@ try {
       localRuns.at(-1).output.includes('Git-ignored files');
     fs.unlinkSync(ignored);
     await localCommand('/swarm workspace remove');
+    await localCommand(`/swarm reports ${id}`);
+    const reportRoot = path.join(
+      path.dirname(path.dirname(swarmDirectory)),
+      'agent-reports',
+      id,
+    );
+    const reportSnapshot = fs.readdirSync(reportRoot)[0];
+    const reportManifest = JSON.parse(
+      fs.readFileSync(
+        path.join(reportRoot, reportSnapshot, 'manifest.json'),
+        'utf8',
+      ),
+    );
+    assert.equal(reportManifest.reports.length, 3);
+    assert.ok(fs.existsSync(path.join(reportRoot, reportSnapshot, 'index.md')));
+    assert.ok(
+      fs.existsSync(path.join(reportRoot, reportSnapshot, 'board.jsonl')),
+    );
     artifact = path.join(workspace, 'deliverable.txt');
     source = path.join(workspace, 'seed.txt');
   }
@@ -792,6 +810,9 @@ try {
                       canonicalWorktreeDirectory,
                     ) === '',
                   ignoredFilesPreserved,
+                  localReportsExported:
+                    localRuns.at(-1).input === `/swarm reports ${id}` &&
+                    localRuns.at(-1).requestCount === 21,
                   sourceIndexUnchanged:
                     originalIndexHash ===
                     createHash('sha256')

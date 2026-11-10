@@ -21,6 +21,7 @@ import {
   assertSwarmOwnership,
   requireSwarmWorktree,
   isAgentWorkflowRunning,
+  exportSwarmReports,
 } from '@google/gemini-cli-core';
 import {
   CommandKind,
@@ -90,6 +91,17 @@ async function action(
       });
       return;
     }
+    if (operation === 'reports' && args.trim()) {
+      context.ui.addItem({
+        type: MessageType.INFO,
+        text: JSON.stringify(
+          exportSwarmReports(root, args.trim(), i18n.getLocale()),
+          null,
+          2,
+        ),
+      });
+      return;
+    }
     let swarm = latestSwarm(root);
     if (operation) {
       if (!swarm)
@@ -108,6 +120,17 @@ async function action(
             onClose: context.ui.removeComponent,
           }),
         };
+      if (operation === 'reports') {
+        context.ui.addItem({
+          type: MessageType.INFO,
+          text: JSON.stringify(
+            exportSwarmReports(root, swarm.id, i18n.getLocale()),
+            null,
+            2,
+          ),
+        });
+        return;
+      }
       if (operation === 'status') {
         const snapshot = swarmSnapshot(root, swarm.id);
         context.ui.addItem({
@@ -220,8 +243,8 @@ async function action(
         context.ui.addItem({
           type: MessageType.INFO,
           text: i18n.t(
-            '用法：/swarm <任务>；/swarm board|status|model|budget|message|resume|cancel',
-            'Usage: /swarm <task>; /swarm board|status|model|budget|message|resume|cancel',
+            '用法：/swarm <任务>；/swarm board|status|reports|model|budget|message|resume|cancel',
+            'Usage: /swarm <task>; /swarm board|status|reports|model|budget|message|resume|cancel',
           ),
         });
         return;
@@ -250,6 +273,11 @@ async function action(
 const operations: Array<[string, string, string]> = [
   ['board', '打开实时留言与成员看板', 'Open the live board and roster'],
   ['status', '查看蜂群状态', 'Show swarm status'],
+  [
+    'reports',
+    '导出成员结果与留言索引，可指定任务ID',
+    'Export member results and board; optional task ID',
+  ],
   ['budget', '设置累计执行预算', 'Set cumulative execution limits'],
   ['model', '设置角色或成员模型', 'Choose a role or member model'],
   [
@@ -294,6 +322,7 @@ export const swarmCommand: SlashCommand = {
       'model',
       'prepare',
       'workspace',
+      'reports',
     ].includes(name),
     action: (context, args) => action(context, args, name),
   })),

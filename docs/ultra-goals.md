@@ -712,3 +712,12 @@
   CI包，旧包保留。WI-072交付；无新真实模型或重复付费/Windows
   fixture，不改个人配置/DB/工具。离线输入字符-31.51%不能当真实总Token/费用/耗时结论；真实Swarm/长任务/更多模型/摘要准确性及复杂逆向边界继续，goal
   active，仅codex不合并master/正式Release。
+
+## 2026-11-11 本地历史报告索引
+
+- E-160/WI-073：新增/boost|teamwork|grill-me|swarm reports
+  [ID]本地导出，完整已保存正文/状态快照、逐份SHA与字节、Swarm当前成员结果/公开板，中文英文索引。显式ID不依赖损坏无关latest/current，模式/ID坏数据明确失败；completed/blocked/cancelled均照实。相同内容hash目录复用，外部修改拒绝覆盖，源任务/预算/板不变，无模型请求。
+- 3core+12CLI、严格相关lint/type通过；源码CLI
+  Boost导出仍13请求、Swarm回写回收后导出仍21请求，5阶段/3成员正文与板可取；最后locale补齐由最终包核对，不重复源码链。真实E-156旧记录5报告全文/hash匹配且源字节不变，离线不付费。
+- 是已保存报告索引，不自动复制正文提到的外部工件/任意目录，不重验证模型结论或恢复源记录已截断内容。preview.42准备三平台/安装，WI-073本地完成；真实Swarm/长任务/更多模型/摘要准确性及复杂逆向边界保留，goal
+  active，仅codex不合并master/正式Release。交接docs/ultra-agent-reports-handoff.md。

@@ -161,6 +161,40 @@ it('saves and clears a role model locally while retaining cumulative usage and a
   expect(model.autoExecute).toBe(false);
 });
 
+it('exports a completed task by ID locally without latest lookup or a submitted prompt', async () => {
+  const { context } = commandContext();
+  const prepare = boostCommand.subCommands!.find(
+    (command) => command.name === 'prepare',
+  )!;
+  await prepare.action!(context, 'Keep the completed report');
+  const record = latestAgentWorkflow(root, 'boost')!;
+  record.phase = 'completed';
+  record.reports = [
+    {
+      agent: 'coder',
+      stage: 'implement 1.1',
+      completed: true,
+      text: 'full result',
+    },
+  ];
+  saveAgentWorkflow(root, record);
+  const source = path.join(root, 'agent-workflows', `${record.id}.json`);
+  const before = fs.readFileSync(source);
+  fs.writeFileSync(
+    path.join(root, 'agent-workflows/current.json'),
+    '{unrelated damaged binding',
+  );
+  const reports = boostCommand.subCommands!.find(
+    (command) => command.name === 'reports',
+  )!;
+  expect(await reports.action!(context, record.id)).toBeUndefined();
+  expect(reports.autoExecute).toBe(false);
+  expect(fs.readFileSync(source)).toEqual(before);
+  expect(
+    fs.readdirSync(path.join(root, 'agent-reports', record.id)),
+  ).toHaveLength(1);
+});
+
 it('prepares boost locally so role models can be chosen before native execution is submitted', async () => {
   const { context } = commandContext();
   const prepare = boostCommand.subCommands!.find(

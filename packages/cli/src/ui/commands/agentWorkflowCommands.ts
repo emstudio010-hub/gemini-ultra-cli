@@ -19,6 +19,7 @@ import {
   setWorkflowRoleModel,
   agentWorktreeCommand,
   assertWorkflowBudgetOwnership,
+  exportWorkflowReports,
   type AgentWorkflow,
   type AgentWorkflowMode,
 } from '@google/gemini-cli-core';
@@ -110,8 +111,18 @@ function workflowCommand(
       if (!operation && !text) {
         info(
           i18n.t(
-            `用法：/${mode} <任务>；/${mode} status|budget|resume|cancel${mode === 'teamwork' ? '|approve' : mode === 'grill-me' ? '|finish' : ''}`,
-            `Usage: /${mode} <task>; /${mode} status|budget|resume|cancel${mode === 'teamwork' ? '|approve' : mode === 'grill-me' ? '|finish' : ''}`,
+            `用法：/${mode} <任务>；/${mode} status|reports|budget|resume|cancel${mode === 'teamwork' ? '|approve' : mode === 'grill-me' ? '|finish' : ''}`,
+            `Usage: /${mode} <task>; /${mode} status|reports|budget|resume|cancel${mode === 'teamwork' ? '|approve' : mode === 'grill-me' ? '|finish' : ''}`,
+          ),
+        );
+        return;
+      }
+      if (operation === 'reports' && args.trim()) {
+        info(
+          JSON.stringify(
+            exportWorkflowReports(root, args.trim(), mode, i18n.getLocale()),
+            null,
+            2,
           ),
         );
         return;
@@ -136,6 +147,23 @@ function workflowCommand(
           config.setApprovalMode(previous || ApprovalMode.DEFAULT);
         }
       };
+      if (operation === 'reports') {
+        if (!record)
+          throw new Error(
+            i18n.t(
+              '当前没有该工作流，请指定历史任务ID。',
+              'No workflow found; specify a saved task ID.',
+            ),
+          );
+        info(
+          JSON.stringify(
+            exportWorkflowReports(root, record.id, mode, i18n.getLocale()),
+            null,
+            2,
+          ),
+        );
+        return;
+      }
       if (operation === 'status') {
         info(
           record
@@ -347,6 +375,7 @@ function workflowCommand(
   };
   const operations = [
     'status',
+    'reports',
     ...(mode === 'grill-me' ? [] : ['model']),
     ...(mode === 'grill-me' ? [] : ['workspace']),
     ...(mode === 'boost' ? ['prepare'] : []),
@@ -371,6 +400,10 @@ function workflowCommand(
       get description() {
         const labels: Record<string, [string, string]> = {
           status: ['查看阶段与里程碑', 'Show stages and milestones'],
+          reports: [
+            '导出完整阶段报告索引，可指定任务ID',
+            'Export full report index; optional task ID',
+          ],
           budget: ['设置累计执行预算', 'Set cumulative execution limits'],
           model: ['设置协作角色模型', 'Choose collaboration role models'],
           workspace: [
@@ -398,6 +431,7 @@ function workflowCommand(
         'model',
         'prepare',
         'workspace',
+        'reports',
       ].includes(name),
       isSafeConcurrent: name === 'status' || name === 'cancel',
       action: (context, args) => action(context, args, name),
