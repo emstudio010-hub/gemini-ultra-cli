@@ -5,6 +5,8 @@
  */
 
 import { Text } from 'ink';
+import { useContext } from 'react';
+import { ConfigContext } from '../contexts/ConfigContext.js';
 import { theme } from '../semantic-colors.js';
 import { getContextUsagePercentage } from '../utils/contextUsage.js';
 import { useSettings } from '../contexts/SettingsContext.js';
@@ -23,7 +25,12 @@ export const ContextUsageDisplay = ({
   terminalWidth: number;
 }) => {
   const settings = useSettings();
-  const percentage = getContextUsagePercentage(promptTokenCount, model);
+  const config = useContext(ConfigContext);
+  const percentage = getContextUsagePercentage(
+    promptTokenCount,
+    model,
+    config?.getContentGenerator?.(),
+  );
   const percentageUsed = (percentage * 100).toFixed(0);
 
   const threshold =

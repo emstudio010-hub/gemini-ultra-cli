@@ -15,7 +15,7 @@ v24.22.2；校验场景使用本地模型fixture，真实逆向工具需另行�
 Release 下载），执行：
 
 ```sh
-npm install -g ./gemini-ultra-cli-1.0.0-preview.24.tgz
+npm install -g ./gemini-ultra-cli-1.0.0-preview.25.tgz
 gemini-ultra --version
 gemini-ultra
 ```
@@ -44,6 +44,15 @@ gemini-ultra
 ## 可选输出上限
 
 进入 /provider，选择「输出上限」即可按供应商设置正整数 Token 数。留空恢复现有默认行为；任务自己指定的上限优先。可用范围依模型和供应商而定，此设置不代表该供应商已支持任意长度。设置保存在个人供应商配置中，安装或升级不会覆盖它。
+
+## 外接模型上下文容量
+
+进入 `/provider`
+→「上下文容量」，填写供应商实际支持的上下文 Token 数。此值对该供应商下的模型共同生效；容量不同的模型可分开配置供应商，或填写共同适用的较小容量。留空恢复原默认值，不会更改输出上限。
+
+主 Agent、子 Agent、自动压缩、超限判断和界面用量显示会读取同一容量。修改立即用于后续计算；达到压缩阈值后，系统仍按原流程提炼历史并保留近期工具结果。设置只在本地用于预算，不会向 API 发送额外字段，也不会扩大网关实际支持的容量。
+
+未配置时仍使用原有模型默认值，未知模型默认为 1,048,576。请按模型或网关的实际说明填写；CLI 不会根据模型名字猜测第三方网关容量。
 
 ## 流响应长时间没有进展
 
@@ -93,13 +102,13 @@ Release。每个安装包附带 `.sha256` 文件，便于传输后核对。
 Windows PowerShell 校验安装包：
 
 ```powershell
-Get-FileHash ./gemini-ultra-cli-1.0.0-preview.24.tgz -Algorithm SHA256
-Get-Content ./gemini-ultra-cli-1.0.0-preview.24.tgz.sha256
+Get-FileHash ./gemini-ultra-cli-1.0.0-preview.25.tgz -Algorithm SHA256
+Get-Content ./gemini-ultra-cli-1.0.0-preview.25.tgz.sha256
 ```
 
 macOS 使用
-`shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.24.tgz.sha256`；Linux 使用
-`sha256sum -c gemini-ultra-cli-1.0.0-preview.24.tgz.sha256`。
+`shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.25.tgz.sha256`；Linux 使用
+`sha256sum -c gemini-ultra-cli-1.0.0-preview.25.tgz.sha256`。
 
 ## 自定义逆向工具路径
 

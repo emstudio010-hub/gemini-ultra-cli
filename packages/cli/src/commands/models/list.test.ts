@@ -70,6 +70,7 @@ describe('models list command', () => {
     } as unknown as LoadedSettings);
     mockLoadCliConfig.mockResolvedValue({
       storage: { initialize: vi.fn().mockResolvedValue(undefined) },
+      getContentGenerator: () => undefined,
     } as unknown as Config);
     mockBuildAvailableModels.mockReturnValue({
       availableModels: sampleAvailableModels,
@@ -87,7 +88,9 @@ describe('models list command', () => {
 
   describe('getModelListings', () => {
     it('should map available models with token limits and aliases', () => {
-      const mockConfig = {} as unknown as Config;
+      const mockConfig = {
+        getContentGenerator: () => undefined,
+      } as unknown as Config;
       const mockSettings = { merged: {} } as unknown as LoadedSettings;
 
       const listings = getModelListings(mockConfig, mockSettings);
@@ -121,7 +124,9 @@ describe('models list command', () => {
         currentModelId: 'custom-new-model',
       });
 
-      const mockConfig = {} as unknown as Config;
+      const mockConfig = {
+        getContentGenerator: () => undefined,
+      } as unknown as Config;
       const mockSettings = { merged: {} } as unknown as LoadedSettings;
 
       const listings = getModelListings(mockConfig, mockSettings);
@@ -144,7 +149,9 @@ describe('models list command', () => {
         currentModelId: 'nameless-model',
       });
 
-      const mockConfig = {} as unknown as Config;
+      const mockConfig = {
+        getContentGenerator: () => undefined,
+      } as unknown as Config;
       const mockSettings = { merged: {} } as unknown as LoadedSettings;
 
       const listings = getModelListings(mockConfig, mockSettings);
@@ -160,7 +167,9 @@ describe('models list command', () => {
         currentModelId: 'auto',
       });
 
-      const mockConfig = {} as unknown as Config;
+      const mockConfig = {
+        getContentGenerator: () => undefined,
+      } as unknown as Config;
       const mockSettings = { merged: {} } as unknown as LoadedSettings;
 
       const listings = getModelListings(mockConfig, mockSettings);

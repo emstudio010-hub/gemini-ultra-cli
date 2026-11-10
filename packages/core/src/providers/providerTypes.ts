@@ -35,6 +35,8 @@ export interface ExternalProviderProfile {
   defaultModel?: string;
   /** Optional output token limit; individual generation requests take priority. */
   maxOutputTokens?: number;
+  /** Optional context capacity in tokens, used for local budgeting and compression. */
+  contextWindow?: number;
   /** Replay provider reasoning for Chat tool conversations; auto detects DeepSeek. */
   reasoningReplay?: 'auto' | 'on' | 'off';
   /** Supported image generation models (e.g. dall-e-3, flux-1, recraft-v3, imagen-3) */

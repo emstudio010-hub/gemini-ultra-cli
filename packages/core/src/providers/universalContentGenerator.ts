@@ -123,6 +123,13 @@ export class UniversalContentGenerator implements ContentGenerator {
     return Math.ceil(text.length / 3);
   }
 
+  getModelContextWindow(model: string): number | undefined {
+    const resolution = this.resolve(model);
+    return resolution
+      ? resolution.provider.contextWindow
+      : this.fallbackGenerator.getModelContextWindow?.(model);
+  }
+
   async countTokens(
     request: CountTokensParameters,
   ): Promise<CountTokensResponse> {

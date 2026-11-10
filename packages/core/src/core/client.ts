@@ -737,7 +737,10 @@ export class GeminiClient {
     }
 
     const remainingTokenCount =
-      tokenLimit(modelForLimitCheck) - this.getChat().getLastPromptTokenCount();
+      tokenLimit(
+        modelForLimitCheck,
+        this.context.config.getContentGenerator(),
+      ) - this.getChat().getLastPromptTokenCount();
 
     await this.tryMaskToolOutputs(this.getHistory());
 

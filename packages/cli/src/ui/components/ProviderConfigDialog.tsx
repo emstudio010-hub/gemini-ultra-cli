@@ -39,6 +39,7 @@ type MenuPage =
   | 'select-models-checklist'
   | 'edit-image-model'
   | 'edit-output-limit'
+  | 'edit-context-window'
   | 'select-reasoning-replay'
   | 'confirm-delete';
 
@@ -195,8 +196,15 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
       ),
     },
     {
+      id: 'edit-context-window',
+      label: t(
+        '11. [上下文容量] - 按供应商实际容量调整自动压缩与用量提示',
+        '11. [Context Window] - Set capacity for compression and usage display',
+      ),
+    },
+    {
       id: 'exit',
-      label: t('11. [保存并返回终端]', '11. [Save and Return to Terminal]'),
+      label: t('12. [保存并返回终端]', '12. [Save and Return to Terminal]'),
     },
   ];
 
@@ -352,6 +360,13 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
               );
               setStatusMessage('');
               setPage('edit-output-limit');
+            } else if (selected === 'edit-context-window') {
+              if (!focusedProvider) return true;
+              setOutputLimitInput(
+                focusedProvider.contextWindow?.toString() ?? '',
+              );
+              setStatusMessage('');
+              setPage('edit-context-window');
             } else if (selected === 'delete') {
               if (focusedProvider) setPage('confirm-delete');
             } else if (selected === 'lang') {
@@ -657,7 +672,7 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
         // ------------------------------------------------------------------
         // Output limit is optional and does not add a step to provider creation.
         // ------------------------------------------------------------------
-        if (page === 'edit-output-limit') {
+        if (page === 'edit-output-limit' || page === 'edit-context-window') {
           if (isEnter(key)) {
             const value = outputLimitInput.trim();
             const limit = value ? Number(value) : undefined;
@@ -678,12 +693,16 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
             if (focusedProvider) {
               mgr.upsertProvider({
                 ...focusedProvider,
-                maxOutputTokens: limit,
+                ...(page === 'edit-context-window'
+                  ? { contextWindow: limit }
+                  : { maxOutputTokens: limit }),
                 setActive: activeProvider?.id === focusedProvider.id,
               });
               setProviders(mgr.listProviders());
               setStatusMessage(
-                t('✓ 输出上限已更新。', '✓ Output limit updated.'),
+                page === 'edit-context-window'
+                  ? t('✓ 上下文容量已更新。', '✓ Context window updated.')
+                  : t('✓ 输出上限已更新。', '✓ Output limit updated.'),
               );
               setPage('main-menu');
             }
@@ -838,6 +857,8 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
             {page === 'edit-image-model' &&
               t('› 生图模型参数设置', '› Image Generation Model')}
             {page === 'edit-output-limit' && t('› 输出上限', '› Output Limit')}
+            {page === 'edit-context-window' &&
+              t('› 上下文容量', '› Context Window')}
             {page === 'select-reasoning-replay' &&
               t('› 推理续接', '› Reasoning Replay')}
             {page === 'confirm-delete' &&
@@ -1299,22 +1320,35 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
         </Box>
       )}
 
-      {page === 'edit-output-limit' && (
+      {(page === 'edit-output-limit' || page === 'edit-context-window') && (
         <Box flexDirection="column">
           <Text bold color={theme.text.primary}>
-            {t('输出上限', 'Output Limit')} · {focusedProvider?.name}
+            {page === 'edit-context-window'
+              ? t('上下文容量', 'Context Window')
+              : t('输出上限', 'Output Limit')}{' '}
+            · {focusedProvider?.name}
           </Text>
           <Text color={theme.text.secondary}>
-            {t(
-              '输入正整数 Token 数，留空沿用默认值。任务自己的上限优先。',
-              'Enter a positive token count, or leave empty for default. Task limits take priority.',
-            )}
+            {page === 'edit-context-window'
+              ? t(
+                  '填写此供应商下模型共同适用的上下文 Token 容量，留空沿用默认值。',
+                  'Enter a context token capacity suitable for all models on this provider; leave empty for default.',
+                )
+              : t(
+                  '输入正整数 Token 数，留空沿用默认值。任务自己的上限优先。',
+                  'Enter a positive token count, or leave empty for default. Task limits take priority.',
+                )}
           </Text>
           <Text color={theme.text.secondary}>
-            {t(
-              '可用上限取决于模型与供应商。',
-              'Available limits depend on the model and provider.',
-            )}
+            {page === 'edit-context-window'
+              ? t(
+                  '用于主 Agent、子 Agent 和自动压缩；不会扩大供应商的实际容量。',
+                  'Used by main agents, subagents and compression; does not increase provider capacity.',
+                )
+              : t(
+                  '可用上限取决于模型与供应商。',
+                  'Available limits depend on the model and provider.',
+                )}
           </Text>
           <Box marginTop={1}>
             <Text color={theme.text.accent}>&gt; </Text>

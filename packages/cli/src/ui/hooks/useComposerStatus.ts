@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useMemo } from 'react';
+import { useContext, useMemo } from 'react';
+import { ConfigContext } from '../contexts/ConfigContext.js';
 import { useUIState } from '../contexts/UIStateContext.js';
 import { useQuotaState } from '../contexts/QuotaContext.js';
 import { useSettings } from '../contexts/SettingsContext.js';
@@ -21,6 +22,7 @@ export const useComposerStatus = () => {
   const uiState = useUIState();
   const quotaState = useQuotaState();
   const settings = useSettings();
+  const config = useContext(ConfigContext);
 
   const hasPendingToolConfirmation = useMemo(
     () =>
@@ -86,6 +88,7 @@ export const useComposerStatus = () => {
     uiState.sessionStats.lastPromptTokenCount,
     uiState.currentModel,
     settings.merged.model?.compressionThreshold,
+    config?.getContentGenerator?.(),
   );
 
   const loadingPhrases = settings.merged.ui.loadingPhrases;

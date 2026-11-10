@@ -3905,7 +3905,8 @@ export class Config implements McpContext, AgentLoopContext {
     return Math.min(
       // Estimate remaining context window in characters (1 token ~= 4 chars).
       4 *
-        (tokenLimit(this.model) - uiTelemetryService.getLastPromptTokenCount()),
+        (tokenLimit(this.model, this.contentGenerator) -
+          uiTelemetryService.getLastPromptTokenCount()),
       this.truncateToolOutputThreshold,
     );
   }

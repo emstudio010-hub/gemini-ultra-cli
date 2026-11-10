@@ -100,6 +100,7 @@ const providersSchema = z.object({
         models: z.array(modelId).default([]),
         defaultModel: modelId.optional(),
         maxOutputTokens: z.number().int().positive().safe().optional(),
+        contextWindow: z.number().int().positive().safe().optional(),
         reasoningReplay: z.enum(['auto', 'on', 'off']).optional(),
         imageModels: z.array(modelId).optional(),
         defaultImageModel: modelId.optional(),
@@ -255,6 +256,7 @@ export class ProviderManager {
     models?: string[];
     defaultModel?: string;
     maxOutputTokens?: number;
+    contextWindow?: number;
     reasoningReplay?: 'auto' | 'on' | 'off';
     imageModels?: string[];
     defaultImageModel?: string;
@@ -339,6 +341,12 @@ export class ProviderManager {
       )
         ? input.maxOutputTokens
         : existing?.maxOutputTokens,
+      contextWindow: Object.prototype.hasOwnProperty.call(
+        input,
+        'contextWindow',
+      )
+        ? input.contextWindow
+        : existing?.contextWindow,
       reasoningReplay: input.reasoningReplay ?? existing?.reasoningReplay,
       imageModels: mergedImageModels,
       defaultImageModel:

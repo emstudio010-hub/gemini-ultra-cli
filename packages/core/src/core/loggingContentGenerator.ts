@@ -161,6 +161,10 @@ export class LoggingContentGenerator implements ContentGenerator {
     return this.wrapped;
   }
 
+  getModelContextWindow(model: string): number | undefined {
+    return this.wrapped.getModelContextWindow?.(model);
+  }
+
   get userTier(): UserTierId | undefined {
     return this.wrapped.userTier;
   }

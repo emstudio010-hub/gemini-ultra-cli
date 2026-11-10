@@ -614,7 +614,8 @@ export class ChatCompressionService {
         (await config.getCompressionThreshold()) ??
         DEFAULT_COMPRESSION_TOKEN_THRESHOLD;
       const isOverModelThreshold =
-        originalTokenCount >= threshold * tokenLimit(model);
+        originalTokenCount >=
+        threshold * tokenLimit(model, config.getContentGenerator());
 
       if (!isOverModelThreshold) {
         return {
@@ -690,7 +691,8 @@ export class ChatCompressionService {
     );
 
     const historyForSummarizer =
-      originalToCompressTokenCount < tokenLimit(model)
+      originalToCompressTokenCount <
+      tokenLimit(model, config.getContentGenerator())
         ? originalHistoryToCompress
         : historyToCompressTruncated;
 

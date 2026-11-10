@@ -75,7 +75,9 @@ export function getModelListings(
   const { availableModels } = buildAvailableModels(config, settings);
 
   return (availableModels ?? []).map((m) => {
-    const inputTokens = tokenLimit(m.modelId) ?? DEFAULT_TOKEN_LIMIT;
+    const inputTokens =
+      tokenLimit(m.modelId, config.getContentGenerator()) ??
+      DEFAULT_TOKEN_LIMIT;
     const outputTokens = 8192;
     return {
       modelId: m.modelId,

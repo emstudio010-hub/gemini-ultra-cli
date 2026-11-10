@@ -257,6 +257,47 @@ describe('ChatCompressionService', () => {
     }
   });
 
+  it('uses the external route capacity for automatic compression', async () => {
+    const actual = await vi.importActual<
+      typeof import('../core/tokenLimits.js')
+    >('../core/tokenLimits.js');
+    vi.mocked(tokenLimit).mockImplementation(actual.tokenLimit);
+    vi.mocked(mockChat.getHistory).mockReturnValue([
+      {
+        role: 'user',
+        parts: [{ text: 'Keep the audit scope and role results.' }],
+      },
+      { role: 'model', parts: [{ text: 'An earlier complete report.' }] },
+    ]);
+    vi.mocked(mockChat.getLastPromptTokenCount).mockReturnValue(60000);
+    const original = await service.compress(
+      mockChat,
+      mockPromptId,
+      false,
+      'external-model',
+      mockConfig,
+      false,
+    );
+    expect(original.info.compressionStatus).toBe(CompressionStatus.NOOP);
+    Object.assign(mockConfig.getContentGenerator(), {
+      getModelContextWindow: () => 100000,
+    });
+    const configured = await service.compress(
+      mockChat,
+      mockPromptId,
+      false,
+      'external-model',
+      mockConfig,
+      false,
+    );
+    expect(configured.info.compressionStatus).toBe(
+      CompressionStatus.COMPRESSED,
+    );
+    expect(mockConfig.getBaseLlmClient().generateContent).toHaveBeenCalledTimes(
+      2,
+    );
+  });
+
   it('should return NOOP if history is empty', async () => {
     vi.mocked(mockChat.getHistory).mockReturnValue([]);
     const result = await service.compress(

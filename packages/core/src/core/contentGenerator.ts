@@ -40,6 +40,9 @@ import { ExternalFallbackGenerator } from '../providers/externalFallbackGenerato
  * Interface abstracting the core functionalities for generating content and counting tokens.
  */
 export interface ContentGenerator {
+  /** Local context capacity for the resolved route; not an API request parameter. */
+  getModelContextWindow?(model: string): number | undefined;
+
   generateContent(
     request: GenerateContentParameters,
     userPromptId: string,

@@ -527,6 +527,7 @@ export class Session {
                   used: turnInputTokens + turnOutputTokens,
                   size: tokenLimit(
                     turnModelId || this.context.config.getModel(),
+                    this.context.config.getContentGenerator(),
                   ),
                 });
               }

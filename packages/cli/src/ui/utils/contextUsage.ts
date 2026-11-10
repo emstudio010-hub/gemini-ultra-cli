@@ -4,16 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { tokenLimit } from '@google/gemini-cli-core';
+import { tokenLimit, type ContentGenerator } from '@google/gemini-cli-core';
 
 export function getContextUsagePercentage(
   promptTokenCount: number,
   model: string | undefined,
+  generator?: Pick<ContentGenerator, 'getModelContextWindow'>,
 ): number {
   if (!model || typeof model !== 'string' || model.length === 0) {
     return 0;
   }
-  const limit = tokenLimit(model);
+  const limit = tokenLimit(model, generator);
   if (limit <= 0) {
     return 0;
   }
@@ -24,6 +25,9 @@ export function isContextUsageHigh(
   promptTokenCount: number,
   model: string | undefined,
   threshold = 0.6,
+  generator?: Pick<ContentGenerator, 'getModelContextWindow'>,
 ): boolean {
-  return getContextUsagePercentage(promptTokenCount, model) > threshold;
+  return (
+    getContextUsagePercentage(promptTokenCount, model, generator) > threshold
+  );
 }

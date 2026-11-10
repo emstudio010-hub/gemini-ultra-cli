@@ -31,6 +31,10 @@ export class RecordingContentGenerator implements ContentGenerator {
     private readonly filePath: string,
   ) {}
 
+  getModelContextWindow(model: string): number | undefined {
+    return this.realGenerator.getModelContextWindow?.(model);
+  }
+
   get userTier(): UserTierId | undefined {
     return this.realGenerator.userTier;
   }

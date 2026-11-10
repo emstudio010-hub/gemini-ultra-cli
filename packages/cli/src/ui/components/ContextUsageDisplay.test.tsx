@@ -7,17 +7,42 @@
 import { renderWithProviders } from '../../test-utils/render.js';
 import { ContextUsageDisplay } from './ContextUsageDisplay.js';
 import { describe, it, expect, vi } from 'vitest';
+import { makeFakeConfig, type ContentGenerator } from '@google/gemini-cli-core';
 
 vi.mock('@google/gemini-cli-core', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('@google/gemini-cli-core')>();
   return {
     ...actual,
-    tokenLimit: () => 10000,
+    tokenLimit: (model: string, generator?: ContentGenerator) =>
+      generator?.getModelContextWindow?.(model) ?? 10000,
   };
 });
 
 describe('ContextUsageDisplay', () => {
+  it('renders the configured route capacity', async () => {
+    const config = makeFakeConfig();
+    vi.spyOn(config, 'getContentGenerator').mockReturnValue({
+      getModelContextWindow: () => 8000,
+      generateContent: vi.fn(),
+      generateContentStream: vi.fn(),
+      countTokens: vi.fn(),
+      embedContent: vi.fn(),
+    });
+    const { lastFrame, unmount } = await renderWithProviders(
+      <ContextUsageDisplay
+        promptTokenCount={6000}
+        model="external-model"
+        terminalWidth={120}
+      />,
+      {
+        config,
+      },
+    );
+    expect(lastFrame()).toContain('75% used');
+    unmount();
+  });
+
   it('renders correct percentage used', async () => {
     const { lastFrame, unmount } = await renderWithProviders(
       <ContextUsageDisplay
