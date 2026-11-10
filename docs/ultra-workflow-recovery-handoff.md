@@ -1,6 +1,7 @@
 # Gemini Ultra CLI 工作流状态恢复交接
 
-日期：2026-11-11。候选 preview.35，本机此时仍 preview.34。
+日期：2026-11-11。本机双命令已安装 preview.35，产品源提交
+`510c8657ffe80082f041ec3d1739a03604aaf6d1`。
 
 ## E-135 / F-036：损坏账本无法取消
 
@@ -47,3 +48,30 @@ E-135 本地保留恢复和未知用量禁复活；非交互 void action 继续�
 
 WI-065 工作流预算/绑定恢复本地完成，preview.35 待分发安装。Swarm 的预算嵌在 members.json 中，整个 Swarm 状态或其绑定损坏的取消恢复尚未统一，继续 WI-066；不要把此修复扩大为任意项目状态文件都已可恢复。原始 workflow 记录本身若损坏也需独立恢复方案。真实供应商自主交付/引用可靠性、复杂逆向、隔离工作树和成员独立模型仍未完成。goal
 active，不合并 master、不发布正式 Release。
+
+## E-137 三平台最终工件
+
+[运行42894747215](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/42894747215)
+completed/success，产品源510c8657ffe80082f041ec3d1739a03604aaf6d1。三个包的SHA、版本/源运行、安装记录与六rg二进制hash/Unix权限逐一核对。Swarm正常20请求/预算3请求、工作流正常12请求/预算3请求和新增坏状态恢复链均通过，模型仅loopback。
+
+| 平台        | 包SHA-256                                                        | 恢复场景时长 | cancel/resume/普通会话 |
+| ----------- | ---------------------------------------------------------------- | ------------ | ---------------------- |
+| Windows x64 | e724844adf5049f5aed9e5d897668c19780c3e0845b73d72d81c6f6d3f86f788 | 8796ms       | 0 / 42 / 0             |
+| Linux x64   | 227e83ba146047f176ba7ebf56ccbabd97a22f995798c37a7f95b68470ef35df | 3610ms       | 0 / 42 / 0             |
+| macOS arm64 | 70b26a3c57a01878ab7c6510c17a2068f7c99fa47b4c3834dd46bd0f610a947e | 4884ms       | 0 / 42 / 0             |
+
+每平台新增恢复场景共2请求：初始创建隔离坏状态1次、取消及拒绝恢复0次、明确普通会话1次；两个坏文件字节匹配。旧任务保持cancelled/accountingUnknown/closed。初始程序退出1为预期损坏拒绝，整个辅助报告passed不等于交付工件。时长不作跨平台性能基准；没有重跑同一付费任务。
+
+## E-138 本机安装
+
+仅一次offline已有缓存安装7039ms/退出0；gemini-ultra和gemini-ultra-cli均1.0.0-preview.35，424包内文件逐一匹配Windows
+CI包。入口SHA为89fa72d889914e452ae52366e5709664c9268a737279f12330a3763b423e3983。保留preview.34原包，不重复Windows
+CI已经执行的相同fixture，不更改真实供应商配置、数据库和逆向工具。
+
+工程证据：github-preview35-run.json、github-preview35-artifacts-result.json、github-run-42894747215/各平台/workflow-recovery-verification.json和对应输出；global-preview35-install-result.json、global-install-github-preview35-full-result.json。WI-065交付完成；goal继续active，仅codex分支，未合并master或发布正式Release。
+
+## E-139 / F-038 Swarm后续已定位
+
+reproduce-swarm-budget-corruption.mjs生成全新隔离Swarm，预留2次调度（0模型请求）。删除budget.requests字段后readSwarm读到0；将其变为非法字符串时cancelSwarm被Schema阻断，原坏字节未变。swarm-state-corruption-before.json记录reproduced=true、reservedBefore=2、observedAfterMissingField=0、invalidCounterPreventsCancel=true。
+
+这不是已观察到的真实用户状态损坏，也尚未修复。WI-066接续Swarm严格计数读取、坏状态/绑定取消和未知用量门槛，再处理workflow记录本体损坏。真实供应商完整自主交付、引用可靠性、复杂逆向、隔离工作树和成员独立模型仍保留在目标池，不以本轮fixture扩大验收。
