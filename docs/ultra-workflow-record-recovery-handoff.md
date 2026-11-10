@@ -1,6 +1,7 @@
 # Gemini Ultra CLI 工作流原记录恢复交接
 
-日期：2026-11-11。候选 preview.37；本机此刻仍 preview.36。
+日期：2026-11-11。本机双命令已安装 preview.37，产品源提交
+`7d56d192195a3bb50cd16a0307653607ebf6f3a2`。
 
 ## E-144 / F-039
 
@@ -44,3 +45,27 @@ E-144 损坏隔离、指定 ID 本地取消、独立账本标记与原文件保�
 
 WI-067 本地完成，preview.37 待三平台分发与安装核对。下一步 WI-068 推进协作成员的独立模型选择及配置便利性，继续实现真正的多模型协作；隔离工作树独立保留。WI-054 真实供应商完整自主交付/引用可靠性、WI-056 复杂逆向仍未完成。goal
 active，不合并 master、不发布正式 Release。
+
+## E-145 三平台最终工件
+
+[运行42899518945](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/42899518945)
+completed/success，产品源7d56d192195a3bb50cd16a0307653607ebf6f3a2。三个包版本/SHA/源运行、安装记录与六rg二进制hash/Unix权限核对通过；Swarm正常20请求/预算3/恢复2，工作流正常12/预算3/预算恢复2，以及新增原记录恢复2请求链均通过，模型仅loopback。
+
+| 平台        | 包SHA-256                                                        | 原记录恢复时长 | cancel/resume/普通会话 |
+| ----------- | ---------------------------------------------------------------- | -------------- | ---------------------- |
+| Windows x64 | 3c5b77f9a8bf3092ad482e15d72fcf89cff9093ac4cf7e78da29ae16c2672bd6 | 4002ms         | 0 / 42 / 0             |
+| Linux x64   | 73311c3b1c55c17742816921b45811dae16cd7802b50f7a0a4910a5f6a38fae5 | 2843ms         | 0 / 42 / 0             |
+| macOS arm64 | 7ac3d7ae16672c07746e63a015022a4e98df55b6b58d53bb616bd79e2a635309 | 4204ms         | 0 / 42 / 0             |
+
+每平台新增链都确认：坏记录/绑定原字节保留，已知fixture预置预算仍为2调度/1失败/1实施；recordUnavailable且closed，指定ID取消和拒绝恢复不发模型请求。初始坏状态退出1为预期失败，普通会话恢复后再发1请求，连初始seed共2请求。无工件/业务交付，时长不作跨平台性能比较，也不替代真实供应商自主验收。
+
+## E-146 本机安装
+
+仅一次offline已有缓存安装7153ms/退出0；gemini-ultra与gemini-ultra-cli均1.0.0-preview.37，424包内文件逐一匹配Windows
+CI包。入口SHA为a0b3fd32d3db04f8f87c5854cb0ff74bde0b8f30b555f1026604f9154e31ba44。保留preview.36原包，不重复相同Windows工件已执行的fixture，不更改个人供应商配置、数据库和逆向工具。
+
+工程证据：github-preview37-run.json、github-preview37-artifacts-result.json、github-run-42899518945/各平台/workflow-record-recovery-verification.json及对应输出；global-preview37-install-result.json、global-install-github-preview37-full-result.json。WI-067交付，goal仍active，仅codex分支，不合并master/正式发布。
+
+## 下一步 WI-068
+
+推进具名成员与工作流角色的独立模型选择、配置便利性和真实多模型协作。只读核对已确认ProviderManager.resolveProviderForModel支持provider:model；LocalAgentExecutor.callModel通过definition的alias及overrideScope取模型配置。后续实现必须在成员调用内隔离路由，不并发改全局activeModel或共享注册表别名；也要覆盖当前LocalSessionInvocation与LocalSubagentInvocation两种执行入口，并保留任务累计预算/实际路由可见性。此功能尚未实现，不能声称已可跨模型成员协作。隔离工作树、WI-054真实自主交付/引用和WI-056复杂逆向继续保留。

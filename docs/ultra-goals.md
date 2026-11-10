@@ -16,9 +16,9 @@
 | P1     | Swarm具名成员、共享留言与实时看板           | 三平台原生链通过         | E-120/122/123：@提及唤醒、事件等待、状态/完成门控和终端刷新/Esc；真实供应商与隔离工作树待做                        |
 | P1     | 内置红队工作流                              | 本地分析闭环通过         | 临时授权下redteam-analyst真实分析生成样本并归档，E-016；复杂逆向与外部目标未验收                                   |
 | P2     | 演练台 Morphicons 交互图标与强度动效        | 本地完成                 | 使用 Morphicons 2.0.2；浏览器确认六档、图标、移动布局、减少动态效果与隐藏暂停                                      |
-| P0     | 安装到 CLI 本身并生成可分发安装包           | 本地完成                 | 当前preview.36 Windows CI包，424文件匹配；E-141/142；Swarm坏状态与计数恢复                                      |
+| P0     | 安装到 CLI 本身并生成可分发安装包           | 本地完成                 | 当前preview.37 Windows CI包，424文件匹配；E-145/146；工作流原记录与查询恢复                                      |
 | P1     | 其他电脑可以开展本地逆向                    | 三平台原生静态链通过     | preview.28的Windows/Linux x64、macOS arm64实际r2函数/指令/引用及SQLite归档通过E-107/111/112；复杂反编译待补        |
-| P1     | GitHub 三平台分发验收                       | 已通过至preview.36       | preview.36/run42897457849三平台success；Swarm/工作流正常/预算/恢复链及包身份通过E-141/142                          |
+| P1     | GitHub 三平台分发验收                       | 已通过至preview.37       | preview.37/run42899518945三平台success；新增原记录恢复链/预算用量保留与包身份通过E-145/146                          |
 | P1     | 真实供应商与长会话上线验收                  | 未完成                   | E-124真实Swarm报告未交付，隔离8192两次length，观察者停下第三轮；原失败保留，完整自主交付仍未通过                   |
 
 ## 证据记录
@@ -600,3 +600,7 @@
 - E-144/F-039：坏历史记录不再阻断其他模式查询；CLI提示ID。同模式当前坏任务禁止静默回落，旧任务恢复不能覆盖其他活绑定。/boost|teamwork|grill-me cancel ID绕过latest先核对独立账本的模式/拥有者；保存recordUnavailable标记再备份原记录，cancelled占位不伪造原需求/报告/完成。
 - 已知累计预算保留，原记录不可用的旧任务禁止resume或新增额度；运行中保存先核对原磁盘记录，调查期损坏不会被旧内存覆盖，成员收尾后再恢复。28相关core+4 CLI、lint/type/格式通过；实际CLI恢复链7599ms/2个loopback请求，cancel0/resume42/普通会话0；2调度/1失败/1实施的fixture预置值未重置，无真实调用/业务交付。
 - WI-067本地完成，preview.37准备分发安装。WI-068下一步推进成员独立模型选择与配置便利性，工作树隔离仍保留；真实自主交付/引用、复杂逆向继续，goal active。
+
+- E-145：preview.37源7d56d192195a3bb50cd16a0307653607ebf6f3a2/run42899518945三平台completed/success，工件版本/SHA/安装与六rg身份/权限核对；Swarm与工作流正常/预算/恢复链均通过，新增原记录恢复2个loopback请求，cancel0/resume42/普通会话0，已知2调度/1失败/1实施保持原值，原坏记录/绑定字节保留。
+- E-146：offline缓存安装7153ms/退出0；双命令preview.37，424文件逐一匹配Windows CI包，旧包保留，不重复fixture/真实付费任务。WI-067交付，goal active。
+- WI-068下一步成员独立模型与配置便利性：ProviderManager已有provider:model路由，LocalAgentExecutor通过alias/overrideScope解析；需调用内隔离，不能并发改全局activeModel/注册表别名，并覆盖session/subagent两入口与预算。尚未实现；隔离工作树、真实自主交付/引用、复杂逆向继续。
