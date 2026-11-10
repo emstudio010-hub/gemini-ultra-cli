@@ -107,7 +107,7 @@ export function ultraSpecialists(
       get promptConfig() {
         return {
           ...base.promptConfig,
-          systemPrompt: `${base.promptConfig.systemPrompt}\n\nRole: ${role.name}\n${role.directive}`,
+          systemPrompt: `${base.promptConfig.systemPrompt}\n\nRole: ${role.name}\n${role.directive}${role.readOnly ? '\nLimit conclusions to the inspected evidence. A caller or dependency missing from a bounded snapshot is unverified, not proof that it is absent from the product. Return evidence paths, outcomes and concrete unresolved gaps so the parent can integrate the result without repeating the investigation.' : ''}`,
         };
       },
     };

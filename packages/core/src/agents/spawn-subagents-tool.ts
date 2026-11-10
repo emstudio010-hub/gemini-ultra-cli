@@ -24,6 +24,7 @@ import {
 import { I18nManager } from '../i18n/i18nManager.js';
 import { isSubagentProgress, SubagentState } from './types.js';
 import { getMaxParallelSubagents } from './subagentScheduler.js';
+import { isRecord } from '../utils/markdownUtils.js';
 export { getMaxParallelSubagents } from './subagentScheduler.js';
 
 export const SPAWN_SUBAGENTS_TOOL_NAME = 'spawn_subagents';
@@ -36,6 +37,50 @@ export interface SpawnSubagentTask {
 
 export interface SpawnSubagentsParams {
   tasks: SpawnSubagentTask[];
+}
+
+function subagentResultText(value: ToolResult): string {
+  const progress = isSubagentProgress(value.returnDisplay)
+    ? value.returnDisplay
+    : undefined;
+  if (progress?.result !== undefined) {
+    let result = progress.result;
+    try {
+      const parsed: unknown = JSON.parse(result);
+      // Built-in specialists wrap their text in this one-field result schema.
+      // Leave every other custom result shape intact.
+      if (isRecord(parsed) && Object.keys(parsed).length === 1) {
+        const response = parsed['response'];
+        if (typeof response === 'string') result = response;
+      }
+    } catch {
+      // Plain text and interrupted results are already in their final form.
+    }
+    return [
+      ...(progress.terminateReason
+        ? [`Termination Reason: ${progress.terminateReason}`]
+        : []),
+      'Result:',
+      result || '(No result text supplied.)',
+    ].join('\n');
+  }
+  const parts = Array.isArray(value.llmContent)
+    ? value.llmContent
+    : [value.llmContent];
+  return (
+    parts
+      .map((part) => {
+        if (typeof part === 'string') return part;
+        if (isRecord(part) && Object.keys(part).length === 1) {
+          const text = part['text'];
+          if (typeof text === 'string') return text;
+        }
+        return JSON.stringify(part);
+      })
+      .join('\n') ||
+    value.error?.message ||
+    '(No result text supplied.)'
+  );
 }
 
 class SpawnSubagentsInvocation extends BaseToolInvocation<
@@ -150,15 +195,9 @@ class SpawnSubagentsInvocation extends BaseToolInvocation<
     const sections: string[] = [];
     settled.forEach((res, i) => {
       const name = tasks[i].agent_name || 'generalist';
-      const label =
-        states[i].status === 'completed'
-          ? ''
-          : ` ${states[i].status.toUpperCase()}`;
+      const label = ` ${states[i].status.toUpperCase()}`;
       if (res.status === 'fulfilled') {
-        const content =
-          typeof res.value.llmContent === 'string'
-            ? res.value.llmContent
-            : JSON.stringify(res.value.llmContent);
+        const content = subagentResultText(res.value);
         sections.push(`### Subagent #${i + 1} (${name})${label}\n${content}`);
       } else {
         const msg =
@@ -167,7 +206,6 @@ class SpawnSubagentsInvocation extends BaseToolInvocation<
       }
     });
 
-    const text = sections.join('\n\n');
     const succeeded = states.filter(
       (state) => state.status === 'completed',
     ).length;
@@ -176,6 +214,11 @@ class SpawnSubagentsInvocation extends BaseToolInvocation<
       (state) => state.status === 'cancelled',
     ).length;
     const allUnsuccessful = succeeded === 0 && tasks.length > 0;
+    const text = [
+      `Collaboration batch settled: ${succeeded} completed, ${failed} failed, ${cancelled} cancelled (${tasks.length} total).`,
+      ...sections,
+      'Next: integrate these reports into the requested deliverable. A completed subtask does not by itself complete the user task. Preserve partial results and report failures or blockers. Reuse the returned evidence; investigate further only to resolve a specific gap or integrate changes, rather than repeating the same investigation. Treat unsupported claims and missing dependencies as unverified.',
+    ].join('\n\n');
     return {
       llmContent: text,
       returnDisplay: I18nManager.getInstance().t(

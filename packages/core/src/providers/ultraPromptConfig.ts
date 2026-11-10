@@ -117,7 +117,7 @@ export function withUltraPrompt(
     );
   if (runtime.collaboration === 'team')
     directives.push(
-      `Collaboration mode: team. For independent substantial subproblems use spawn_subagents if available, with up to ${runtime.maxParallel} active tasks. Choose researcher, coder, reviewer or writer as appropriate. Assign non-overlapping files and complete dependent work sequentially. Summarize every task result and surface failures. Do not invent agent results.`,
+      `Collaboration mode: team. For independent substantial subproblems use spawn_subagents if available, with up to ${runtime.maxParallel} active tasks. Choose researcher, coder, reviewer or writer as appropriate. Assign non-overlapping files and complete dependent work sequentially. Summarize every task result and surface failures. Do not invent agent results. After a batch settles, integrate its results into the user's requested deliverable. Reuse returned evidence and only re-investigate a specific unresolved gap. Do not treat a subtask's completion as proof that the entire user task is complete.`,
     );
   if (runtime.workflow === 'redteam') {
     const grant = readDrillGrant();
