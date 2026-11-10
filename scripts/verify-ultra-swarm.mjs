@@ -14,6 +14,15 @@ const entry = path.resolve(process.argv[2]);
 const reportPath = path.resolve(process.argv[3]);
 const budgetMode = process.argv[4] === 'budget';
 const worktreeMode = process.argv[4] === 'worktree';
+const contextMode = process.argv[4] === 'context';
+const longHandoff =
+  'Seed investigation evidence.\n' +
+  'evidence '.repeat(400) +
+  '\nREQUIRED_FULL_SWARM_MIDDLE\n' +
+  'evidence '.repeat(400) +
+  '\nRequired deliverable: answer=42\n';
+let fullHandoffRead = false;
+const contextInputs = [];
 const modelMode = ['models', 'models-session'].includes(process.argv[4]);
 const sessionMode = process.argv[4] === 'models-session';
 const recoveryMode = process.argv[4] === 'recovery';
@@ -74,6 +83,22 @@ const server = createServer(async (req, res) => {
     const results = payload.messages.filter(
       (message) => message.role === 'tool',
     );
+    let memberPrompt;
+    if (contextMode && role !== 'main') {
+      memberPrompt = payload.messages
+        .filter((message) => message.role === 'user')
+        .map((message) =>
+          typeof message.content === 'string'
+            ? message.content
+            : message.content.map((part) => part.text || '').join('\n'),
+        )
+        .join('\n');
+      if (results.length === 0) {
+        assert.ok(memberPrompt.includes('read fullText'));
+        assert.ok(!memberPrompt.includes('REQUIRED_FULL_SWARM_MIDDLE'));
+        contextInputs.push({ role, chars: memberPrompt.length });
+      }
+    }
     requests.push({
       role,
       tools,
@@ -275,8 +300,9 @@ const server = createServer(async (req, res) => {
                 text: '@coordinator Seed requires answer=42. Read-only investigation complete.',
               })
             : complete({
-                response:
-                  'Seed independently inspected. Required content is answer=42.',
+                response: contextMode
+                  ? longHandoff
+                  : 'Seed independently inspected. Required content is answer=42.',
               });
     } else if (role === 'coder') {
       if (worktreeMode && results.length === 0) {
@@ -305,7 +331,27 @@ const server = createServer(async (req, res) => {
       }
     } else {
       assert.ok(!tools.includes('write_file'));
-      if (results.length === 0)
+      if (contextMode && results.length === 0) {
+        const reports = JSON.parse(
+          memberPrompt
+            .split(
+              'Current member results (including your prior result, if any):\n',
+            )[1]
+            .split('\nShared board')[0],
+        );
+        const report = reports.find((item) => item.name === 'analyst').result;
+        assert.equal(report.truncated, true);
+        assert.equal(fs.readFileSync(report.fullText, 'utf8'), longHandoff);
+        assert.equal(
+          report.sha256,
+          createHash('sha256').update(longHandoff).digest('hex'),
+        );
+        message = call('read_file', { file_path: report.fullText });
+      } else if (contextMode && results.length === 1) {
+        assert.ok(results[0].content.includes('REQUIRED_FULL_SWARM_MIDDLE'));
+        fullHandoffRead = true;
+        message = call('read_file', { file_path: artifact });
+      } else if (results.length === 0)
         message = call('read_file', { file_path: artifact });
       else {
         assert.ok(
@@ -780,7 +826,22 @@ try {
             mentionsWakeIdleMember:
               state?.members.find((member) => member.name === 'analyst')
                 ?.turns === 2,
-            noIdlePolling: requests.length === (worktreeMode ? 21 : 20),
+            noIdlePolling:
+              requests.length === (worktreeMode || contextMode ? 21 : 20),
+            ...(contextMode
+              ? {
+                  fullHandoffRead,
+                  allMemberTurnsHaveContext: contextInputs.length === 4,
+                  retainedLongResult:
+                    state?.members.find((member) => member.name === 'analyst')
+                      ?.result === longHandoff,
+                  boardRetainsOriginal: board.some(
+                    (post) =>
+                      post.sender === 'analyst' &&
+                      post.text.includes('REQUIRED_FULL_SWARM_MIDDLE'),
+                  ),
+                }
+              : {}),
             assignedPublicIdentity:
               board.some(
                 (post) =>
@@ -864,19 +925,21 @@ try {
               : {}),
           };
   const report = {
-    mode: worktreeMode
-      ? 'worktree'
-      : modelMode
-        ? sessionMode
-          ? 'models-session'
-          : 'models'
-        : recoveryMode
-          ? 'recovery'
-          : budgetMode
-            ? 'budget'
-            : diagnosticMode
-              ? 'diagnostic'
-              : 'delivery',
+    mode: contextMode
+      ? 'context'
+      : worktreeMode
+        ? 'worktree'
+        : modelMode
+          ? sessionMode
+            ? 'models-session'
+            : 'models'
+          : recoveryMode
+            ? 'recovery'
+            : budgetMode
+              ? 'budget'
+              : diagnosticMode
+                ? 'diagnostic'
+                : 'delivery',
     passed: Object.values(checks).every(Boolean),
     version: metadata.version,
     platform: process.platform,
@@ -886,6 +949,7 @@ try {
     exitCode,
     timedOut,
     checks,
+    ...(contextMode ? { contextInputs } : {}),
     requests,
     failures,
     state,
