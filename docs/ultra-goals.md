@@ -14,9 +14,9 @@
 | P1     | 多 Agent 有界排队、取消与结果可见           | 真实恢复交付通过     | E-104保留2完成1超时，压缩后同ID恢复交付报告；原始无人介入任务与引用准确性仍待验收                                  |
 | P1     | 内置红队工作流                              | 本地分析闭环通过     | 临时授权下redteam-analyst真实分析生成样本并归档，E-016；复杂逆向与外部目标未验收                                   |
 | P2     | 演练台 Morphicons 交互图标与强度动效        | 本地完成             | 使用 Morphicons 2.0.2；浏览器确认六档、图标、移动布局、减少动态效果与隐藏暂停                                      |
-| P0     | 安装到 CLI 本身并生成可分发安装包           | 本地完成             | 当前preview.27 Windows CI包，424包内文件匹配；E-105；手动取消与单轮压缩已交付                                      |
+| P0     | 安装到 CLI 本身并生成可分发安装包           | 本地完成             | 当前preview.28 Windows CI包，424包内文件匹配；E-109；原生函数/指令工具已交付                                       |
 | P1     | 其他电脑可以开展本地逆向                    | 三平台原生基础链通过 | preview.8的Windows/Linux x64、macOS arm64真实rabin2读取/归档/查询通过E-022/027/029；复杂反编译与其他工具仍待补     |
-| P1     | GitHub 三平台分发验收                       | 已通过至preview.27   | preview.27/run42865743087三平台success，工件核对和本机安装通过；E-105                                              |
+| P1     | GitHub 三平台分发验收                       | 已通过至preview.28   | preview.28/run42868353559三平台success，工件核对和本机安装通过；E-108/109                                          |
 | P1     | 真实供应商与长会话上线验收                  | 未完成               | E-104当前真实服务压缩后73,466ms完成原报告，3请求；完整无人介入协作、真实复杂逆向仍未验收                           |
 
 ## 证据记录
@@ -469,4 +469,12 @@
 - 新增5项必要选择用例通过，受影响文件严格lint及核心/CLI类型构建通过；首次lint三处one-var已格式修正，无实现语义变动。真实r2
   6.2.2读取生成ELF得到两个函数和helper的CALL引用，样本未执行；安装后的完整工具链待preview.28工件核对。静态反汇编不等于反编译或复杂逆向验收。
 - preview.28准备三平台构建与安装；本阶段不新增付费模型调用，使用隔离HTTP模型fixture验证真实本机r2与SQLite归档链。整体goal
+  active。
+
+- E-107：已安装preview.28实际CLI/native-r2/SQLite链通过（6请求/2,515ms/退出0）：生成ELF的functions、instructions、xrefs三个视图各一次成功，两个函数/常量42的指令/实际CALL引用核实，note写入和查询成功、样本哈希未变。模型仅loopback
+  fixture；native执行限Windows x64，无样本执行或付费调用，不作为复杂反编译验收。
+- E-108：功能提交eace895008859c4787ffa6033557c1e951db9dce，运行42868353559三平台completed/success，三个工件版本/安装报告/SHA和六rg
+  hash/0755核对通过；Linux/macOS本轮未运行新native-r2分析路径。
+- E-109：双命令preview.28，Windows
+  CI已有缓存offline安装6秒，424包内文件逐一一致，入口59f6a36c271c6b39a09e4b91a004596a4bf36755666e7584247af157afae1f1f。新工具原生链与包身份分别记证据；源码/工程目录/Obsidian交接已写，goal
   active。
