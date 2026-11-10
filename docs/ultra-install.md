@@ -15,7 +15,7 @@ v24.22.2；校验场景使用本地模型fixture，真实逆向工具需另行�
 Release 下载），执行：
 
 ```sh
-npm install -g ./gemini-ultra-cli-1.0.0-preview.11.tgz
+npm install -g ./gemini-ultra-cli-1.0.0-preview.12.tgz
 gemini-ultra --version
 gemini-ultra
 ```
@@ -72,13 +72,13 @@ Release。每个安装包附带 `.sha256` 文件，便于传输后核对。
 Windows PowerShell 校验安装包：
 
 ```powershell
-Get-FileHash ./gemini-ultra-cli-1.0.0-preview.11.tgz -Algorithm SHA256
-Get-Content ./gemini-ultra-cli-1.0.0-preview.11.tgz.sha256
+Get-FileHash ./gemini-ultra-cli-1.0.0-preview.12.tgz -Algorithm SHA256
+Get-Content ./gemini-ultra-cli-1.0.0-preview.12.tgz.sha256
 ```
 
 macOS 使用
-`shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.11.tgz.sha256`；Linux 使用
-`sha256sum -c gemini-ultra-cli-1.0.0-preview.11.tgz.sha256`。
+`shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.12.tgz.sha256`；Linux 使用
+`sha256sum -c gemini-ultra-cli-1.0.0-preview.12.tgz.sha256`。
 
 ## 自定义逆向工具路径
 
@@ -201,3 +201,10 @@ MiB。
 
 网络 JSON 会先校验实际使用的字段，Gemini 响应的未知扩展元数据继续保留。无效文本、错误结构和损坏的工具参数会给出清晰错误，工具不会执行。旧版 SDK 工具 Schema 的嵌套大写类型会转成 JSON
 Schema 标准小写。
+
+## 回复期间输入命令
+
+模型回复时，可继续输入 `/effort`、`/language`
+等本地斜杠命令。普通命令会排队，待回复结束后按输入顺序逐条执行；支持并发的命令仍可即时处理。相邻普通消息会合并提交，斜杠命令始终保留独立边界。
+
+启动期间输入的命令会等待命令表就绪，本地命令无需等待 MCP 连接。清空队列后，尚未开始的输入不会继续执行；已开始的操作需要单独取消。Shell 命令仍不能在回复期间排队。

@@ -4,14 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { coreEvents, I18nManager } from '@google/gemini-cli-core';
 import { StreamingState } from '../types.js';
+import { isSlashCommand } from '../utils/commandUtils.js';
 
 export interface UseMessageQueueOptions {
   isConfigInitialized: boolean;
   areCommandsReady?: boolean;
   streamingState: StreamingState;
-  submitQuery: (query: string) => void;
+  submitQuery: (query: string) => void | Promise<unknown>;
   isMcpReady: boolean;
   isCompressing?: boolean;
 }
@@ -38,6 +40,15 @@ export function useMessageQueue({
   isCompressing = false,
 }: UseMessageQueueOptions): UseMessageQueueReturn {
   const [messageQueue, setMessageQueue] = useState<string[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const submissionInFlight = useRef(false);
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   // Add a message to the queue
   const addMessage = useCallback((message: string) => {
@@ -73,20 +84,50 @@ export function useMessageQueue({
     if (
       isConfigInitialized &&
       areCommandsReady &&
+      !isSubmitting &&
+      !submissionInFlight.current &&
       streamingState === StreamingState.Idle &&
       !isCompressing &&
-      isMcpReady &&
       messageQueue.length > 0
     ) {
-      // Combine all messages with double newlines for clarity
-      const combinedMessage = messageQueue.join('\n\n');
-      // Clear the queue and submit
-      setMessageQueue([]);
-      submitQuery(combinedMessage);
+      // A command is a separate action, never an argument of a previous
+      // command or part of a prompt. Only adjacent ordinary prompts combine.
+      const isCommand = isSlashCommand(messageQueue[0]);
+      if (!isCommand && !isMcpReady) return;
+      let count = 1;
+      if (!isCommand) {
+        while (
+          count < messageQueue.length &&
+          !isSlashCommand(messageQueue[count])
+        )
+          count++;
+      }
+      const query = messageQueue.slice(0, count).join('\n\n');
+      submissionInFlight.current = true;
+      setIsSubmitting(true);
+      setMessageQueue((pending) => pending.slice(count));
+      void Promise.resolve()
+        .then(() => (mounted.current ? submitQuery(query) : undefined))
+        .catch((error: unknown) => {
+          if (mounted.current)
+            coreEvents.emitFeedback(
+              'error',
+              I18nManager.getInstance().t(
+                '排队输入执行失败，请检查错误后重试。其余输入将继续按顺序处理。',
+                'A queued input failed. Check the error before retrying; remaining inputs will continue in order.',
+              ),
+              error,
+            );
+        })
+        .finally(() => {
+          submissionInFlight.current = false;
+          if (mounted.current) setIsSubmitting(false);
+        });
     }
   }, [
     isConfigInitialized,
     areCommandsReady,
+    isSubmitting,
     streamingState,
     isMcpReady,
     messageQueue,

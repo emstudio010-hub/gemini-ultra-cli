@@ -4334,4 +4334,28 @@ describe('AppContainer State Management', () => {
       unmount();
     });
   });
+
+  it('queues non-concurrent slash commands while the model is responding', async () => {
+    const actual = await vi.importActual<
+      typeof import('./hooks/useMessageQueue.js')
+    >('./hooks/useMessageQueue.js');
+    mockedUseMessageQueue.mockImplementation(actual.useMessageQueue);
+    const submit = vi.fn();
+    mockedUseGeminiStream.mockReturnValue({
+      ...DEFAULT_GEMINI_STREAM_MOCK,
+      streamingState: StreamingState.Responding,
+      submitQuery: submit,
+    });
+    const { unmount } = await act(async () => renderAppContainer());
+    await act(async () => {
+      await capturedUIActions.handleFinalSubmit('/effort high');
+      await capturedUIActions.handleFinalSubmit('/language en');
+    });
+    expect(submit).not.toHaveBeenCalled();
+    expect(capturedUIState.messageQueue).toEqual([
+      '/effort high',
+      '/language en',
+    ]);
+    unmount();
+  });
 });

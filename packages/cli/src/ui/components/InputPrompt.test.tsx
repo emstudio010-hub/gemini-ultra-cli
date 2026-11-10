@@ -1219,7 +1219,7 @@ describe('InputPrompt', () => {
     unmount();
   });
 
-  it('shows an error when attempting to queue a slash command', async () => {
+  it('queues a slash command with the queue shortcut', async () => {
     props.buffer.setText('/clear');
     props.streamingState = StreamingState.Responding;
 
@@ -1235,10 +1235,9 @@ describe('InputPrompt', () => {
     });
 
     await waitFor(() => {
-      expect(props.setQueueErrorMessage).toHaveBeenCalledWith(
-        'Slash commands cannot be queued',
-      );
-      expect(props.onQueueMessage).not.toHaveBeenCalled();
+      expect(props.setQueueErrorMessage).not.toHaveBeenCalled();
+      expect(props.onQueueMessage).toHaveBeenCalledWith('/clear');
+      expect(props.buffer.text).toBe('');
     });
     unmount();
   });
@@ -4139,11 +4138,11 @@ describe('InputPrompt', () => {
 
     it.each([
       {
-        name: 'should prevent slash commands',
+        name: 'should submit slash commands for sequential queuing',
         bufferText: '/help',
         shellMode: false,
-        shouldSubmit: false,
-        errorMessage: 'Slash commands cannot be queued',
+        shouldSubmit: true,
+        errorMessage: null,
       },
       {
         name: 'should allow concurrent-safe slash commands',

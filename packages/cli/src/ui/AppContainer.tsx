@@ -1671,8 +1671,8 @@ Logging in with Google... Restarting Gemini CLI to continue.
       const isMcpOrConfigReady = isConfigInitialized && isMcpReady;
       if (
         (!isSlash || areCommandsReady) &&
-        ((isSlash && isConfigInitialized) ||
-          (!isCompressing && isIdle && isMcpOrConfigReady))
+        ((isSlash && isConfigInitialized && isIdle && !isAgentRunning) ||
+          (!isSlash && !isCompressing && isIdle && isMcpOrConfigReady))
       ) {
         if (!isSlash) {
           const permissions = await checkPermissions(submittedValue, config);

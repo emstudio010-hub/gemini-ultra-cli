@@ -10,6 +10,7 @@ import { render } from '../../test-utils/render.js';
 import { waitFor } from '../../test-utils/async.js';
 import { useMessageQueue } from './useMessageQueue.js';
 import { StreamingState } from '../types.js';
+import { coreEvents } from '@google/gemini-cli-core';
 
 describe('useMessageQueue', () => {
   let mockSubmitQuery: ReturnType<typeof vi.fn>;
@@ -28,7 +29,7 @@ describe('useMessageQueue', () => {
     isConfigInitialized: boolean;
     areCommandsReady?: boolean;
     streamingState: StreamingState;
-    submitQuery: (query: string) => void;
+    submitQuery: (query: string) => void | Promise<unknown>;
     isMcpReady: boolean;
     isCompressing?: boolean;
   }) => {
@@ -76,6 +77,119 @@ describe('useMessageQueue', () => {
     await waitFor(() =>
       expect(mockSubmitQuery).toHaveBeenCalledExactlyOnceWith('/effort low'),
     );
+  });
+
+  it('preserves queued command boundaries, awaits each command and only waits for MCP on prompts', async () => {
+    let releaseFirst!: () => void;
+    mockSubmitQuery.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseFirst = resolve;
+        }),
+    );
+    const { result, rerender } = await renderMessageQueueHook({
+      isConfigInitialized: true,
+      areCommandsReady: false,
+      streamingState: StreamingState.Idle,
+      submitQuery: mockSubmitQuery,
+      isMcpReady: false,
+    });
+    act(() => {
+      for (const message of [
+        '/effort high',
+        '/language 中文',
+        'Explain the project',
+        'Use concise prose',
+        '/effort low',
+      ])
+        result.current.addMessage(message);
+    });
+    rerender({ areCommandsReady: true });
+    await waitFor(() =>
+      expect(mockSubmitQuery).toHaveBeenCalledExactlyOnceWith('/effort high'),
+    );
+    expect(result.current.messageQueue).toEqual([
+      '/language 中文',
+      'Explain the project',
+      'Use concise prose',
+      '/effort low',
+    ]);
+    await act(async () => releaseFirst());
+    await waitFor(() =>
+      expect(mockSubmitQuery).toHaveBeenNthCalledWith(2, '/language 中文'),
+    );
+    expect(mockSubmitQuery).toHaveBeenCalledTimes(2);
+    rerender({ areCommandsReady: true, isMcpReady: true });
+    await waitFor(() => expect(mockSubmitQuery).toHaveBeenCalledTimes(4));
+    expect(mockSubmitQuery.mock.calls.map(([message]) => message)).toEqual([
+      '/effort high',
+      '/language 中文',
+      'Explain the project\n\nUse concise prose',
+      '/effort low',
+    ]);
+    expect(result.current.messageQueue).toEqual([]);
+  });
+
+  it('does not run cleared commands after an in-flight queued command settles', async () => {
+    let releaseFirst!: () => void;
+    mockSubmitQuery.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseFirst = resolve;
+        }),
+    );
+    const { result, rerender } = await renderMessageQueueHook({
+      isConfigInitialized: true,
+      areCommandsReady: false,
+      streamingState: StreamingState.Idle,
+      submitQuery: mockSubmitQuery,
+      isMcpReady: true,
+    });
+    act(() => {
+      result.current.addMessage('/effort high');
+      result.current.addMessage('/language 中文');
+    });
+    rerender({ areCommandsReady: true });
+    await waitFor(() => expect(mockSubmitQuery).toHaveBeenCalledTimes(1));
+    act(() => {
+      result.current.clearQueue();
+      result.current.addMessage('/effort low');
+    });
+    await act(async () => releaseFirst());
+    await waitFor(() => expect(mockSubmitQuery).toHaveBeenCalledTimes(2));
+    expect(mockSubmitQuery.mock.calls.map(([message]) => message)).toEqual([
+      '/effort high',
+      '/effort low',
+    ]);
+  });
+
+  it('reports a rejected queued command and continues with the next command', async () => {
+    const feedback = vi.spyOn(coreEvents, 'emitFeedback');
+    mockSubmitQuery.mockRejectedValueOnce(new Error('fixture command failure'));
+    const { result, rerender } = await renderMessageQueueHook({
+      isConfigInitialized: true,
+      areCommandsReady: false,
+      streamingState: StreamingState.Idle,
+      submitQuery: mockSubmitQuery,
+      isMcpReady: true,
+    });
+    act(() => {
+      result.current.addMessage('/effort high');
+      result.current.addMessage('/effort low');
+    });
+    rerender({ areCommandsReady: true });
+    await waitFor(() => expect(mockSubmitQuery).toHaveBeenCalledTimes(2));
+    expect(mockSubmitQuery.mock.calls.map(([message]) => message)).toEqual([
+      '/effort high',
+      '/effort low',
+    ]);
+    expect(feedback).toHaveBeenCalledWith(
+      'error',
+      expect.any(String),
+      expect.objectContaining({ message: 'fixture command failure' }),
+    );
+    expect(result.current.messageQueue).toEqual([]);
+    feedback.mockRestore();
   });
 
   it('should add messages to queue', async () => {

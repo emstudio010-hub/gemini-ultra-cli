@@ -464,10 +464,11 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
       const isSlash = isSlashCommand(trimmedMessage);
 
       const isShell = shellModeActive;
-      if (
-        (isSlash || isShell) &&
-        streamingState === StreamingState.Responding
-      ) {
+      if (streamingState === StreamingState.Responding) {
+        if (isShell) {
+          setQueueErrorMessage('Shell commands cannot be queued');
+          return;
+        }
         if (isSlash) {
           const { commandToExecute } = parseSlashCommand(
             trimmedMessage,
@@ -478,11 +479,6 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
             return;
           }
         }
-
-        setQueueErrorMessage(
-          `${isShell ? 'Shell' : 'Slash'} commands cannot be queued`,
-        );
-        return;
       }
       inputHistory.handleSubmit(trimmedMessage);
     },
@@ -764,13 +760,8 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
         !hasTabCompletionInteraction &&
         buffer.text.trim().length > 0
       ) {
-        const trimmedMessage = buffer.text.trim();
-        const isSlash = isSlashCommand(trimmedMessage);
-
-        if (isSlash || shellModeActive) {
-          setQueueErrorMessage(
-            `${shellModeActive ? 'Shell' : 'Slash'} commands cannot be queued`,
-          );
+        if (shellModeActive) {
+          setQueueErrorMessage('Shell commands cannot be queued');
         } else if (onQueueMessage) {
           onQueueMessage(buffer.text);
           buffer.setText('');
