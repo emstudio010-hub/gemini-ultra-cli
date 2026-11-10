@@ -103,6 +103,7 @@ vi.mock('./services/McpPromptLoader.js');
 vi.mock('./services/BuiltinCommandLoader.js');
 
 describe('runNonInteractive', () => {
+  let originalExitCode: typeof process.exitCode;
   let mockConfig: Config;
   let mockSettings: LoadedSettings;
   let mockToolRegistry: ToolRegistry;
@@ -137,6 +138,7 @@ describe('runNonInteractive', () => {
   };
 
   beforeEach(async () => {
+    originalExitCode = process.exitCode;
     mockSchedulerSchedule.mockReset();
 
     mockCommandServiceCreate.mockResolvedValue({
@@ -230,6 +232,7 @@ describe('runNonInteractive', () => {
   });
 
   afterEach(() => {
+    process.exitCode = originalExitCode;
     vi.restoreAllMocks();
   });
 
@@ -2817,6 +2820,7 @@ describe('runNonInteractive', () => {
         `[ERROR] ${TRUE_EMPTY_RESPONSE_MESSAGE}\n`,
       );
       expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledTimes(1);
+      expect(process.exitCode).toBe(1);
     });
 
     it('should handle InvalidStream event gracefully in STREAM_JSON mode', async () => {
@@ -2851,6 +2855,7 @@ describe('runNonInteractive', () => {
       expect(output).toContain('"severity":"error"');
       expect(output).toContain(TRUE_EMPTY_RESPONSE_MESSAGE);
       expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledTimes(1);
+      expect(process.exitCode).toBe(1);
     });
 
     it('should handle InvalidStream event gracefully in JSON mode', async () => {
@@ -2885,6 +2890,7 @@ describe('runNonInteractive', () => {
       expect(output).toContain('"type": "INVALID_STREAM"');
       expect(output).toContain(TRUE_EMPTY_RESPONSE_MESSAGE);
       expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledTimes(1);
+      expect(process.exitCode).toBe(1);
     });
 
     it('should handle non-NO_RESPONSE_TEXT InvalidStream event gracefully and use message from eventValue', async () => {
@@ -2912,6 +2918,7 @@ describe('runNonInteractive', () => {
         '[ERROR] Custom malformed function call message\n',
       );
       expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledTimes(1);
+      expect(process.exitCode).toBe(1);
     });
   });
 

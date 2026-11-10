@@ -287,3 +287,10 @@
 - E-064：[preview.17运行42756282770](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/42756282770)三平台completed/success，功能提交1b52d4217e1d2fb763d4645f69b77921fea92e7e。三个包版本/安装报告/SHA-256、六rg hash/0755核对通过。
 - E-065：本机双命令preview.17、入口与Windows CI包一致。实际fetch等待响应头直到deadline的场景得到5次loopback请求、9,818ms、退出0，发起总结且保留TIMEOUT/FAILED与完整部分发现。最初脚本将JSON包装的部分结果误按裸多行文本匹配，原false结果保留；单独解码同一捕获的内置response结构后所有语义断言通过，没有重跑CLI或模型。不是新一轮真实模型验证。
 - Windows包SHA-256 `55b704db9c4a59a07fe1ec3cbd81ca8aacc1a1dde6216168511240609c9b598e`；Linux `3b29d231773c154b4a12afc12c9143c0f73225927dd4ad2584cbae23b367eaa0`；macOS `97b464dd6cacbe03905ade045672d4d7e084753ba02aa0e9d5642324877bc986`。本机已有缓存offline安装26秒，不代表无缓存新电脑离线安装。整体目标active，完整上线仍未验收。
+
+## 2026-11-10 无正文错误与退出状态
+
+- E-066/F-022：两个非交互路径的InvalidStream原先只输出错误；主入口又无条件将exitCode重置为0。现错误分支设置非零退出状态，主入口仅在未设置状态时默认成功，保留现有错误输出及异步清理。八个既有TEXT/JSON/stream-json与自定义错误用例新增退出状态断言后，修前8失败、修后8通过；五文件严格ESLint、格式和核心/CLI TypeScript通过。
+- E-067：开发bundle七个实际CLI/HTTP场景完成定向核对：三格式持续thinking-only、ADK持续失败、默认监督入口失败均退出1；普通与ADK恢复场景均在既有重试/nudge后真实write_file落盘并退出0。请求次数分别2与3（general.maxAttempts=2），证明本地有界重试，不是实际供应商长任务验收。
+- 首次七场景里5通过，两个在连接本地端口前ETIMEDOUT、0请求；仅这两项改用固定空闲端口45679复核通过，原false记录保留，不宣称修复本机网络根因。preview.17基线另有一次重试前TypeError及Windows CRLF被脚本误按LF匹配，原记录亦保留，未用其推断产品没有重试。
+- preview.18准备三平台分发；本阶段没有重跑E-063整套付费任务。真实完整交付与复杂逆向仍未完成，整体目标active。

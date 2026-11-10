@@ -588,6 +588,7 @@ export async function runNonInteractive({
           }
           case 'error': {
             if (event._meta?.['code'] === 'INVALID_STREAM') {
+              process.exitCode ||= 1;
               const errorTypeVal = event._meta?.['errorType'];
               const errorType =
                 typeof errorTypeVal === 'string' ? errorTypeVal : undefined;

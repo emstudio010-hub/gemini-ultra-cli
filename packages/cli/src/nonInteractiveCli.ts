@@ -490,6 +490,7 @@ export async function runNonInteractive(
             }
             warnings.push(blockMessage);
           } else if (event.type === GeminiEventType.InvalidStream) {
+            process.exitCode ||= 1;
             const eventValue = event.value;
             if (eventValue?.type === 'NO_RESPONSE_TEXT') {
               invalidStreamError = TRUE_EMPTY_RESPONSE_MESSAGE;
