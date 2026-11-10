@@ -14,9 +14,9 @@
 | P1     | 多 Agent 有界排队、取消与结果可见           | 本地及当前模型通过   | 队列/取消fixture通过；真实双代理、6次工具、7次请求0错误，E-016；长期稳定性仍待观察                                 |
 | P1     | 内置红队工作流                              | 本地分析闭环通过     | 临时授权下redteam-analyst真实分析生成样本并归档，E-016；复杂逆向与外部目标未验收                                   |
 | P2     | 演练台 Morphicons 交互图标与强度动效        | 本地完成             | 使用 Morphicons 2.0.2；浏览器确认六档、图标、移动布局、减少动态效果与隐藏暂停                                      |
-| P0     | 安装到 CLI 本身并生成可分发安装包           | 本地完成             | 当前preview.12，GitHub Windows工件与本机入口匹配；E-042；已安装回复期间三条命令按序执行并正常退出                  |
+| P0     | 安装到 CLI 本身并生成可分发安装包           | 本地完成             | 当前preview.13，GitHub Windows工件与本机入口匹配；E-046；已安装三Agent执行限制与部分结果传递通过                   |
 | P1     | 其他电脑可以开展本地逆向                    | 三平台原生基础链通过 | preview.8的Windows/Linux x64、macOS arm64真实rabin2读取/归档/查询通过E-022/027/029；复杂反编译与其他工具仍待补     |
-| P1     | GitHub 三平台分发验收                       | 已通过               | 最新preview.12 run42732399585三平台success，独立构建/打包/安装，工件校验通过；E-041                                |
+| P1     | GitHub 三平台分发验收                       | 已通过               | 最新preview.13 run42734023367三平台success，独立构建/打包/安装，工件校验通过；E-045                                |
 | P1     | 真实供应商与长会话上线验收                  | 部分完成             | 当前Ess DeepSeek Flash真实工具与双代理闭环通过；其他模型、协议和长会话仍待验收                                     |
 
 ## 证据记录
@@ -216,3 +216,12 @@
 - E-044：已安装preview.12在隔离配置下运行三个真实本地子Agent、七次loopback模型请求：正常reviewer成功；受轮数限制的researcher误记GOAL；coder最后一轮确实写入了临时文件。退出0但验证不通过，1,733ms，原记录installed-preview12-agent-limits-isolated-before-result.json保留，临时文件已清理。这不是实际供应商或复杂逆向任务验收。
 - 首次默认监督入口观察在发出HTTP请求前连接loopback超时（0请求），未用于证明当前缺陷；改用无重启的实际CLI进程后取得上述基线。该监督入口现象单独保留待查，不能写成已修复。
 - 版本推进preview.13，等待三平台工件与安装后同场景结果。整体目标保持active。
+
+- E-045：[preview.13运行42734023367](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/42734023367)三平台completed/success，功能提交3dc72db73b748dc897c2ccbd7c3c82c6f8e6d2db；三份工件的版本、平台和SHA-256下载核对通过。
+- E-046：本机两个命令已安装Windows CI
+  preview.13，入口与工件一致；同一三Agent场景2,189ms通过，正常任务GOAL、限额结果MAX_TURNS/FAILED且保留部分发现，超限文件未创建，7次loopback请求、退出0。默认监督入口单独复核1,760ms也通过；此前0请求超时原因未知，未将成功复核表述为网络根因修复。
+- Windows包SHA-256
+  `d2878db3258e047b4685b6a81706ceafa4aff2881294cee3a903526fdc72de5c`；Linux
+  `6c7ee252d3b9b72500d820c20ea030d9827f2bde8afa06a4c30f89ed74fda7fa`；macOS
+  `8d994d5eaadc51503f04a6231302b989a84d9280bcf9eac87af0afcacbb60354`。
+- 下一阶段：核对安装包搜索性能。当前安装CLI提示Ripgrep不可用，源码发布脚本未见vendor/ripgrep拷贝；需确认实际工件、各平台二进制来源和解析路径，再修复，不扩大系统PATH信任范围。复杂真实逆向、多Agent长任务及长会话目标仍active。
