@@ -70,7 +70,8 @@ function writeJson(file: string, value: unknown): void {
 }
 export function readSwarm(root: string, id: string): Swarm {
   const file = path.join(directory(root, id), 'members.json');
-  if (fs.statSync(file).size > 256 * 1024)
+  // Twelve schema-valid UTF-8 member briefs and results can exceed 256 KiB.
+  if (fs.statSync(file).size > 2 * 1024 * 1024)
     throw new Error('Swarm state is too large.');
   return swarmSchema.parse(JSON.parse(fs.readFileSync(file, 'utf8')));
 }

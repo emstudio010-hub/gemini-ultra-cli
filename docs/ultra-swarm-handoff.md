@@ -25,3 +25,11 @@ Evidence→Finding→Path：E-120原生成员/板/唤醒状态用例→区别于
 
 参考：https://antigravity.google/docs/swarm/
 。持续目标active，仅同步codex分支，不合并master或正式发布Release。
+
+## E-121 中文长报告恢复
+
+合法中文成员结果（12成员，361,483字节）和阶段报告（80条，2,405,881字节）在修前实际存储读取器均因字节阈值被拒绝；字段字符数仍在各自Schema范围内。将Swarm状态读取上限从256KiB调整为2MiB、工作流记录从2MiB调整为8MiB，保留结构校验与总量边界。相同离线记录重新读取均成功，未调用模型。初次本地辅助脚本的Windows
+ESM导入路径缺file URL，修正辅助脚本后取得修前/修后证据；不是产品导入错误。
+
+原Swarm候选fdec206bc0da252ed93be78f69366e2544bb362d/run42878996969三平台completed/success，含新native
+Swarm检查；尚未安装该候选。最终将使用包含字节上限修复的新提交构建工件，避免源码与安装不一致。原记录留存，不重启原运行。

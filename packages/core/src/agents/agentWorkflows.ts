@@ -87,7 +87,8 @@ export function readAgentWorkflow(
   id: string,
 ): AgentWorkflow {
   const file = workflowPath(projectTempDir, id);
-  if (fs.statSync(file).size > 2 * 1024 * 1024)
+  // The bounded 100 reports may contain multibyte text (up to ~7 MiB total).
+  if (fs.statSync(file).size > 8 * 1024 * 1024)
     throw new Error('Workflow record is too large.');
   return workflowSchema.parse(JSON.parse(fs.readFileSync(file, 'utf8')));
 }
