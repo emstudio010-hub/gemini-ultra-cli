@@ -19,6 +19,8 @@ const metadata = JSON.parse(
   ),
 );
 const budgetMode = process.argv[4] === 'budget';
+const modelMode = ['models', 'models-session'].includes(process.argv[4]);
+const sessionMode = process.argv[4] === 'models-session';
 const recordRecoveryMode = process.argv[4] === 'record-recovery';
 const recoveryMode = process.argv[4] === 'recovery' || recordRecoveryMode;
 let recoveryReady = false;
@@ -38,6 +40,9 @@ fs.writeFileSync(
     security: { auth: { selectedType: 'gateway' } },
     privacy: { usageStatisticsEnabled: false },
     general: { enableAutoUpdate: false, enableAutoUpdateNotification: false },
+    ...(sessionMode
+      ? { experimental: { adk: { agentSessionSubagentEnabled: true } } }
+      : {}),
   }),
 );
 const id = randomUUID();
@@ -49,7 +54,7 @@ let timer;
 let timedOut = false;
 const server = createServer(async (req, res) => {
   try {
-    assert.equal(req.url, '/chat/completions');
+    if (!modelMode) assert.equal(req.url, '/chat/completions');
     const chunks = [];
     for await (const chunk of req) chunks.push(chunk);
     const payload = JSON.parse(Buffer.concat(chunks).toString());
@@ -70,7 +75,28 @@ const server = createServer(async (req, res) => {
     const results = payload.messages.filter(
       (message) => message.role === 'tool',
     );
-    requests.push({ role, tools, resultCount: results.length });
+    requests.push({
+      role,
+      tools,
+      resultCount: results.length,
+      model: payload.model,
+      path: req.url,
+    });
+    if (modelMode) {
+      const route =
+        role === 'main'
+          ? ''
+          : role === 'researcher'
+            ? 'read'
+            : role === 'coder'
+              ? 'build'
+              : 'review';
+      assert.equal(
+        req.url,
+        route ? `/route-${route}/chat/completions` : '/chat/completions',
+      );
+      assert.equal(payload.model, route ? `${route}-model` : 'fixture-model');
+    }
     if (role !== 'main') {
       assert.ok(!tools.includes('run_agent_workflow'));
       assert.ok(!tools.includes('draft_agent_workflow'));
@@ -142,6 +168,15 @@ const server = createServer(async (req, res) => {
             updatedAt: new Date().toISOString(),
             stage: '',
             reports: [],
+            ...(modelMode
+              ? {
+                  roleModels: {
+                    researcher: 'fixture-read:read-model',
+                    coder: 'fixture-build:build-model',
+                    'workflow-auditor': 'fixture-review:review-model',
+                  },
+                }
+              : {}),
           }),
         );
         if (budgetMode) {
@@ -297,6 +332,19 @@ try {
           defaultModel: 'fixture-model',
           updatedAt: new Date().toISOString(),
         },
+        ...(modelMode
+          ? ['read', 'build', 'review'].map((route) => ({
+              id: `fixture-${route}`,
+              name: `Fixture ${route}`,
+              baseUrl: `http://127.0.0.1:${server.address().port}/route-${route}`,
+              apiKey: 'fixture-only',
+              protocol: 'openai-chat',
+              models: [`${route}-model`],
+              defaultModel: `${route}-model`,
+              contextWindow: 64000,
+              updatedAt: new Date().toISOString(),
+            }))
+          : []),
       ],
     }),
   );
@@ -540,15 +588,38 @@ try {
             budget?.state === 'closed' &&
             budget.requests === 10 &&
             budget.implementationRounds[0] === 1,
+          ...(modelMode
+            ? {
+                isolatedProviderModels: [
+                  'read-model',
+                  'build-model',
+                  'review-model',
+                ].every((model) =>
+                  requests.some((request) => request.model === model),
+                ),
+                stageRoutesPersisted: record?.reports.every(
+                  (report) =>
+                    report.modelsUsed.length === 1 &&
+                    report.modelsUsed[0] === record.roleModels[report.agent],
+                ),
+                globalSelectionUnchanged:
+                  JSON.parse(fs.readFileSync(providers, 'utf8')).activeModel ===
+                  'fixture-model',
+              }
+            : {}),
         };
   const report = {
-    mode: recordRecoveryMode
-      ? 'record-recovery'
-      : recoveryMode
-        ? 'recovery'
-        : budgetMode
-          ? 'budget'
-          : 'delivery',
+    mode: modelMode
+      ? sessionMode
+        ? 'models-session'
+        : 'models'
+      : recordRecoveryMode
+        ? 'record-recovery'
+        : recoveryMode
+          ? 'recovery'
+          : budgetMode
+            ? 'budget'
+            : 'delivery',
     passed: Object.values(checks).every(Boolean),
     version: metadata.version,
     platform: process.platform,
@@ -565,13 +636,15 @@ try {
     actualDeliveryHex: fs.existsSync(artifact)
       ? fs.readFileSync(artifact).toString('hex')
       : null,
-    scope: recordRecoveryMode
-      ? 'Generated corrupt original workflow record and binding with an intact independent ledger. Actual local cancel by ID preserves both bad files and known fixture-seeded usage (2 dispatches, 1 failed stage, 1 implementation). Old resume rejected without model calls; ordinary conversation restored. Two loopback requests total, not a real-provider delivery or billing counter.'
-      : recoveryMode
-        ? 'Isolated generated corrupt ledger and binding: initial CLI failure, actual headless /boost cancel without a model call, old resume rejected without a model call, then ordinary conversation restored. Both corrupt files preserved byte for byte. Two loopback requests total; no real provider, user state or completed deliverable.'
-        : budgetMode
-          ? 'Actual native workflow and child executors stop at two cumulative model dispatches; one initial coordinator request seeds the isolated state before accounting starts. Partial evidence remains blocked, no writer starts, CLI exits 1 without observer termination. Loopback fixture, not a paid provider task or delivery success.'
-          : 'Actual installed CLI and native workflow tool, real child executors, isolated HTTP model fixture. Two read-only researchers, one writer, milestone auditor and final auditor; actual file read/write and persisted stages. Not live-provider autonomy, UI keyboard interaction, deep reverse-engineering or production acceptance.',
+    scope: modelMode
+      ? `Actual installed native workflow with ${sessionMode ? 'LocalSessionInvocation' : 'LocalSubagentInvocation'}, distinct local HTTP provider paths/model IDs for each role, actual file writes and independent review, persisted dispatched routes and shared budget. Loopback model responses only; no real-provider autonomy or paid calls.`
+      : recordRecoveryMode
+        ? 'Generated corrupt original workflow record and binding with an intact independent ledger. Actual local cancel by ID preserves both bad files and known fixture-seeded usage (2 dispatches, 1 failed stage, 1 implementation). Old resume rejected without model calls; ordinary conversation restored. Two loopback requests total, not a real-provider delivery or billing counter.'
+        : recoveryMode
+          ? 'Isolated generated corrupt ledger and binding: initial CLI failure, actual headless /boost cancel without a model call, old resume rejected without a model call, then ordinary conversation restored. Both corrupt files preserved byte for byte. Two loopback requests total; no real provider, user state or completed deliverable.'
+          : budgetMode
+            ? 'Actual native workflow and child executors stop at two cumulative model dispatches; one initial coordinator request seeds the isolated state before accounting starts. Partial evidence remains blocked, no writer starts, CLI exits 1 without observer termination. Loopback fixture, not a paid provider task or delivery success.'
+            : 'Actual installed CLI and native workflow tool, real child executors, isolated HTTP model fixture. Two read-only researchers, one writer, milestone auditor and final auditor; actual file read/write and persisted stages. Not live-provider autonomy, UI keyboard interaction, deep reverse-engineering or production acceptance.',
   };
   fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));

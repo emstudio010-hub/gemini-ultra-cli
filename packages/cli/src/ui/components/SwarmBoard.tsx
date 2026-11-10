@@ -121,7 +121,10 @@ export function SwarmBoard({
           )}
           <Text color={theme.text.secondary}>
             {view.swarm?.members
-              .map((member) => `@${member.name} [${member.state}]`)
+              .map(
+                (member) =>
+                  `@${member.name} [${member.state}] ${member.model ?? view.swarm?.roleModels[member.agent] ?? 'inherit'}`,
+              )
               .join(' · ') ||
               (locale === 'zh'
                 ? '等待协调者添加成员'

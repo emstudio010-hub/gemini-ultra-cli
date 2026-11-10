@@ -10,6 +10,12 @@ import { lock, checkSync } from 'proper-lockfile';
 import { z } from 'zod';
 import { latestSwarm } from './swarm.js';
 import {
+  agentRoleModelsSchema,
+  normalizeAgentModel,
+  workflowRoleSchema,
+  withAgentModel,
+} from './agentModelRouting.js';
+import {
   workflowBudget,
   workflowBudgetSummary,
   activateWorkflowBudget,
@@ -54,6 +60,7 @@ const workflowSchema = workflowPlanSchema.extend({
   budgetRecoveryPath: z.string().optional(),
   recordUnavailable: z.boolean().optional(),
   recordRecoveryPath: z.string().optional(),
+  roleModels: agentRoleModelsSchema.default({}),
   updatedAt: z.string(),
   stage: z.string().default(''),
   reports: z
@@ -63,6 +70,7 @@ const workflowSchema = workflowPlanSchema.extend({
         stage: z.string(),
         completed: z.boolean(),
         text: z.string().max(16000),
+        modelsUsed: z.array(z.string().max(512)).max(16).optional(),
       }),
     )
     .max(100)
@@ -109,6 +117,7 @@ export function agentWorkflowSummary(
     milestones: record.milestones,
     recordPath: workflowPath(projectTempDir, record.id),
     reportCount: record.reports.length,
+    roleModels: record.roleModels,
     recentReports: record.reports.slice(-4).map((report) => ({
       ...report,
       text: report.text.slice(0, 4000),
@@ -230,6 +239,29 @@ export function createAgentWorkflow(
 }
 
 const active = new Map<string, { id: string; controller: AbortController }>();
+/** Local user configuration only; execution state and cumulative counters are retained. */
+export function setWorkflowRoleModel(
+  root: string,
+  id: string,
+  target: string,
+  modelSpec: string,
+): void {
+  if (isAgentWorkflowRunning(root))
+    throw new Error(
+      'Wait for the running workflow to settle before changing member models.',
+    );
+  const record = readAgentWorkflow(root, id);
+  assertWorkflowBudgetOwnership(root, record);
+  if (record.recordUnavailable || record.budgetUnavailable)
+    throw new Error(
+      'Unavailable task records cannot change member models. Create a scoped successor.',
+    );
+  if (record.phase === 'completed')
+    throw new Error('A completed workflow cannot change member models.');
+  const role = workflowRoleSchema.parse(target);
+  record.roleModels[role] = normalizeAgentModel(modelSpec);
+  saveAgentWorkflow(root, record);
+}
 export function isAgentWorkflowRunning(projectTempDir: string): boolean {
   const directory = workflowDir(projectTempDir);
   return (
@@ -394,11 +426,19 @@ export async function runAgentWorkflow(
           persist();
           onProgress?.(`${current.mode}: ${title}`);
           let result: WorkflowAgentResult;
+          let modelsUsed: string[] = [];
           try {
-            result = await runAgent(
-              agent,
-              `${context()}\n\nAssignment: ${instruction}`,
-              combined,
+            result = await withAgentModel(
+              current.roleModels[agent],
+              () =>
+                runAgent(
+                  agent,
+                  `${context()}\n\nAssignment: ${instruction}`,
+                  combined,
+                ),
+              (models) => {
+                modelsUsed = models;
+              },
             );
           } catch (error) {
             result = {
@@ -419,6 +459,7 @@ export async function runAgentWorkflow(
             agent,
             stage: title,
             completed: result.completed,
+            modelsUsed,
             text:
               result.text.length > 16000
                 ? `${result.text.slice(0, 15950)}\n[Report truncated; remaining text not stored.]`

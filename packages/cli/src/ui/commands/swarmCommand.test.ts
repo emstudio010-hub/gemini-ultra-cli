@@ -12,6 +12,8 @@ import {
   readSwarm,
   consumeSwarmRequest,
   type Config,
+  ApprovalMode,
+  latestSwarm,
 } from '@google/gemini-cli-core';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { swarmCommand } from './swarmCommand.js';
@@ -70,4 +72,55 @@ it('cancels by an explicit ID before reading a damaged latest binding, without a
     accountingUnknown: true,
   });
   expect(cancel.autoExecute).toBe(false);
+});
+
+it('saves a role model locally without submitting a prompt or resetting usage', async () => {
+  const swarm = createSwarm(root, 'Choose member models');
+  consumeSwarmRequest(root);
+  const config = {
+    storage: { getProjectTempDir: () => root },
+  } as unknown as Config;
+  const context = createMockCommandContext({
+    services: { agentContext: { config } },
+  });
+  const model = swarmCommand.subCommands!.find(
+    (command) => command.name === 'model',
+  )!;
+  expect(
+    await model.action!(context, 'researcher native:gemini-fixture'),
+  ).toBeUndefined();
+  expect(readSwarm(root, swarm.id)).toMatchObject({
+    roleModels: { researcher: 'native:gemini-fixture' },
+    budget: { requests: 1 },
+  });
+  expect(await model.action!(context, 'researcher inherit')).toBeUndefined();
+  expect(readSwarm(root, swarm.id).roleModels.researcher).toBeUndefined();
+  expect(model.autoExecute).toBe(false);
+});
+
+it('prepares a task and a future named model before any member or model call starts', async () => {
+  const config = {
+    storage: { getProjectTempDir: () => root },
+    getApprovalMode: () => ApprovalMode.DEFAULT,
+  } as unknown as Config;
+  const context = createMockCommandContext({
+    services: { agentContext: { config } },
+  });
+  const prepare = swarmCommand.subCommands!.find(
+    (command) => command.name === 'prepare',
+  )!;
+  expect(
+    await prepare.action!(context, 'Prepare a multi-model task'),
+  ).toBeUndefined();
+  const model = swarmCommand.subCommands!.find(
+    (command) => command.name === 'model',
+  )!;
+  expect(
+    await model.action!(context, '@author native:gemini-fixture'),
+  ).toBeUndefined();
+  expect(latestSwarm(root)).toMatchObject({
+    memberModels: { author: 'native:gemini-fixture' },
+    members: [],
+    budget: { requests: 0, turns: 0 },
+  });
 });

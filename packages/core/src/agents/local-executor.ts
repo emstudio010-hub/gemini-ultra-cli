@@ -81,6 +81,7 @@ import { parseThought } from '../utils/thoughtUtils.js';
 import { type z } from 'zod';
 import { debugLogger } from '../utils/debugLogger.js';
 import { getModelConfigAlias } from './registry.js';
+import { agentExecutionModel } from './agentModelRouting.js';
 import { getVersion } from '../utils/version.js';
 import { getToolCallContext } from '../utils/toolCallContext.js';
 import { scheduleAgentTools } from './agent-scheduler.js';
@@ -939,7 +940,9 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
     prompt_id: string,
     abortSignal?: AbortSignal,
   ): Promise<void> {
-    const model = this.definition.modelConfig.model ?? DEFAULT_GEMINI_MODEL;
+    const model = agentExecutionModel(
+      this.definition.modelConfig.model ?? DEFAULT_GEMINI_MODEL,
+    );
     const threshold =
       (await this.context.config.getCompressionThreshold()) ??
       DEFAULT_COMPRESSION_TOKEN_THRESHOLD;
@@ -1035,7 +1038,7 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
         model: modelConfigAlias,
         overrideScope: this.definition.name,
       });
-    const requestedModel = resolvedConfig.model;
+    const requestedModel = agentExecutionModel(resolvedConfig.model);
 
     let modelToUse: string | undefined;
     if (isAutoModel(requestedModel)) {

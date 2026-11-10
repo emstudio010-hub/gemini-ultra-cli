@@ -5,6 +5,7 @@
  */
 
 import type { Config } from '../config/config.js';
+import { currentAgentModel } from '../agents/agentModelRouting.js';
 import { createSessionId } from '../utils/session.js';
 import {
   openBrowserSecurely,
@@ -29,6 +30,9 @@ export async function handleFallback(
   authType?: string,
   error?: unknown,
 ): Promise<string | boolean | null> {
+  // A member's explicit route must not install a session-wide model override
+  // or change the parent/peer selection when its own provider is unavailable.
+  if (currentAgentModel()) return null;
   const failureKind = classifyFailureKind(error);
 
   const chain = resolvePolicyChain(config);

@@ -604,3 +604,10 @@
 - E-145：preview.37源7d56d192195a3bb50cd16a0307653607ebf6f3a2/run42899518945三平台completed/success，工件版本/SHA/安装与六rg身份/权限核对；Swarm与工作流正常/预算/恢复链均通过，新增原记录恢复2个loopback请求，cancel0/resume42/普通会话0，已知2调度/1失败/1实施保持原值，原坏记录/绑定字节保留。
 - E-146：offline缓存安装7153ms/退出0；双命令preview.37，424文件逐一匹配Windows CI包，旧包保留，不重复fixture/真实付费任务。WI-067交付，goal active。
 - WI-068下一步成员独立模型与配置便利性：ProviderManager已有provider:model路由，LocalAgentExecutor通过alias/overrideScope解析；需调用内隔离，不能并发改全局activeModel/注册表别名，并覆盖session/subagent两入口与预算。尚未实现；隔离工作树、真实自主交付/引用、复杂逆向继续。
+
+## 2026-11-11 协作成员独立模型
+
+- E-147/WI-068：调用内AsyncLocalStorage路由覆盖原生执行器/压缩容量/最终生成器，两种本地调用入口均可分配不同provider:model或native:gemini模型；不改全局activeModel/注册表别名/供应商文件。中文名称、角色/具名预设与inherit，运行中禁止改模；显式成员错误不触发全局换模，丢失供应商明确失败。
+- /swarm prepare和/boost prepare先零模型创建任务；model命令显示安全本地目录，配置角色/预定@成员，resume再开始。角色/成员与阶段报告保留modelsUsed实际分发尝试路由，共享累计预算，权限scope不变。
+- 23相关core+10CLI、严格lint/type通过；源码bundle Swarm/工作流×两调用入口四链20/20/12/12请求均通过，三个不同loopback供应商路径/模型ID、实际读写/独立审查、主路由不变。最后补齐prepare/具名预设/429隔离由定向用例和最终CI核对，未重复源码四链；无付费/全量/冒烟。
+- preview.38准备分发/安装；WI-068本地完成，WI-069下一步可选Git工作树隔离/回收/整合。真实自主交付/引用、复杂逆向继续，goal active。

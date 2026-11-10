@@ -14,6 +14,8 @@ import {
   cancelSavedSwarm,
   resumeSwarm,
   setSwarmBudget,
+  setSwarmModel,
+  availableAgentModels,
 } from '@google/gemini-cli-core';
 import {
   CommandKind,
@@ -37,6 +39,36 @@ async function action(
         i18n.t('当前配置尚未就绪。', 'Configuration is not ready.'),
       );
     const root = config.storage.getProjectTempDir();
+    if (operation === 'prepare') {
+      if (!args.trim())
+        throw new Error(
+          i18n.t('用法：/swarm prepare <任务>', 'Usage: /swarm prepare <task>'),
+        );
+      if (config.getApprovalMode() === ApprovalMode.PLAN)
+        throw new Error(i18n.t('请先退出计划模式。', 'Leave Plan Mode first.'));
+      const prepared = createSwarm(root, args.trim());
+      context.ui.addItem({
+        type: MessageType.INFO,
+        text: i18n.t(
+          `蜂群已准备：${prepared.id}。先用 /swarm model 配置角色或 @成员，再 /swarm resume 开始；尚未调用模型。`,
+          `Swarm prepared: ${prepared.id}. Configure roles or @members with /swarm model, then start with /swarm resume. No model call made.`,
+        ),
+      });
+      return;
+    }
+    if (operation === 'model' && !args.trim()) {
+      context.ui.addItem({
+        type: MessageType.INFO,
+        text:
+          i18n.t(
+            '用法：/swarm model <researcher|coder|workflow-auditor|@成员> <供应商ID:模型|native:gemini-模型|inherit>\n已配置模型：',
+            'Usage: /swarm model <researcher|coder|workflow-auditor|@member> <provider:model|native:gemini-model|inherit>\nConfigured models:',
+          ) +
+          '\n' +
+          availableAgentModels().join('\n'),
+      });
+      return;
+    }
     if (operation === 'cancel') {
       const cancelled = cancelSavedSwarm(root, args.trim() || undefined);
       context.ui.addItem({
@@ -75,7 +107,7 @@ async function action(
         const snapshot = swarmSnapshot(root, swarm.id);
         context.ui.addItem({
           type: MessageType.INFO,
-          text: `Swarm ${snapshot.phase}\n${snapshot.objective}\n${i18n.t('累计预算', 'Cumulative budget')}: ${JSON.stringify(snapshot.budget)}\n${snapshot.stopReason}\n${snapshot.members.map((member) => `@${member.name}: ${member.state}`).join('\n')}\n${snapshot.boardPath}`,
+          text: `Swarm ${snapshot.phase}\n${snapshot.objective}\n${i18n.t('角色模型', 'Role models')}: ${JSON.stringify(snapshot.roleModels)}\n${i18n.t('累计预算', 'Cumulative budget')}: ${JSON.stringify(snapshot.budget)}\n${snapshot.stopReason}\n${snapshot.members.map((member) => `@${member.name}: ${member.state} · ${member.model ?? snapshot.roleModels[member.agent] ?? 'inherit'} · ${member.modelsUsed.join(', ')}`).join('\n')}\n${snapshot.boardPath}`,
         });
         return;
       }
@@ -102,6 +134,25 @@ async function action(
           text: i18n.t(
             '预算已保存；累计用量保留。受阻蜂群可用 /swarm resume 恢复。',
             'Budget saved; cumulative usage retained. Use /swarm resume to continue a blocked swarm.',
+          ),
+        });
+        return;
+      }
+      if (operation === 'model') {
+        const values = args.trim().split(/\s+/);
+        if (values.length !== 2)
+          throw new Error(
+            i18n.t(
+              '用法：/swarm model <角色|@成员> <供应商ID:模型|native:gemini-模型|inherit>',
+              'Usage: /swarm model <role|@member> <provider:model|native:gemini-model|inherit>',
+            ),
+          );
+        setSwarmModel(root, swarm.id, values[0], values[1]);
+        context.ui.addItem({
+          type: MessageType.INFO,
+          text: i18n.t(
+            '成员模型已保存，后续轮次生效；全局模型与累计用量保持。',
+            'Member model saved for future turns; global model and cumulative usage retained.',
           ),
         });
         return;
@@ -135,8 +186,8 @@ async function action(
         context.ui.addItem({
           type: MessageType.INFO,
           text: i18n.t(
-            '用法：/swarm <任务>；/swarm board|status|budget|message|resume|cancel',
-            'Usage: /swarm <task>; /swarm board|status|budget|message|resume|cancel',
+            '用法：/swarm <任务>；/swarm board|status|model|budget|message|resume|cancel',
+            'Usage: /swarm <task>; /swarm board|status|model|budget|message|resume|cancel',
           ),
         });
         return;
@@ -166,6 +217,12 @@ const operations: Array<[string, string, string]> = [
   ['board', '打开实时留言与成员看板', 'Open the live board and roster'],
   ['status', '查看蜂群状态', 'Show swarm status'],
   ['budget', '设置累计执行预算', 'Set cumulative execution limits'],
+  ['model', '设置角色或成员模型', 'Choose a role or member model'],
+  [
+    'prepare',
+    '先创建任务，配置模型后再开始',
+    'Prepare a task before choosing models and starting',
+  ],
   [
     'message',
     '公开留言并提及成员',
@@ -191,7 +248,9 @@ export const swarmCommand: SlashCommand = {
     },
     kind: CommandKind.BUILT_IN,
     isSafeConcurrent: ['board', 'status', 'message', 'cancel'].includes(name),
-    autoExecute: !['message', 'budget', 'cancel'].includes(name),
+    autoExecute: !['message', 'budget', 'cancel', 'model', 'prepare'].includes(
+      name,
+    ),
     action: (context, args) => action(context, args, name),
   })),
 };

@@ -13,6 +13,8 @@ import { spawn } from 'node:child_process';
 const entry = path.resolve(process.argv[2]);
 const reportPath = path.resolve(process.argv[3]);
 const budgetMode = process.argv[4] === 'budget';
+const modelMode = ['models', 'models-session'].includes(process.argv[4]);
+const sessionMode = process.argv[4] === 'models-session';
 const recoveryMode = process.argv[4] === 'recovery';
 let recoveryReady = false;
 const diagnosticMode = process.argv[4] === 'diagnostic' || budgetMode;
@@ -36,6 +38,9 @@ fs.writeFileSync(
     security: { auth: { selectedType: 'gateway' } },
     privacy: { usageStatisticsEnabled: false },
     general: { enableAutoUpdate: false, enableAutoUpdateNotification: false },
+    ...(sessionMode
+      ? { experimental: { adk: { agentSessionSubagentEnabled: true } } }
+      : {}),
   }),
 );
 const id = randomUUID();
@@ -47,7 +52,7 @@ let timer;
 let timedOut = false;
 const server = createServer(async (req, res) => {
   try {
-    assert.equal(req.url, '/chat/completions');
+    if (!modelMode) assert.equal(req.url, '/chat/completions');
     const chunks = [];
     for await (const chunk of req) chunks.push(chunk);
     const payload = JSON.parse(Buffer.concat(chunks).toString());
@@ -68,7 +73,28 @@ const server = createServer(async (req, res) => {
     const results = payload.messages.filter(
       (message) => message.role === 'tool',
     );
-    requests.push({ role, tools, resultCount: results.length });
+    requests.push({
+      role,
+      tools,
+      resultCount: results.length,
+      model: payload.model,
+      path: req.url,
+    });
+    if (modelMode) {
+      const route =
+        role === 'main'
+          ? ''
+          : role === 'researcher'
+            ? 'read'
+            : role === 'coder'
+              ? 'build'
+              : 'review';
+      assert.equal(
+        req.url,
+        route ? `/route-${route}/chat/completions` : '/chat/completions',
+      );
+      assert.equal(payload.model, route ? `${route}-model` : 'fixture-model');
+    }
     if (role !== 'main') {
       assert.ok(!tools.includes('manage_swarm'));
       assert.ok(tools.includes('post_swarm_message'));
@@ -114,6 +140,15 @@ const server = createServer(async (req, res) => {
             revision: 0,
             ownerPid: child.pid,
             members: [],
+            ...(modelMode
+              ? {
+                  roleModels: {
+                    researcher: 'fixture-read:read-model',
+                    coder: 'fixture-build:build-model',
+                    'workflow-auditor': 'fixture-review:review-model',
+                  },
+                }
+              : {}),
             ...(budgetMode
               ? {
                   budget: {
@@ -330,6 +365,19 @@ try {
           defaultModel: 'fixture-model',
           updatedAt: new Date().toISOString(),
         },
+        ...(modelMode
+          ? ['read', 'build', 'review'].map((route) => ({
+              id: `fixture-${route}`,
+              name: `Fixture ${route}`,
+              baseUrl: `http://127.0.0.1:${server.address().port}/route-${route}`,
+              apiKey: 'fixture-only',
+              protocol: 'openai-chat',
+              models: [`${route}-model`],
+              defaultModel: `${route}-model`,
+              contextWindow: 64000,
+              updatedAt: new Date().toISOString(),
+            }))
+          : []),
       ],
     }),
   );
@@ -590,15 +638,39 @@ try {
                 member.verifiedRevision === state.revision,
             ),
             finalText: stdout.includes('NATIVE_SWARM_DELIVERED'),
+            ...(modelMode
+              ? {
+                  isolatedProviderModels: [
+                    'read-model',
+                    'build-model',
+                    'review-model',
+                  ].every((model) =>
+                    requests.some((request) => request.model === model),
+                  ),
+                  memberRoutesPersisted: state?.members.every(
+                    (member) =>
+                      member.modelsUsed.length === 1 &&
+                      member.modelsUsed[0] === state.roleModels[member.agent],
+                  ),
+                  sharedBudgetRetained: state?.budget.requests === 18,
+                  globalSelectionUnchanged:
+                    JSON.parse(fs.readFileSync(providers, 'utf8'))
+                      .activeModel === 'fixture-model',
+                }
+              : {}),
           };
   const report = {
-    mode: recoveryMode
-      ? 'recovery'
-      : budgetMode
-        ? 'budget'
-        : diagnosticMode
-          ? 'diagnostic'
-          : 'delivery',
+    mode: modelMode
+      ? sessionMode
+        ? 'models-session'
+        : 'models'
+      : recoveryMode
+        ? 'recovery'
+        : budgetMode
+          ? 'budget'
+          : diagnosticMode
+            ? 'diagnostic'
+            : 'delivery',
     passed: Object.values(checks).every(Boolean),
     version: metadata.version,
     platform: process.platform,
@@ -616,13 +688,15 @@ try {
     actualDeliveryHex: fs.existsSync(artifact)
       ? fs.readFileSync(artifact).toString('hex')
       : null,
-    scope: recoveryMode
-      ? 'Generated corrupt Swarm members and binding: initial bounded CLI failure, actual local /swarm cancel <id> with no model request, old resume rejected with exit 42 and no model request, then ordinary conversation restored. Both bad files retained byte for byte and board unchanged. Two loopback requests total; no real provider task or delivery success.'
-      : budgetMode
-        ? 'Native main/member executor budget with a loopback output-limit response: the initial coordinator request creates the isolated seed, then two cumulative dispatches are allowed and the next is blocked before the provider. CLI exits nonzero, member stays paused and the task stays blocked. Not a live-provider delivery or HTTP retry billing counter.'
-        : diagnosticMode
-          ? 'Installed CLI and real local executor receiving a loopback provider output-limit response. Checks the concrete error reaches the paused member, board and coordinator, without marking completion. Not a live-provider task or proof the model respects retry budgets.'
-          : 'Installed CLI, actual native swarm service, real local child executors, public board and member identity, mention-triggered wake, actual file writes/reads and current independent verifier gate. Model responses are loopback fixtures. Not live-provider autonomy, terminal keyboard/visual acceptance or complex reverse engineering.',
+    scope: modelMode
+      ? `Actual installed native Swarm with ${sessionMode ? 'LocalSessionInvocation' : 'LocalSubagentInvocation'}, distinct local HTTP provider paths and model IDs for researcher/coder/verifier, persisted dispatched routes and shared budget. Loopback responses only; no real-provider autonomy or paid calls.`
+      : recoveryMode
+        ? 'Generated corrupt Swarm members and binding: initial bounded CLI failure, actual local /swarm cancel <id> with no model request, old resume rejected with exit 42 and no model request, then ordinary conversation restored. Both bad files retained byte for byte and board unchanged. Two loopback requests total; no real provider task or delivery success.'
+        : budgetMode
+          ? 'Native main/member executor budget with a loopback output-limit response: the initial coordinator request creates the isolated seed, then two cumulative dispatches are allowed and the next is blocked before the provider. CLI exits nonzero, member stays paused and the task stays blocked. Not a live-provider delivery or HTTP retry billing counter.'
+          : diagnosticMode
+            ? 'Installed CLI and real local executor receiving a loopback provider output-limit response. Checks the concrete error reaches the paused member, board and coordinator, without marking completion. Not a live-provider task or proof the model respects retry budgets.'
+            : 'Installed CLI, actual native swarm service, real local child executors, public board and member identity, mention-triggered wake, actual file writes/reads and current independent verifier gate. Model responses are loopback fixtures. Not live-provider autonomy, terminal keyboard/visual acceptance or complex reverse engineering.',
   };
   fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));

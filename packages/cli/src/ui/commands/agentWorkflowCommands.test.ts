@@ -139,3 +139,46 @@ it('cancels an explicitly identified damaged record locally before attempting la
   );
   expect(cancel.autoExecute).toBe(false);
 });
+
+it('saves and clears a role model locally while retaining cumulative usage and approval', async () => {
+  const { context } = commandContext();
+  await boostCommand.action!(context, 'Select collaboration models');
+  const record = latestAgentWorkflow(root, 'boost')!;
+  consumeWorkflowRequest(root);
+  const model = boostCommand.subCommands!.find(
+    (command) => command.name === 'model',
+  )!;
+  expect(
+    await model.action!(context, 'coder native:gemini-fixture'),
+  ).toBeUndefined();
+  expect(latestAgentWorkflow(root, 'boost')).toMatchObject({
+    roleModels: { coder: 'native:gemini-fixture' },
+    approved: true,
+  });
+  expect(workflowBudget(root, record).requests).toBe(1);
+  expect(await model.action!(context, 'coder inherit')).toBeUndefined();
+  expect(latestAgentWorkflow(root, 'boost')?.roleModels.coder).toBeUndefined();
+  expect(model.autoExecute).toBe(false);
+});
+
+it('prepares boost locally so role models can be chosen before native execution is submitted', async () => {
+  const { context } = commandContext();
+  const prepare = boostCommand.subCommands!.find(
+    (command) => command.name === 'prepare',
+  )!;
+  expect(
+    await prepare.action!(context, 'Prepare the selected models'),
+  ).toBeUndefined();
+  const record = latestAgentWorkflow(root, 'boost')!;
+  expect(record.phase).toBe('ready');
+  expect(workflowBudget(root, record).requests).toBe(0);
+  const model = boostCommand.subCommands!.find(
+    (command) => command.name === 'model',
+  )!;
+  expect(
+    await model.action!(context, 'coder native:gemini-fixture'),
+  ).toBeUndefined();
+  expect(latestAgentWorkflow(root, 'boost')?.roleModels.coder).toBe(
+    'native:gemini-fixture',
+  );
+});

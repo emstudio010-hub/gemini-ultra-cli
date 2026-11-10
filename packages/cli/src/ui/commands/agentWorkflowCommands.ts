@@ -15,6 +15,8 @@ import {
   setWorkflowBudget,
   activateWorkflowBudget,
   closeWorkflowBudget,
+  availableAgentModels,
+  setWorkflowRoleModel,
   type AgentWorkflow,
   type AgentWorkflowMode,
 } from '@google/gemini-cli-core';
@@ -51,6 +53,50 @@ function workflowCommand(
           i18n.t('当前配置尚未就绪。', 'Configuration is not ready.'),
         );
       const root = config.storage.getProjectTempDir();
+      if (operation === 'prepare') {
+        if (!args.trim())
+          throw new Error(
+            i18n.t(
+              '用法：/boost prepare <任务>',
+              'Usage: /boost prepare <task>',
+            ),
+          );
+        if (config.getApprovalMode() === ApprovalMode.PLAN)
+          throw new Error(
+            i18n.t('请先退出计划模式。', 'Leave Plan Mode first.'),
+          );
+        if (isAgentWorkflowRunning(root))
+          throw new Error(
+            i18n.t(
+              '当前项目已有工作流正在执行。',
+              'A workflow is already running in this project.',
+            ),
+          );
+        const prepared = createAgentWorkflow(
+          root,
+          mode,
+          args.trim(),
+          config.getApprovalMode(),
+        );
+        info(
+          i18n.t(
+            `任务已准备：${prepared.id}。先用 /${mode} model 配置角色，再 /${mode} resume 开始；尚未调用模型。`,
+            `Task prepared: ${prepared.id}. Configure roles with /${mode} model, then start with /${mode} resume. No model call made.`,
+          ),
+        );
+        return;
+      }
+      if (operation === 'model' && !args.trim()) {
+        info(
+          i18n.t(
+            `用法：/${mode} model <researcher|coder|workflow-auditor> <供应商ID:模型|native:gemini-模型|inherit>\n已配置模型：`,
+            `Usage: /${mode} model <researcher|coder|workflow-auditor> <provider:model|native:gemini-model|inherit>\nConfigured models:`,
+          ) +
+            '\n' +
+            availableAgentModels().join('\n'),
+        );
+        return;
+      }
       const text =
         args.trim() ||
         (!operation && mode === 'grill-me'
@@ -91,7 +137,7 @@ function workflowCommand(
       if (operation === 'status') {
         info(
           record
-            ? `${record.mode}: ${record.phase}\n${record.objective}\n${record.stage}\n${i18n.t('累计预算', 'Cumulative budget')}: ${JSON.stringify(workflowBudgetSummary(root, record))}\n${record.milestones.map((item, index) => `${index + 1}. [${item.completed ? 'x' : ' '}] ${item.title}\n${item.acceptance}`).join('\n')}\nID: ${record.id}`
+            ? `${record.mode}: ${record.phase}\n${record.objective}\n${record.stage}\n${i18n.t('角色模型', 'Role models')}: ${JSON.stringify(record.roleModels)}\n${i18n.t('累计预算', 'Cumulative budget')}: ${JSON.stringify(workflowBudgetSummary(root, record))}\n${record.milestones.map((item, index) => `${index + 1}. [${item.completed ? 'x' : ' '}] ${item.title}\n${item.acceptance}`).join('\n')}\nID: ${record.id}`
             : i18n.t(
                 '当前项目没有该工作流。',
                 'No workflow of this kind in this project.',
@@ -167,6 +213,24 @@ function workflowCommand(
             i18n.t(
               '预算已保存，累计用量保留。受阻任务需显式 resume。',
               'Budget saved; cumulative usage retained. Explicitly resume a blocked task.',
+            ),
+          );
+          return;
+        }
+        if (operation === 'model') {
+          const values = args.trim().split(/\s+/);
+          if (values.length !== 2)
+            throw new Error(
+              i18n.t(
+                `用法：/${mode} model <角色> <供应商ID:模型|native:gemini-模型|inherit>`,
+                `Usage: /${mode} model <role> <provider:model|native:gemini-model|inherit>`,
+              ),
+            );
+          setWorkflowRoleModel(root, record.id, values[0], values[1]);
+          info(
+            i18n.t(
+              '角色模型已保存，后续阶段生效；全局模型与累计用量保持。',
+              'Role model saved for future stages; global model and cumulative usage retained.',
             ),
           );
           return;
@@ -257,6 +321,8 @@ function workflowCommand(
   };
   const operations = [
     'status',
+    ...(mode === 'grill-me' ? [] : ['model']),
+    ...(mode === 'boost' ? ['prepare'] : []),
     'budget',
     'resume',
     'cancel',
@@ -279,6 +345,11 @@ function workflowCommand(
         const labels: Record<string, [string, string]> = {
           status: ['查看阶段与里程碑', 'Show stages and milestones'],
           budget: ['设置累计执行预算', 'Set cumulative execution limits'],
+          model: ['设置协作角色模型', 'Choose collaboration role models'],
+          prepare: [
+            '先创建任务，配置模型后再开始',
+            'Prepare a task before choosing models and starting',
+          ],
           resume: ['恢复已保存任务', 'Resume the saved workflow'],
           cancel: [
             '取消并保留结果，可指定任务 ID',
@@ -290,7 +361,7 @@ function workflowCommand(
         return I18nManager.getInstance().t(...labels[name]);
       },
       kind: CommandKind.BUILT_IN,
-      autoExecute: !['budget', 'cancel'].includes(name),
+      autoExecute: !['budget', 'cancel', 'model', 'prepare'].includes(name),
       isSafeConcurrent: name === 'status' || name === 'cancel',
       action: (context, args) => action(context, args, name),
     })),

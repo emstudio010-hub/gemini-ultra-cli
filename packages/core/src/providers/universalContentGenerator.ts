@@ -28,6 +28,11 @@ import type { HttpError } from '../utils/httpErrors.js';
 import { consumeSwarmRequest } from '../agents/swarm.js';
 import { consumeWorkflowRequest } from '../agents/workflowBudget.js';
 import {
+  currentAgentModel,
+  normalizeAgentModel,
+  observeAgentModel,
+} from '../agents/agentModelRouting.js';
+import {
   providerReasoningSignature,
   shouldReplayReasoning,
   stripProviderReasoning,
@@ -109,6 +114,12 @@ export class UniversalContentGenerator implements ContentGenerator {
   private resolve(
     model: string,
   ): { provider: ExternalProviderProfile; modelId: string } | null {
+    const selected = currentAgentModel();
+    if (selected) {
+      normalizeAgentModel(selected); // Deleted/renamed providers fail instead of silently rerouting.
+      if (selected.startsWith('native:')) return null;
+      model = selected;
+    }
     const mgr = ProviderManager.getInstance();
     const hit = mgr.resolveProviderForModel(model);
     if (hit) return hit;
@@ -129,7 +140,11 @@ export class UniversalContentGenerator implements ContentGenerator {
     const resolution = this.resolve(model);
     return resolution
       ? resolution.provider.contextWindow
-      : this.fallbackGenerator.getModelContextWindow?.(model);
+      : this.fallbackGenerator.getModelContextWindow?.(
+          currentAgentModel()?.startsWith('native:')
+            ? currentAgentModel()!.slice(7)
+            : model,
+        );
   }
 
   async countTokens(
@@ -159,6 +174,12 @@ export class UniversalContentGenerator implements ContentGenerator {
     userPromptId: string,
     role: LlmRole,
   ): Promise<GenerateContentResponse> {
+    const selected = currentAgentModel();
+    if (selected)
+      request = {
+        ...request,
+        model: selected.startsWith('native:') ? selected.slice(7) : selected,
+      };
     consumeSwarmRequest(this.gcConfig?.storage?.getProjectTempDir());
     consumeWorkflowRequest(this.gcConfig?.storage?.getProjectTempDir());
     if (role === LlmRole.MAIN || role === LlmRole.SUBAGENT)
@@ -166,6 +187,7 @@ export class UniversalContentGenerator implements ContentGenerator {
     const resolution = this.resolve(request.model);
 
     if (!resolution) {
+      observeAgentModel(`native:${request.model}`);
       return this.fallbackGenerator.generateContent(
         {
           ...request,
@@ -177,6 +199,7 @@ export class UniversalContentGenerator implements ContentGenerator {
     }
 
     const { provider, modelId } = resolution;
+    observeAgentModel(`${provider.id}:${modelId}`);
     const modifiedRequest = this.withProviderDefaults(
       request,
       provider,
@@ -195,6 +218,12 @@ export class UniversalContentGenerator implements ContentGenerator {
     userPromptId: string,
     role: LlmRole,
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
+    const selected = currentAgentModel();
+    if (selected)
+      request = {
+        ...request,
+        model: selected.startsWith('native:') ? selected.slice(7) : selected,
+      };
     consumeSwarmRequest(this.gcConfig?.storage?.getProjectTempDir());
     consumeWorkflowRequest(this.gcConfig?.storage?.getProjectTempDir());
     if (role === LlmRole.MAIN || role === LlmRole.SUBAGENT)
@@ -202,6 +231,7 @@ export class UniversalContentGenerator implements ContentGenerator {
     const resolution = this.resolve(request.model);
 
     if (!resolution) {
+      observeAgentModel(`native:${request.model}`);
       return this.fallbackGenerator.generateContentStream(
         {
           ...request,
@@ -213,6 +243,7 @@ export class UniversalContentGenerator implements ContentGenerator {
     }
 
     const { provider, modelId } = resolution;
+    observeAgentModel(`${provider.id}:${modelId}`);
     const modifiedRequest = this.withProviderDefaults(
       request,
       provider,
