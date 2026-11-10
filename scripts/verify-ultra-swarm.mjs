@@ -12,6 +12,7 @@ import { spawn } from 'node:child_process';
 
 const entry = path.resolve(process.argv[2]);
 const reportPath = path.resolve(process.argv[3]);
+const diagnosticMode = process.argv[4] === 'diagnostic';
 const metadata = JSON.parse(
   fs.readFileSync(
     path.join(path.dirname(path.dirname(entry)), 'package.json'),
@@ -115,51 +116,84 @@ const server = createServer(async (req, res) => {
           JSON.stringify({ id }),
         );
       }
-      const steps = [
-        {
-          action: 'add',
-          name: 'analyst',
-          agent: 'researcher',
-          brief:
-            'Read seed.txt only; report the required content publicly. Wait after the result.',
-        },
-        {
-          action: 'add',
-          name: 'builder',
-          agent: 'coder',
-          brief:
-            'Own only deliverable.txt. Write answer=42 followed by a newline; preserve seed.txt. Report publicly.',
-        },
-        { action: 'wait' },
-        {
-          action: 'post',
-          text: '@analyst independently recheck the seed, then wait.',
-        },
-        { action: 'wait' },
-        {
-          action: 'add',
-          name: 'verifier',
-          agent: 'workflow-auditor',
-          brief:
-            'Independently read deliverable.txt and verify the required content; no edits.',
-        },
-        { action: 'wait' },
-        { action: 'finish' },
-      ];
+      const steps = diagnosticMode
+        ? [
+            {
+              action: 'add',
+              name: 'author',
+              agent: 'coder',
+              brief:
+                'Return the assigned result; this fixture verifies caught provider-limit diagnostics.',
+            },
+            { action: 'wait' },
+          ]
+        : [
+            {
+              action: 'add',
+              name: 'analyst',
+              agent: 'researcher',
+              brief:
+                'Read seed.txt only; report the required content publicly. Wait after the result.',
+            },
+            {
+              action: 'add',
+              name: 'builder',
+              agent: 'coder',
+              brief:
+                'Own only deliverable.txt. Write answer=42 followed by a newline; preserve seed.txt. Report publicly.',
+            },
+            { action: 'wait' },
+            {
+              action: 'post',
+              text: '@analyst independently recheck the seed, then wait.',
+            },
+            { action: 'wait' },
+            {
+              action: 'add',
+              name: 'verifier',
+              agent: 'workflow-auditor',
+              brief:
+                'Independently read deliverable.txt and verify the required content; no edits.',
+            },
+            { action: 'wait' },
+            { action: 'finish' },
+          ];
       if (results.length < steps.length)
         message = call('manage_swarm', {
           swarm_id: id,
           ...steps[results.length],
         });
       else {
-        assert.equal(
-          JSON.parse(
-            fs.readFileSync(path.join(swarmDirectory, 'members.json'), 'utf8'),
-          ).phase,
-          'completed',
+        const saved = JSON.parse(
+          fs.readFileSync(path.join(swarmDirectory, 'members.json'), 'utf8'),
         );
-        message = { content: 'NATIVE_SWARM_DELIVERED' };
+        if (diagnosticMode) {
+          assert.equal(saved.phase, 'active');
+          assert.equal(saved.members[0].state, 'paused');
+          assert.ok(
+            saved.members[0].result.includes(
+              'OpenAI output token limit reached; response is incomplete.',
+            ),
+          );
+          assert.ok(
+            results.some((result) =>
+              result.content.includes(
+                'OpenAI output token limit reached; response is incomplete.',
+              ),
+            ),
+          );
+        } else assert.equal(saved.phase, 'completed');
+        message = {
+          content: diagnosticMode
+            ? 'NATIVE_SWARM_DIAGNOSTIC_RETAINED'
+            : 'NATIVE_SWARM_DELIVERED',
+        };
       }
+    } else if (diagnosticMode) {
+      message = {
+        content: '',
+        reasoning_content: 'The configured output budget has been exhausted.',
+      };
     } else if (role === 'researcher') {
       message =
         results.length === 0
@@ -200,6 +234,12 @@ const server = createServer(async (req, res) => {
         });
       }
     }
+    const finishReason =
+      diagnosticMode && role !== 'main'
+        ? 'length'
+        : message.tool_calls
+          ? 'tool_calls'
+          : 'stop';
     if (payload.stream) {
       res.writeHead(200, { 'Content-Type': 'text/event-stream' });
       res.end(
@@ -208,7 +248,7 @@ const server = createServer(async (req, res) => {
             choices: [
               {
                 delta: message,
-                finish_reason: message.tool_calls ? 'tool_calls' : 'stop',
+                finish_reason: finishReason,
               },
             ],
           }) +
@@ -221,7 +261,7 @@ const server = createServer(async (req, res) => {
           choices: [
             {
               message: { role: 'assistant', ...message },
-              finish_reason: message.tool_calls ? 'tool_calls' : 'stop',
+              finish_reason: finishReason,
             },
           ],
         }),
@@ -348,36 +388,53 @@ try {
         .filter(Boolean)
         .map((line) => JSON.parse(line))
     : [];
-  const checks = {
-    normalExit: exitCode === 0 && !timedOut,
-    noFixtureMismatch: failures.length === 0,
-    nativeCompletion: state?.phase === 'completed',
-    exactDelivery:
-      fs.existsSync(artifact) &&
-      /^answer=42\r?\n$/.test(fs.readFileSync(artifact, 'utf8')),
-    seedUnchanged:
-      fs.readFileSync(source, 'utf8') === 'Required deliverable: answer=42\n',
-    mentionsWakeIdleMember:
-      state?.members.find((member) => member.name === 'analyst')?.turns === 2,
-    noIdlePolling: requests.length === 20,
-    assignedPublicIdentity:
-      board.some(
-        (post) =>
-          post.sender === 'analyst' && post.text.startsWith('@coordinator'),
-      ) &&
-      board.some(
-        (post) =>
-          post.sender === 'builder' && post.text.startsWith('@coordinator'),
-      ),
-    monotonicBoard: board.every((post, index) => post.seq === index + 1),
-    currentIndependentVerdict: state?.members.some(
-      (member) =>
-        member.agent === 'workflow-auditor' &&
-        member.verifiedRevision === state.revision,
-    ),
-    finalText: stdout.includes('NATIVE_SWARM_DELIVERED'),
-  };
+  const checks = diagnosticMode
+    ? {
+        normalExit: exitCode === 0 && !timedOut,
+        noFixtureMismatch: failures.length === 0,
+        pausedWithConcreteDiagnostic:
+          state?.members[0]?.state === 'paused' &&
+          state.members[0].result.includes(
+            'OpenAI output token limit reached; response is incomplete.',
+          ),
+        notMisreportedAsComplete: state?.phase === 'active',
+        singlePausedTurn:
+          requests.length === 4 && state?.members[0]?.turns === 1,
+        finalText: stdout.includes('NATIVE_SWARM_DIAGNOSTIC_RETAINED'),
+      }
+    : {
+        normalExit: exitCode === 0 && !timedOut,
+        noFixtureMismatch: failures.length === 0,
+        nativeCompletion: state?.phase === 'completed',
+        exactDelivery:
+          fs.existsSync(artifact) &&
+          /^answer=42\r?\n$/.test(fs.readFileSync(artifact, 'utf8')),
+        seedUnchanged:
+          fs.readFileSync(source, 'utf8') ===
+          'Required deliverable: answer=42\n',
+        mentionsWakeIdleMember:
+          state?.members.find((member) => member.name === 'analyst')?.turns ===
+          2,
+        noIdlePolling: requests.length === 20,
+        assignedPublicIdentity:
+          board.some(
+            (post) =>
+              post.sender === 'analyst' && post.text.startsWith('@coordinator'),
+          ) &&
+          board.some(
+            (post) =>
+              post.sender === 'builder' && post.text.startsWith('@coordinator'),
+          ),
+        monotonicBoard: board.every((post, index) => post.seq === index + 1),
+        currentIndependentVerdict: state?.members.some(
+          (member) =>
+            member.agent === 'workflow-auditor' &&
+            member.verifiedRevision === state.revision,
+        ),
+        finalText: stdout.includes('NATIVE_SWARM_DELIVERED'),
+      };
   const report = {
+    mode: diagnosticMode ? 'diagnostic' : 'delivery',
     passed: Object.values(checks).every(Boolean),
     version: metadata.version,
     platform: process.platform,
@@ -394,8 +451,9 @@ try {
     actualDeliveryHex: fs.existsSync(artifact)
       ? fs.readFileSync(artifact).toString('hex')
       : null,
-    scope:
-      'Installed CLI, actual native swarm service, real local child executors, public board and member identity, mention-triggered wake, actual file writes/reads and current independent verifier gate. Model responses are loopback fixtures. Not live-provider autonomy, terminal keyboard/visual acceptance or complex reverse engineering.',
+    scope: diagnosticMode
+      ? 'Installed CLI and real local executor receiving a loopback provider output-limit response. Checks the concrete error reaches the paused member, board and coordinator, without marking completion. Not a live-provider task or proof the model respects retry budgets.'
+      : 'Installed CLI, actual native swarm service, real local child executors, public board and member identity, mention-triggered wake, actual file writes/reads and current independent verifier gate. Model responses are loopback fixtures. Not live-provider autonomy, terminal keyboard/visual acceptance or complex reverse engineering.',
   };
   fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));

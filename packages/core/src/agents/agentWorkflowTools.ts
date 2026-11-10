@@ -15,11 +15,7 @@ import {
 } from '../tools/tools.js';
 import { ToolErrorType } from '../tools/tool-error.js';
 import { AgentTool } from './agent-tool.js';
-import {
-  AgentTerminateMode,
-  isSubagentProgress,
-  SubagentState,
-} from './types.js';
+import { localAgentOutcome } from './local-agent-outcome.js';
 import {
   readAgentWorkflow,
   saveAgentWorkflow,
@@ -155,32 +151,7 @@ class RunInvocation extends BaseToolInvocation<
         const result = await new AgentTool(this.context, this.messageBus)
           .build({ agent_name: agent, prompt })
           .execute({ abortSignal: signal, updateOutput: options.updateOutput });
-        const progress = isSubagentProgress(result.returnDisplay)
-          ? result.returnDisplay
-          : undefined;
-        const completed =
-          !result.error &&
-          progress?.state === SubagentState.COMPLETED &&
-          progress.terminateReason === AgentTerminateMode.GOAL;
-        let text =
-          progress?.result ||
-          result.error?.message ||
-          'No structured subagent result.';
-        if (agent !== 'workflow-auditor') {
-          try {
-            const parsed: unknown = JSON.parse(text);
-            if (
-              typeof parsed === 'object' &&
-              parsed !== null &&
-              'response' in parsed &&
-              typeof parsed.response === 'string'
-            )
-              text = parsed.response;
-          } catch {
-            /* Interrupted and plain-text results stay intact. */
-          }
-        }
-        return { completed, text };
+        return localAgentOutcome(result, agent !== 'workflow-auditor');
       },
       options.updateOutput,
     );
