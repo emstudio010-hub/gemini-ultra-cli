@@ -1278,6 +1278,7 @@ Logging in with Google... Restarting Gemini CLI to continue.
   const {
     handleSlashCommand,
     slashCommands,
+    areCommandsReady,
     pendingHistoryItems: pendingSlashCommandHistoryItems,
     commandContext,
     confirmationRequest: commandConfirmationRequest,
@@ -1568,6 +1569,7 @@ Logging in with Google... Restarting Gemini CLI to continue.
     popAllMessages,
   } = useMessageQueue({
     isConfigInitialized,
+    areCommandsReady,
     streamingState,
     submitQuery,
     isMcpReady,
@@ -1668,8 +1670,9 @@ Logging in with Google... Restarting Gemini CLI to continue.
 
       const isMcpOrConfigReady = isConfigInitialized && isMcpReady;
       if (
-        (isSlash && isConfigInitialized) ||
-        (!isCompressing && isIdle && isMcpOrConfigReady)
+        (!isSlash || areCommandsReady) &&
+        ((isSlash && isConfigInitialized) ||
+          (!isCompressing && isIdle && isMcpOrConfigReady))
       ) {
         if (!isSlash) {
           const permissions = await checkPermissions(submittedValue, config);
@@ -1732,6 +1735,7 @@ Logging in with Google... Restarting Gemini CLI to continue.
       handleHintSubmit,
       isConfigInitialized,
       triggerExpandHint,
+      areCommandsReady,
     ],
   );
 

@@ -15,7 +15,7 @@ v24.22.2；校验场景使用本地模型fixture，真实逆向工具需另行�
 Release 下载），执行：
 
 ```sh
-npm install -g ./gemini-ultra-cli-1.0.0-preview.10.tgz
+npm install -g ./gemini-ultra-cli-1.0.0-preview.11.tgz
 gemini-ultra --version
 gemini-ultra
 ```
@@ -26,6 +26,9 @@ gemini-ultra
 `~/.gemini`，不会随安装包分发。
 
 ## 首次使用
+
+输入框可能先于命令发现完成显示。启动期输入的斜杠命令会等待本地命令表就绪再处理；不会因暂时未找到命令而把
+`/effort`、`/language` 等输入发给模型。
 
 1. `/language` 选择中文或英文；也可 `/language 中文`、`/language 英文`。
 2. 首次启动选择「配置外接供应商」即可录入端点与密钥，无需先登录 Google。进入会话后也可使用
@@ -69,13 +72,13 @@ Release。每个安装包附带 `.sha256` 文件，便于传输后核对。
 Windows PowerShell 校验安装包：
 
 ```powershell
-Get-FileHash ./gemini-ultra-cli-1.0.0-preview.10.tgz -Algorithm SHA256
-Get-Content ./gemini-ultra-cli-1.0.0-preview.10.tgz.sha256
+Get-FileHash ./gemini-ultra-cli-1.0.0-preview.11.tgz -Algorithm SHA256
+Get-Content ./gemini-ultra-cli-1.0.0-preview.11.tgz.sha256
 ```
 
 macOS 使用
-`shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.10.tgz.sha256`；Linux 使用
-`sha256sum -c gemini-ultra-cli-1.0.0-preview.10.tgz.sha256`。
+`shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.11.tgz.sha256`；Linux 使用
+`sha256sum -c gemini-ultra-cli-1.0.0-preview.11.tgz.sha256`。
 
 ## 自定义逆向工具路径
 

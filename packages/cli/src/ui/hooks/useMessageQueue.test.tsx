@@ -26,6 +26,7 @@ describe('useMessageQueue', () => {
 
   const renderMessageQueueHook = async (initialProps: {
     isConfigInitialized: boolean;
+    areCommandsReady?: boolean;
     streamingState: StreamingState;
     submitQuery: (query: string) => void;
     isMcpReady: boolean;
@@ -58,6 +59,23 @@ describe('useMessageQueue', () => {
 
     expect(result.current.messageQueue).toEqual([]);
     expect(result.current.getQueuedMessagesText()).toBe('');
+  });
+
+  it('retains a queued slash command until command discovery is ready', async () => {
+    const { result, rerender } = await renderMessageQueueHook({
+      isConfigInitialized: true,
+      areCommandsReady: false,
+      streamingState: StreamingState.Idle,
+      submitQuery: mockSubmitQuery,
+      isMcpReady: true,
+    });
+    act(() => result.current.addMessage('/effort low'));
+    expect(mockSubmitQuery).not.toHaveBeenCalled();
+    expect(result.current.messageQueue).toEqual(['/effort low']);
+    rerender({ areCommandsReady: true });
+    await waitFor(() =>
+      expect(mockSubmitQuery).toHaveBeenCalledExactlyOnceWith('/effort low'),
+    );
   });
 
   it('should add messages to queue', async () => {

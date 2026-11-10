@@ -9,6 +9,7 @@ import { StreamingState } from '../types.js';
 
 export interface UseMessageQueueOptions {
   isConfigInitialized: boolean;
+  areCommandsReady?: boolean;
   streamingState: StreamingState;
   submitQuery: (query: string) => void;
   isMcpReady: boolean;
@@ -30,6 +31,7 @@ export interface UseMessageQueueReturn {
  */
 export function useMessageQueue({
   isConfigInitialized,
+  areCommandsReady = true,
   streamingState,
   submitQuery,
   isMcpReady,
@@ -70,6 +72,7 @@ export function useMessageQueue({
   useEffect(() => {
     if (
       isConfigInitialized &&
+      areCommandsReady &&
       streamingState === StreamingState.Idle &&
       !isCompressing &&
       isMcpReady &&
@@ -83,6 +86,7 @@ export function useMessageQueue({
     }
   }, [
     isConfigInitialized,
+    areCommandsReady,
     streamingState,
     isMcpReady,
     messageQueue,

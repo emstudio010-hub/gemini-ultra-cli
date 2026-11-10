@@ -36,6 +36,7 @@ import {
   MCPDiscoveryState,
   CoreToolCallStatus,
   formatLocalDateKey,
+  I18nManager,
 } from '@google/gemini-cli-core';
 import { useSessionStats } from '../contexts/SessionContext.js';
 import type {
@@ -111,9 +112,16 @@ export const useSlashCommandProcessor = (
   setCustomDialog: (dialog: React.ReactNode | null) => void,
 ) => {
   const session = useSessionStats();
-  const [commands, setCommands] = useState<readonly SlashCommand[] | undefined>(
-    undefined,
-  );
+  const [loadedCommands, setLoadedCommands] = useState<{
+    commands: readonly SlashCommand[];
+    configInitialized: boolean;
+  }>();
+  const commands = loadedCommands?.commands;
+  // A pre-initialization load may have failed to read config-backed builtins.
+  // Wait for the load associated with the current initialization state.
+  const areCommandsReady =
+    loadedCommands !== undefined &&
+    loadedCommands.configInitialized === isConfigInitialized;
   const [reloadTrigger, setReloadTrigger] = useState(0);
 
   const reloadCommands = useCallback(() => {
@@ -355,7 +363,10 @@ export const useSlashCommandProcessor = (
         return;
       }
 
-      setCommands(commandService.getCommands());
+      setLoadedCommands({
+        commands: commandService.getCommands(),
+        configInitialized: isConfigInitialized,
+      });
     })();
 
     return () => {
@@ -370,9 +381,6 @@ export const useSlashCommandProcessor = (
       overwriteConfirmed?: boolean,
       addToHistory: boolean = true,
     ): Promise<SlashCommandProcessorResult | false> => {
-      if (!commands) {
-        return false;
-      }
       if (typeof rawQuery !== 'string') {
         return false;
       }
@@ -380,6 +388,19 @@ export const useSlashCommandProcessor = (
       const trimmed = rawQuery.trim();
       if (!trimmed.startsWith('/') && !trimmed.startsWith('?')) {
         return false;
+      }
+      if (!commands || !areCommandsReady) {
+        addItem(
+          {
+            type: MessageType.INFO,
+            text: I18nManager.getInstance().t(
+              '命令仍在加载，请稍后重试。',
+              'Commands are still loading. Please try again shortly.',
+            ),
+          },
+          Date.now(),
+        );
+        return { type: 'handled' };
       }
 
       const {
@@ -765,6 +786,7 @@ export const useSlashCommandProcessor = (
       addItem,
       actions,
       commands,
+      areCommandsReady,
       commandContext,
       addMessage,
       setSessionShellAllowlist,
@@ -777,6 +799,7 @@ export const useSlashCommandProcessor = (
   return {
     handleSlashCommand,
     slashCommands: commands,
+    areCommandsReady,
     pendingHistoryItems,
     commandContext,
     confirmationRequest,

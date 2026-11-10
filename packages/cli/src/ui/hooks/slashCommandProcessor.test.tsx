@@ -174,6 +174,7 @@ describe('useSlashCommandProcessor', () => {
       builtinCommands?: SlashCommand[];
       fileCommands?: SlashCommand[];
       mcpCommands?: SlashCommand[];
+      isConfigInitialized?: boolean;
       setIsProcessing?: (isProcessing: boolean) => void;
       refreshStatic?: () => void;
       openAgentConfigDialog?: (
@@ -195,6 +196,7 @@ describe('useSlashCommandProcessor', () => {
     mockBuiltinLoadCommands.mockResolvedValue(Object.freeze(builtinCommands));
     mockFileLoadCommands.mockResolvedValue(Object.freeze(fileCommands));
     mockMcpLoadCommands.mockResolvedValue(Object.freeze(mcpCommands));
+    let configInitialized = options.isConfigInitialized ?? true;
 
     let result!: { current: ReturnType<typeof useSlashCommandProcessor> };
     let unmount!: () => void;
@@ -234,7 +236,7 @@ describe('useSlashCommandProcessor', () => {
             setText: vi.fn(),
           },
           new Map(), // extensionsUpdateState
-          true, // isConfigInitialized
+          configInitialized,
           vi.fn(), // setBannerVisible
           vi.fn(), // setCustomDialog
         ),
@@ -257,7 +259,8 @@ describe('useSlashCommandProcessor', () => {
         return result.current;
       },
       unmount,
-      rerender: async () => {
+      rerender: async (initialized?: boolean) => {
+        if (initialized !== undefined) configInitialized = initialized;
         rerender();
       },
     };
@@ -304,6 +307,35 @@ describe('useSlashCommandProcessor', () => {
   });
 
   describe('Initialization and Command Loading', () => {
+    it('waits for command discovery after config initialization and never falls through while loading', async () => {
+      const action = vi.fn();
+      const effort = createTestCommand({ name: 'effort', action });
+      const result = await setupProcessorHook({
+        builtinCommands: [effort],
+        isConfigInitialized: false,
+      });
+      let resolveLoad!: (commands: SlashCommand[]) => void;
+      mockBuiltinLoadCommands.mockImplementationOnce(
+        () =>
+          new Promise<SlashCommand[]>((resolve) => {
+            resolveLoad = resolve;
+          }),
+      );
+      await act(async () => result.rerender(true));
+      expect(result.current.areCommandsReady).toBe(false);
+      let loadingResult;
+      await act(async () => {
+        loadingResult = await result.current.handleSlashCommand('/effort low');
+      });
+      expect(loadingResult).toEqual({ type: 'handled' });
+      expect(action).not.toHaveBeenCalled();
+      await act(async () => resolveLoad([effort]));
+      await waitFor(() => expect(result.current.areCommandsReady).toBe(true));
+      await act(async () => {
+        await result.current.handleSlashCommand('/effort low');
+      });
+      expect(action).toHaveBeenCalledOnce();
+    });
     it('should initialize CommandService with all required loaders', async () => {
       await setupProcessorHook();
       expect(BuiltinCommandLoader).toHaveBeenCalledWith(mockConfig);
