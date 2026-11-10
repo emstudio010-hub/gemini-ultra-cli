@@ -11,13 +11,13 @@
 | P0     | 加载卡住时可取消、有超时和错误恢复          | 本地完成，持续观察   | 修复结束后保活不断重置收尾期限，安装HTTP场景6,511→2,046ms且usage保留；启动期斜杠等待当前命令表，E-033至038         |
 | P0     | `/language` 中文/英文选择与六档唯一推理强度 | 本地完成             | 显式切换、即时刷新、持久化；终端与浏览器中英文各六档，别名仍可输入                                                 |
 | P1     | 模型配置便捷可靠                            | 本地完成             | 新增不覆盖旧供应商、端点规范化、手动模型、密钥清空与掩码、外接供应商可独立初始化；真实供应商待验收                 |
-| P1     | 多 Agent 有界排队、取消与结果可见           | 本地及当前模型通过   | 队列/取消fixture通过；真实双代理、6次工具、7次请求0错误，E-016；长期稳定性仍待观察                                 |
+| P1     | 多 Agent 有界排队、取消与结果可见           | 基础链通过，长任务待修 | E-063真实三角色2完成1超时，状态准确；父模型INVALID_STREAM未交付报告，不能算完整任务通过                          |
 | P1     | 内置红队工作流                              | 本地分析闭环通过     | 临时授权下redteam-analyst真实分析生成样本并归档，E-016；复杂逆向与外部目标未验收                                   |
 | P2     | 演练台 Morphicons 交互图标与强度动效        | 本地完成             | 使用 Morphicons 2.0.2；浏览器确认六档、图标、移动布局、减少动态效果与隐藏暂停                                      |
-| P0     | 安装到 CLI 本身并生成可分发安装包           | 本地完成             | 当前preview.16，GitHub Windows工件与本机入口匹配；E-060；已安装协作状态与可读结果交接通过                           |
+| P0     | 安装到 CLI 本身并生成可分发安装包           | 本地完成             | 当前preview.17，GitHub Windows工件与本机入口匹配；E-065；实际fetch超时发起总结并保留TIMEOUT/FAILED与部分结果          |
 | P1     | 其他电脑可以开展本地逆向                    | 三平台原生基础链通过 | preview.8的Windows/Linux x64、macOS arm64真实rabin2读取/归档/查询通过E-022/027/029；复杂反编译与其他工具仍待补     |
-| P1     | GitHub 三平台分发验收                       | 已通过               | 最新preview.16 run42754395069三平台success，独立构建/打包/安装与工件核对；E-059                                    |
-| P1     | 真实供应商与长会话上线验收                  | 部分完成             | E-058报告自主落盘，但两子任务超时且480秒观察上限前无最终回复；正常完整结束仍未验收                                 |
+| P1     | GitHub 三平台分发验收                       | 已通过               | 最新preview.17 run42756282770三平台success，独立构建/打包/安装与工件核对；E-064                                    |
+| P1     | 真实供应商与长会话上线验收                  | 未完成               | E-063自行结束但返回INVALID_STREAM、空正文、无报告，进程错误地退出0；下一阶段修复失败状态与核对恢复重试             |
 
 ## 证据记录
 
@@ -281,4 +281,9 @@
 
 - E-061/F-020：DeadlineTimer的abort携带普通Error，fetch可原样拒绝该reason；旧runInternal只识别AbortError，跳过TIMEOUT阶段总结。四个定向对照修前1失败3通过，preview.16已安装实际fetch场景也不发总结请求、只返回普通错误（4,999ms，失败基线保留）。现在识别定时器的同一reason对象或AbortError，仍要求内部deadline已触发且非用户取消；不吞掉无关错误。总结保持TIMEOUT/FAILED和部分发现，不升级成功。14个恢复/超时相关用例通过。
 - E-062/F-021：可信程序化工具实例分支原先只排除complete_task，漏过Kind.Agent和update_topic，而名称分支已过滤。一个定向用例修前失败；现在共用过滤条件，保留浏览器显式实例与状态，不强制克隆。4个相关实例/声明/执行用例通过。此为递归与父会话控制规则的一致性修复，未宣称外部可利用漏洞。
-- 两个受影响文件严格ESLint通过；核心/CLI TypeScript在deadline修复后通过，最终发布构建会覆盖新增对象过滤改动。共18个选定用例，没有全量或冒烟。preview.17准备分发，八文件真实三角色任务观察中，12分钟外部观察窗口不作旧版本速度对照。整体目标active。
+- 两个受影响文件严格ESLint通过；核心/CLI TypeScript在deadline修复后通过，最终三平台构建亦完成新增对象过滤改动的类型构建。共18个选定用例，没有全量或冒烟。
+- E-063：preview.17开发bundle、当前Ess/DeepSeek、八份只读副本、三个产品Agent/并发2，633,710ms自行结束，未触及720秒观察器。researcher/redteam-analyst GOAL，reviewer TIMEOUT，父代理准确收到2 completed/1 failed/0 cancelled；该超时的总结没有成功捕获。父模型最终INVALID_STREAM（只有思考、无最终正文），无报告、整体失败；CLI却退出0（F-022待修）。35次API请求、57工具调用，均有最终统计；不作旧版速度对照，不把退出0当成功。
+- 会话、源码快照、原失败结果和一致性SQLite备份已保留；笔记在清理前查询成功，保存库亦重开查到note表及一条记录。不覆盖preview.16漏WAL的旧证据。下一阶段先用fixture追踪错误退出码、核对已有thinking-only重试/nudge路径，不重跑整套付费任务。
+- E-064：[preview.17运行42756282770](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/42756282770)三平台completed/success，功能提交1b52d4217e1d2fb763d4645f69b77921fea92e7e。三个包版本/安装报告/SHA-256、六rg hash/0755核对通过。
+- E-065：本机双命令preview.17、入口与Windows CI包一致。实际fetch等待响应头直到deadline的场景得到5次loopback请求、9,818ms、退出0，发起总结且保留TIMEOUT/FAILED与完整部分发现。最初脚本将JSON包装的部分结果误按裸多行文本匹配，原false结果保留；单独解码同一捕获的内置response结构后所有语义断言通过，没有重跑CLI或模型。不是新一轮真实模型验证。
+- Windows包SHA-256 `55b704db9c4a59a07fe1ec3cbd81ca8aacc1a1dde6216168511240609c9b598e`；Linux `3b29d231773c154b4a12afc12c9143c0f73225927dd4ad2584cbae23b367eaa0`；macOS `97b464dd6cacbe03905ade045672d4d7e084753ba02aa0e9d5642324877bc986`。本机已有缓存offline安装26秒，不代表无缓存新电脑离线安装。整体目标active，完整上线仍未验收。
