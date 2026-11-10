@@ -17,6 +17,8 @@ import {
   closeWorkflowBudget,
   availableAgentModels,
   setWorkflowRoleModel,
+  agentWorktreeCommand,
+  assertWorkflowBudgetOwnership,
   type AgentWorkflow,
   type AgentWorkflowMode,
 } from '@google/gemini-cli-core';
@@ -181,6 +183,30 @@ function workflowCommand(
               'A workflow is running in this project; inspect its status or cancel it.',
             ),
           );
+        if (operation === 'workspace') {
+          assertWorkflowBudgetOwnership(root, record);
+          const state = agentWorktreeCommand(
+            root,
+            record.id,
+            config.getTargetDir(),
+            args,
+            record.reports.length === 0 && record.phase !== 'completed',
+            record.phase === 'completed',
+          );
+          if (args.trim() === 'on') {
+            record.worktreeRequired = true;
+            saveAgentWorkflow(root, record);
+          }
+          info(
+            state
+              ? JSON.stringify(state, null, 2)
+              : i18n.t(
+                  `当前使用共享工作区。可在启动前用 /${mode} workspace on 启用隔离。`,
+                  `Using the shared workspace. Enable isolation with /${mode} workspace on before starting.`,
+                ),
+          );
+          return;
+        }
         if (record.phase === 'completed') {
           info(
             i18n.t(
@@ -322,6 +348,7 @@ function workflowCommand(
   const operations = [
     'status',
     ...(mode === 'grill-me' ? [] : ['model']),
+    ...(mode === 'grill-me' ? [] : ['workspace']),
     ...(mode === 'boost' ? ['prepare'] : []),
     'budget',
     'resume',
@@ -346,6 +373,10 @@ function workflowCommand(
           status: ['查看阶段与里程碑', 'Show stages and milestones'],
           budget: ['设置累计执行预算', 'Set cumulative execution limits'],
           model: ['设置协作角色模型', 'Choose collaboration role models'],
+          workspace: [
+            '管理隔离工作树与成果补丁',
+            'Manage isolated worktree and result patch',
+          ],
           prepare: [
             '先创建任务，配置模型后再开始',
             'Prepare a task before choosing models and starting',
@@ -361,7 +392,13 @@ function workflowCommand(
         return I18nManager.getInstance().t(...labels[name]);
       },
       kind: CommandKind.BUILT_IN,
-      autoExecute: !['budget', 'cancel', 'model', 'prepare'].includes(name),
+      autoExecute: ![
+        'budget',
+        'cancel',
+        'model',
+        'prepare',
+        'workspace',
+      ].includes(name),
       isSafeConcurrent: name === 'status' || name === 'cancel',
       action: (context, args) => action(context, args, name),
     })),

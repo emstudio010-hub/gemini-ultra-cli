@@ -10,6 +10,12 @@ import { lock, checkSync } from 'proper-lockfile';
 import { z } from 'zod';
 import { latestSwarm } from './swarm.js';
 import {
+  inAgentWorktree,
+  readAgentWorktree,
+  acceptReviewedAgentWorktree,
+  agentWorktreeTree,
+} from './agentWorktree.js';
+import {
   agentRoleModelsSchema,
   normalizeAgentModel,
   workflowRoleSchema,
@@ -61,6 +67,7 @@ const workflowSchema = workflowPlanSchema.extend({
   recordUnavailable: z.boolean().optional(),
   recordRecoveryPath: z.string().optional(),
   roleModels: agentRoleModelsSchema.default({}),
+  worktreeRequired: z.boolean().default(false),
   updatedAt: z.string(),
   stage: z.string().default(''),
   reports: z
@@ -118,6 +125,7 @@ export function agentWorkflowSummary(
     recordPath: workflowPath(projectTempDir, record.id),
     reportCount: record.reports.length,
     roleModels: record.roleModels,
+    worktree: readAgentWorktree(projectTempDir, record.id),
     recentReports: record.reports.slice(-4).map((report) => ({
       ...report,
       text: report.text.slice(0, 4000),
@@ -431,10 +439,16 @@ export async function runAgentWorkflow(
             result = await withAgentModel(
               current.roleModels[agent],
               () =>
-                runAgent(
-                  agent,
-                  `${context()}\n\nAssignment: ${instruction}`,
-                  combined,
+                inAgentWorktree(
+                  projectTempDir,
+                  id,
+                  (directory) =>
+                    runAgent(
+                      agent,
+                      `${directory ? `ISOLATED TASK WORKTREE: ${directory}. Resolve all assigned repository files relative to this directory. Do not edit the source checkout. Dependencies ignored by Git are not copied. This is a working-directory boundary, not an OS sandbox.\n` : ''}${context()}\n\nAssignment: ${instruction}`,
+                      combined,
+                    ),
+                  current.worktreeRequired,
                 ),
               (models) => {
                 modelsUsed = models;
@@ -539,6 +553,7 @@ export async function runAgentWorkflow(
           milestone.completed = true;
           persist();
         }
+        const finalReviewTree = agentWorktreeTree(projectTempDir, id);
         const audit = await stage(
           'workflow-auditor',
           'final audit',
@@ -550,6 +565,7 @@ export async function runAgentWorkflow(
             'Final independent audit did not accept the deliverable.',
           );
         }
+        acceptReviewedAgentWorktree(projectTempDir, id, finalReviewTree);
         current.phase = 'completed';
         current.stage = 'completed';
         persist();

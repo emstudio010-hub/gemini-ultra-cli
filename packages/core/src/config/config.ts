@@ -178,6 +178,7 @@ import type { AnyToolInvocation, AnyDeclarativeTool } from '../tools/tools.js';
 import { WorkspaceContext } from '../utils/workspaceContext.js';
 import {
   getWorkspaceContextOverride,
+  getAgentWorkingDirectory,
   hasScopedAutoMemoryExtractionWriteAccess,
   hasScopedMemoryInboxAccess,
 } from './scoped-config.js';
@@ -2235,11 +2236,11 @@ export class Config implements McpContext, AgentLoopContext {
   }
 
   getTargetDir(): string {
-    return this.targetDir;
+    return getAgentWorkingDirectory() ?? this.targetDir;
   }
 
   getProjectRoot(): string {
-    return this.targetDir;
+    return getAgentWorkingDirectory() ?? this.targetDir;
   }
 
   /**
@@ -3084,7 +3085,7 @@ export class Config implements McpContext, AgentLoopContext {
   }
 
   getWorkingDir(): string {
-    return this.cwd;
+    return getAgentWorkingDirectory() ?? this.cwd;
   }
 
   getBugCommand(): BugCommandSettings | undefined {

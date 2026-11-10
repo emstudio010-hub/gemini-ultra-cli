@@ -16,9 +16,9 @@
 | P1     | Swarm具名成员、共享留言与实时看板           | 三平台原生链通过         | E-120/122/123：@提及唤醒、事件等待、状态/完成门控和终端刷新/Esc；真实供应商与隔离工作树待做                        |
 | P1     | 内置红队工作流                              | 本地分析闭环通过         | 临时授权下redteam-analyst真实分析生成样本并归档，E-016；复杂逆向与外部目标未验收                                   |
 | P2     | 演练台 Morphicons 交互图标与强度动效        | 本地完成                 | 使用 Morphicons 2.0.2；浏览器确认六档、图标、移动布局、减少动态效果与隐藏暂停                                      |
-| P0     | 安装到 CLI 本身并生成可分发安装包           | 本地完成                 | 当前preview.38 Windows CI包，424文件匹配；E-148/149；角色/具名独立模型                                      |
+| P0     | 安装到 CLI 本身并生成可分发安装包           | 本地完成                 | 当前preview.38 Windows CI包，424文件匹配；E-148/149；角色/具名独立模型                                             |
 | P1     | 其他电脑可以开展本地逆向                    | 三平台原生静态链通过     | preview.28的Windows/Linux x64、macOS arm64实际r2函数/指令/引用及SQLite归档通过E-107/111/112；复杂反编译待补        |
-| P1     | GitHub 三平台分发验收                       | 已通过至preview.38       | preview.38/run42903510083三平台success；Swarm/工作流×两入口多模型路由和安装身份通过E-148/149                          |
+| P1     | GitHub 三平台分发验收                       | 已通过至preview.38       | preview.38/run42903510083三平台success；Swarm/工作流×两入口多模型路由和安装身份通过E-148/149                       |
 | P1     | 真实供应商与长会话上线验收                  | 未完成                   | E-124真实Swarm报告未交付，隔离8192两次length，观察者停下第三轮；原失败保留，完整自主交付仍未通过                   |
 
 ## 证据记录
@@ -556,62 +556,101 @@
 ## 2026-11-11 Swarm原生累计预算
 
 - E-128/F-034：默认120次模型调度、2次失败轮次、40次成员唤醒，所有名字/恢复共用持久化计数；保留原20轮/成员和10分钟/轮。触限blocked并中止成员，主/子/辅助生成入口预留额度，不伪装HTTP重试/费用统计。
-- 本地/swarm budget修改数值，不发模型请求、不清零、不作为模型工具；提高后resume，状态和板显示额度与停止原因。取消释放本会话限制，恢复旧任务仍查旧计数。
-- 17 core+2 CLI定向用例、严格lint/type构建通过；源码bundle实际native故障链3个loopback请求/1816ms，CLI自行退出1，blocked/paused/具体错误保留。第1请求创建隔离状态，后2请求计入任务额度；超额前置拒绝。没有付费调用，不代表真实任务完成。
-- preview.33准备分发；WI-063 Swarm本地预算实现，Teamwork/Boost独立请求累计预算后续补齐，不把任意自然语言轮数宣称已强制。WI-054真实自主交付/引用与WI-056复杂逆向未完成，整体goal active。
+- 本地/swarm
+  budget修改数值，不发模型请求、不清零、不作为模型工具；提高后resume，状态和板显示额度与停止原因。取消释放本会话限制，恢复旧任务仍查旧计数。
+- 17 core+2
+  CLI定向用例、严格lint/type构建通过；源码bundle实际native故障链3个loopback请求/1816ms，CLI自行退出1，blocked/paused/具体错误保留。第1请求创建隔离状态，后2请求计入任务额度；超额前置拒绝。没有付费调用，不代表真实任务完成。
+- preview.33准备分发；WI-063
+  Swarm本地预算实现，Teamwork/Boost独立请求累计预算后续补齐，不把任意自然语言轮数宣称已强制。WI-054真实自主交付/引用与WI-056复杂逆向未完成，整体goal
+  active。
 
 - E-129：preview.33源8ede6b1e45c5749f622f17c3ac56867c3b9160a4/run42887993551三平台success，工件版本/SHA/安装/六rg身份核对。每平台原生正常20请求链及新增预算触限3请求链通过；预算场景CLI自行退出1、blocked/paused，非业务交付成功。提前工件核对的ENOENT日志保留，待原下载结束后通过，未重启CI。
-- E-130：本机offline缓存安装7240ms/退出0，双命令preview.33，424包内文件逐一匹配Windows CI包；旧包保留。不重跑相同fixture，无付费调用，未改真实供应商/数据库/逆向工具。
-- WI-063 Swarm任务预算交付；WI-064后续统一Teamwork/Boost请求累计额度与恢复门控。WI-054真实完整自主交付/引用、WI-056复杂逆向和隔离工作树/成员独立模型仍未完成。目标active，Obsidian/源码/工程交接同步，不合并master/正式发布。
+- E-130：本机offline缓存安装7240ms/退出0，双命令preview.33，424包内文件逐一匹配Windows
+  CI包；旧包保留。不重跑相同fixture，无付费调用，未改真实供应商/数据库/逆向工具。
+- WI-063
+  Swarm任务预算交付；WI-064后续统一Teamwork/Boost请求累计额度与恢复门控。WI-054真实完整自主交付/引用、WI-056复杂逆向和隔离工作树/成员独立模型仍未完成。目标active，Obsidian/源码/工程交接同步，不合并master/正式发布。
 
 ## 2026-11-11 工作流累计预算
 
 - E-131/F-035：修复Teamwork/Boost恢复后重新获得两轮实施额度；独立预算账本默认240次模型调度、4个失败阶段、每里程碑2次累计实施。主/子/辅助共享入口，状态/报告分开保存防止并行覆盖，取消不清零，完成关闭绑定；旧报告迁移可观察到的轮数与失败，历史请求量不伪造。
-- /boost budget、/teamwork budget及访谈模式本地额度命令，不调用模型；提高上限后显式resume。原生跨模式任务互斥，活拥有者在修改前拒绝。预算触限与用户取消区分，原诊断保留。
+- /boost budget、/teamwork
+  budget及访谈模式本地额度命令，不调用模型；提高上限后显式resume。原生跨模式任务互斥，活拥有者在修改前拒绝。预算触限与用户取消区分，原诊断保留。
 - 28项相关core和4项CLI定向用例、受影响lint/type/格式通过；源码正常五阶段12请求/2064ms/退出0，预算3请求/1825ms/退出1，无writer/工件，blocked/paused且部分报告保留。全程loopback，无付费/全量/冒烟。
-- WI-064本地实现完成，preview.34准备分发安装。WI-065预算状态损坏的可取消恢复继续；WI-054真实无人介入交付/引用、WI-056复杂逆向及隔离工作树/成员独立模型仍未完成。goal active。
+- WI-064本地实现完成，preview.34准备分发安装。WI-065预算状态损坏的可取消恢复继续；WI-054真实无人介入交付/引用、WI-056复杂逆向及隔离工作树/成员独立模型仍未完成。goal
+  active。
 
 - E-132：preview.34源5f37e00a2de5f303b03e3909b44200bf56d95af1/run42891302374三平台completed/success；工件版本/SHA/安装/六rg身份与权限核对通过。每平台Swarm正常20请求/预算3请求、工作流正常12请求/预算3请求通过；正常账本closed/10次成员调度，触限blocked/paused/2次累计调度，CLI自行退出1。仅模型fixture，不是实战交付。
-- E-133：offline缓存安装7038ms/退出0，双命令preview.34，424包内文件逐一匹配Windows CI包；旧包保留，无付费/全量/冒烟。WI-064交付，整体goal active。
+- E-133：offline缓存安装7038ms/退出0，双命令preview.34，424包内文件逐一匹配Windows
+  CI包；旧包保留，无付费/全量/冒烟。WI-064交付，整体goal active。
 - E-134/F-036：生成的隔离坏JSON账本会同时阻断cancel与调度，原ready记录和坏字节保留、0模型请求，证据workflow-budget-corruption-before.json。WI-065下一步允许保留坏账本后显式取消，并防止未知旧用量通过resume静默重置；尚未修复。WI-054真实自主交付/引用、WI-056复杂逆向及隔离worktree/成员独立模型继续。
 
 ## 2026-11-11 工作流损坏预算恢复
 
 - E-135/F-036：显式cancel保存坏预算/坏绑定字节；工作流记录独立保存跟踪版本/拥有进程/未知用量标记。跟踪账本缺失或关键计数字段缺失不再按新预算补0。未知用量在状态中为null，旧任务不能resume或调大额度；健康账本绑定修复不丢累计值，I/O错误不被吞掉。
-- E-136/F-037：非交互本地斜杠命令不再fall through发给模型；真实输入错误使用既有退出42。23项core+2项选定headless检查、lint/type通过；实际CLI取消0/恢复42/正常会话0，两坏文件原字节保留，全场景2个loopback请求/7162ms，无真实调用。
-- 初辅助断言误期望FatalInputError退出1；保留原false并按源码既有42重评同一记录，不重复场景。preview.35准备分发安装，WI-065本地完成；WI-066继续Swarm members.json/绑定和原workflow记录本体损坏恢复。真实自主交付/引用、复杂逆向、隔离工作树和成员模型继续，goal active。
+- E-136/F-037：非交互本地斜杠命令不再fall
+  through发给模型；真实输入错误使用既有退出42。23项core+2项选定headless检查、lint/type通过；实际CLI取消0/恢复42/正常会话0，两坏文件原字节保留，全场景2个loopback请求/7162ms，无真实调用。
+- 初辅助断言误期望FatalInputError退出1；保留原false并按源码既有42重评同一记录，不重复场景。preview.35准备分发安装，WI-065本地完成；WI-066继续Swarm
+  members.json/绑定和原workflow记录本体损坏恢复。真实自主交付/引用、复杂逆向、隔离工作树和成员模型继续，goal
+  active。
 
 - E-137：preview.35源510c8657ffe80082f041ec3d1739a03604aaf6d1/run42894747215三平台completed/success；工件版本/SHA/安装和六rg身份/权限核对，原生Swarm/工作流正常及预算链通过，新增坏状态恢复链每平台2个loopback请求，取消0/恢复42/普通会话0，坏文件字节保留，旧用量未知且任务cancelled。
-- E-138：offline缓存安装7039ms/退出0；两个命令preview.35，424文件逐一匹配Windows CI包，旧包保留，未重复fixture/付费任务。WI-065交付，goal active。
+- E-138：offline缓存安装7039ms/退出0；两个命令preview.35，424文件逐一匹配Windows
+  CI包，旧包保留，未重复fixture/付费任务。WI-065交付，goal active。
 - E-139/F-038：Swarm隔离状态2次预留后缺requests字段会读成0，非法字段使取消被拒绝，0模型请求，原坏字节未变。证据swarm-state-corruption-before.json。WI-066继续Swarm坏状态/绑定取消和计数严格读取，再处理workflow记录本体损坏；真实自主交付/引用、复杂逆向、工作树/独立模型仍未完成。
 
 ## 2026-11-11 Swarm计数与损坏状态恢复
 
-- E-140/F-038：budget存在必须有六个合法字段，缺计数/错误UUID/超大或非法状态拒绝分发；独立owner与budgetVersion防止跟踪预算消失时按旧格式补0。明确/swarm cancel ID绕过坏索引，保存未知标记后备份原状态与索引，原板不改；未知旧任务不能resume/调大预算，摘要null/看板未知。
-- 活拥有者拒绝，本进程活成员先请求中止并收尾后再取消恢复；健康成员仅索引坏时保留已知计数。旧版JSON可提取合法ownerPid，所有拥有者信息丢失则拒绝猜测。21相关core+3 CLI、lint/type通过；实际CLI恢复链7227ms/2个loopback请求，cancel0/resume42/普通会话0，无真实调用/交付工件。
-- WI-066本地完成，preview.36准备分发安装；WI-067继续workflow记录本体损坏恢复。真实自主交付/引用、复杂逆向、隔离工作树/成员模型仍待完成，goal active。
+- E-140/F-038：budget存在必须有六个合法字段，缺计数/错误UUID/超大或非法状态拒绝分发；独立owner与budgetVersion防止跟踪预算消失时按旧格式补0。明确/swarm
+  cancel
+  ID绕过坏索引，保存未知标记后备份原状态与索引，原板不改；未知旧任务不能resume/调大预算，摘要null/看板未知。
+- 活拥有者拒绝，本进程活成员先请求中止并收尾后再取消恢复；健康成员仅索引坏时保留已知计数。旧版JSON可提取合法ownerPid，所有拥有者信息丢失则拒绝猜测。21相关core+3
+  CLI、lint/type通过；实际CLI恢复链7227ms/2个loopback请求，cancel0/resume42/普通会话0，无真实调用/交付工件。
+- WI-066本地完成，preview.36准备分发安装；WI-067继续workflow记录本体损坏恢复。真实自主交付/引用、复杂逆向、隔离工作树/成员模型仍待完成，goal
+  active。
 
 - E-141：preview.36源5c3ac52db14af282852ee4e5fb04cd3859be6554/run42897457849三平台completed/success；包版本/SHA/安装和六rg身份/权限核对。Swarm正常20请求/预算3/恢复2，工作流正常12/预算3/恢复2通过；新增Swarm取消0/恢复42/普通会话0，坏成员/索引字节与板保留，只loopback模型。
-- E-142：offline缓存安装6932ms/退出0；双命令preview.36，424文件逐一匹配Windows CI包，旧包保留。未重复相同fixture/付费任务，WI-066交付，goal active。
+- E-142：offline缓存安装6932ms/退出0；双命令preview.36，424文件逐一匹配Windows
+  CI包，旧包保留。未重复相同fixture/付费任务，WI-066交付，goal active。
 - E-143/F-039：生成的坏workflow记录本体使cancel和无关teamwork查询失败，原预算/拥有者完整；原字节保留/0模型请求，证据workflow-record-corruption-before.json。WI-067继续指定ID保留取消与坏历史记录查询隔离。真实自主交付/引用、复杂逆向、隔离worktree/成员独立模型继续。
 
 ## 2026-11-11 原工作流记录恢复
 
-- E-144/F-039：坏历史记录不再阻断其他模式查询；CLI提示ID。同模式当前坏任务禁止静默回落，旧任务恢复不能覆盖其他活绑定。/boost|teamwork|grill-me cancel ID绕过latest先核对独立账本的模式/拥有者；保存recordUnavailable标记再备份原记录，cancelled占位不伪造原需求/报告/完成。
-- 已知累计预算保留，原记录不可用的旧任务禁止resume或新增额度；运行中保存先核对原磁盘记录，调查期损坏不会被旧内存覆盖，成员收尾后再恢复。28相关core+4 CLI、lint/type/格式通过；实际CLI恢复链7599ms/2个loopback请求，cancel0/resume42/普通会话0；2调度/1失败/1实施的fixture预置值未重置，无真实调用/业务交付。
-- WI-067本地完成，preview.37准备分发安装。WI-068下一步推进成员独立模型选择与配置便利性，工作树隔离仍保留；真实自主交付/引用、复杂逆向继续，goal active。
+- E-144/F-039：坏历史记录不再阻断其他模式查询；CLI提示ID。同模式当前坏任务禁止静默回落，旧任务恢复不能覆盖其他活绑定。/boost|teamwork|grill-me
+  cancel
+  ID绕过latest先核对独立账本的模式/拥有者；保存recordUnavailable标记再备份原记录，cancelled占位不伪造原需求/报告/完成。
+- 已知累计预算保留，原记录不可用的旧任务禁止resume或新增额度；运行中保存先核对原磁盘记录，调查期损坏不会被旧内存覆盖，成员收尾后再恢复。28相关core+4
+  CLI、lint/type/格式通过；实际CLI恢复链7599ms/2个loopback请求，cancel0/resume42/普通会话0；2调度/1失败/1实施的fixture预置值未重置，无真实调用/业务交付。
+- WI-067本地完成，preview.37准备分发安装。WI-068下一步推进成员独立模型选择与配置便利性，工作树隔离仍保留；真实自主交付/引用、复杂逆向继续，goal
+  active。
 
 - E-145：preview.37源7d56d192195a3bb50cd16a0307653607ebf6f3a2/run42899518945三平台completed/success，工件版本/SHA/安装与六rg身份/权限核对；Swarm与工作流正常/预算/恢复链均通过，新增原记录恢复2个loopback请求，cancel0/resume42/普通会话0，已知2调度/1失败/1实施保持原值，原坏记录/绑定字节保留。
-- E-146：offline缓存安装7153ms/退出0；双命令preview.37，424文件逐一匹配Windows CI包，旧包保留，不重复fixture/真实付费任务。WI-067交付，goal active。
+- E-146：offline缓存安装7153ms/退出0；双命令preview.37，424文件逐一匹配Windows
+  CI包，旧包保留，不重复fixture/真实付费任务。WI-067交付，goal active。
 - WI-068下一步成员独立模型与配置便利性：ProviderManager已有provider:model路由，LocalAgentExecutor通过alias/overrideScope解析；需调用内隔离，不能并发改全局activeModel/注册表别名，并覆盖session/subagent两入口与预算。尚未实现；隔离工作树、真实自主交付/引用、复杂逆向继续。
 
 ## 2026-11-11 协作成员独立模型
 
 - E-147/WI-068：调用内AsyncLocalStorage路由覆盖原生执行器/压缩容量/最终生成器，两种本地调用入口均可分配不同provider:model或native:gemini模型；不改全局activeModel/注册表别名/供应商文件。中文名称、角色/具名预设与inherit，运行中禁止改模；显式成员错误不触发全局换模，丢失供应商明确失败。
-- /swarm prepare和/boost prepare先零模型创建任务；model命令显示安全本地目录，配置角色/预定@成员，resume再开始。角色/成员与阶段报告保留modelsUsed实际分发尝试路由，共享累计预算，权限scope不变。
-- 23相关core+10CLI、严格lint/type通过；源码bundle Swarm/工作流×两调用入口四链20/20/12/12请求均通过，三个不同loopback供应商路径/模型ID、实际读写/独立审查、主路由不变。最后补齐prepare/具名预设/429隔离由定向用例和最终CI核对，未重复源码四链；无付费/全量/冒烟。
-- preview.38准备分发/安装；WI-068本地完成，WI-069下一步可选Git工作树隔离/回收/整合。真实自主交付/引用、复杂逆向继续，goal active。
+- /swarm prepare和/boost
+  prepare先零模型创建任务；model命令显示安全本地目录，配置角色/预定@成员，resume再开始。角色/成员与阶段报告保留modelsUsed实际分发尝试路由，共享累计预算，权限scope不变。
+- 23相关core+10CLI、严格lint/type通过；源码bundle
+  Swarm/工作流×两调用入口四链20/20/12/12请求均通过，三个不同loopback供应商路径/模型ID、实际读写/独立审查、主路由不变。最后补齐prepare/具名预设/429隔离由定向用例和最终CI核对，未重复源码四链；无付费/全量/冒烟。
+- preview.38准备分发/安装；WI-068本地完成，WI-069下一步可选Git工作树隔离/回收/整合。真实自主交付/引用、复杂逆向继续，goal
+  active。
 
 - E-148：preview.38源a823805998c3c9a300f43fca37346d33661ee041/run42903510083三平台completed/success；包版本/SHA/安装报告/六rg身份权限通过。最终源码四条原生多模型链Swarm20/20、工作流12/12均退出0，两入口实际命中研究/实施/审查不同loopback路径与模型ID，主路由保持；modelsUsed与18/10累计预算核对，既有预算恢复链通过。
-- E-149：offline缓存安装7081ms/退出0；双命令preview.38，424文件匹配Windows CI包，旧包保留，不重复fixture/付费任务。WI-068交付，goal active。
+- E-149：offline缓存安装7081ms/退出0；双命令preview.38，424文件匹配Windows
+  CI包，旧包保留，不重复fixture/付费任务。WI-068交付，goal active。
 - WI-069下一步可选Git工作树隔离/结果整合：scoped-config只有额外目录上下文覆盖，不等于cwd/项目根隔离，需同时核对shell/file工具路径、预算归属、清理与整合冲突、保留未提交变更。真实自主交付/引用、复杂逆向仍未完成。
+
+## 2026-11-11 协作任务 Git 工作树
+
+- E-150/WI-069：Swarm/Boost/Teamwork 新增 workspace
+  on|status|export|apply|remove。私有索引捕获工作文件及未忽略未跟踪内容，原暂存区/HEAD不变；成员调用内同时改变真实文件根、WorkspaceContext及shell
+  cwd，storage/预算归属不变。任务级共享一份隔离工作树，writer/verifier仍串行，不是OS沙箱或每成员并行分支。
+- 独立审查前后及完成前核对tree，缺必需清单拒绝回落原目录；只有completed且当前成果经审查才允许本地apply。先check后整体apply，不改source
+  index，冲突保留；清理无force，保留补丁及状态，cleanupHead支持拒绝后的重试。64MiB、submodule、符号链接目录有明确边界，ignored依赖不复制。
+- 24相关core、严格lint/type/格式通过；最后审查者选择收尾后Swarm7项通过。源码CLI工作树链21个loopback请求/22254ms/退出0，实际shell
+  cwd和文件工具、独立审查、回写与回收通过；prepare/配置/回写不加模型请求，原staged/unstaged/untracked及index保持。最终补齐由CI同源包核对，不重跑相同源码链、付费任务或全量/冒烟。
+- WI-069本地完成，preview.39准备三平台及安装。本机仍preview.38；真实自主交付/引用、复杂逆向继续。docs/ultra-agent-worktree-handoff.md为本阶段交接；goal
+  active，仅codex分支，不合并master/正式Release。

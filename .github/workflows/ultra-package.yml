@@ -48,6 +48,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node scripts/verify-ultra-swarm.mjs $entry artifacts/ultra-release/swarm-model-session-verification.json models-session
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/verify-ultra-swarm.mjs $entry artifacts/ultra-release/worktree-verification.json worktree
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node scripts/verify-ultra-swarm.mjs $entry artifacts/ultra-release/swarm-budget-verification.json budget
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node scripts/verify-ultra-swarm.mjs $entry artifacts/ultra-release/swarm-recovery-verification.json recovery
@@ -77,6 +79,8 @@ jobs:
             artifacts/ultra-release/swarm-verification-output.txt
             artifacts/ultra-release/swarm-model-session-verification.json
             artifacts/ultra-release/swarm-model-session-verification-output.txt
+            artifacts/ultra-release/worktree-verification.json
+            artifacts/ultra-release/worktree-verification-output.txt
             artifacts/ultra-release/swarm-budget-verification.json
             artifacts/ultra-release/swarm-budget-verification-output.txt
             artifacts/ultra-release/swarm-recovery-verification.json

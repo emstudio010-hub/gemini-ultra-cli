@@ -6,13 +6,14 @@ import process from 'node:process';
 import console from 'node:console';
 import { Buffer } from 'node:buffer';
 import { setTimeout, clearTimeout } from 'node:timers';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { createServer } from 'node:http';
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 
 const entry = path.resolve(process.argv[2]);
 const reportPath = path.resolve(process.argv[3]);
 const budgetMode = process.argv[4] === 'budget';
+const worktreeMode = process.argv[4] === 'worktree';
 const modelMode = ['models', 'models-session'].includes(process.argv[4]);
 const sessionMode = process.argv[4] === 'models-session';
 const recoveryMode = process.argv[4] === 'recovery';
@@ -29,8 +30,8 @@ const profile = path.join(scratch, 'profile');
 const workspace = path.join(scratch, 'workspace');
 fs.mkdirSync(path.join(profile, '.gemini'), { recursive: true });
 fs.mkdirSync(workspace);
-const source = path.join(workspace, 'seed.txt');
-const artifact = path.join(workspace, 'deliverable.txt');
+let source = path.join(workspace, 'seed.txt');
+let artifact = path.join(workspace, 'deliverable.txt');
 fs.writeFileSync(source, 'Required deliverable: answer=42\n');
 fs.writeFileSync(
   path.join(profile, '.gemini/settings.json'),
@@ -43,7 +44,7 @@ fs.writeFileSync(
       : {}),
   }),
 );
-const id = randomUUID();
+let id = randomUUID();
 const requests = [];
 const failures = [];
 let swarmDirectory;
@@ -278,17 +279,30 @@ const server = createServer(async (req, res) => {
                   'Seed independently inspected. Required content is answer=42.',
               });
     } else if (role === 'coder') {
-      message =
-        results.length === 0
-          ? call('write_file', { file_path: artifact, content: 'answer=42\n' })
-          : results.length === 1
-            ? call('post_swarm_message', {
-                text: '@coordinator deliverable.txt written; ready for independent verification.',
+      if (worktreeMode && results.length === 0) {
+        message = call('run_shell_command', {
+          command:
+            "node -e \"require('fs').writeFileSync('shell-cwd.txt',process.cwd())\"",
+          description: 'Record actual isolated shell cwd',
+          is_background: false,
+        });
+      } else {
+        const count = results.length - (worktreeMode ? 1 : 0);
+        message =
+          count === 0
+            ? call('write_file', {
+                file_path: artifact,
+                content: 'answer=42\n',
               })
-            : complete({
-                response:
-                  'Created the assigned artifact; no unrelated changes.',
-              });
+            : count === 1
+              ? call('post_swarm_message', {
+                  text: '@coordinator deliverable.txt written; ready for independent verification.',
+                })
+              : complete({
+                  response:
+                    'Created the assigned artifact; no unrelated changes.',
+                });
+      }
     } else {
       assert.ok(!tools.includes('write_file'));
       if (results.length === 0)
@@ -416,6 +430,102 @@ try {
   ])
     delete env[key];
   const started = Date.now();
+  const localRuns = [];
+  const localCommand = async (input) => {
+    child = spawn(
+      process.execPath,
+      [
+        entry,
+        '-y',
+        '-m',
+        'fixture-model',
+        '-p',
+        input,
+        '--output-format',
+        'json',
+      ],
+      {
+        cwd: workspace,
+        env,
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
+    let output = '';
+    child.stdout.on('data', (chunk) => {
+      output += chunk;
+    });
+    child.stderr.on('data', (chunk) => {
+      output += chunk;
+    });
+    const commandTimer = setTimeout(() => {
+      timedOut = true;
+      child.kill();
+    }, 60000);
+    let code;
+    try {
+      code = await new Promise((resolve, reject) => {
+        child.once('error', reject);
+        child.once('close', resolve);
+      });
+    } finally {
+      clearTimeout(commandTimer);
+    }
+    localRuns.push({
+      input,
+      exitCode: code,
+      output,
+      requestCount: requests.length,
+    });
+    assert.equal(code, 0, output);
+  };
+  let worktreeState;
+  let originalIndexHash;
+  if (worktreeMode) {
+    const git = (args) =>
+      execFileSync('git', args, {
+        cwd: workspace,
+        windowsHide: true,
+        encoding: 'utf8',
+      });
+    git(['init', '--quiet']);
+    git(['config', 'user.name', 'Fixture']);
+    git(['config', 'user.email', 'fixture@invalid']);
+    git(['config', 'core.autocrlf', 'false']);
+    git(['add', '.']);
+    git(['commit', '--quiet', '-m', 'fixture']);
+    fs.writeFileSync(path.join(workspace, 'local.txt'), 'user staged\n');
+    git(['add', 'local.txt']);
+    fs.writeFileSync(path.join(workspace, 'local.txt'), 'user unstaged\n');
+    fs.writeFileSync(
+      path.join(workspace, 'user-untracked.txt'),
+      'user untracked\n',
+    );
+    originalIndexHash = createHash('sha256')
+      .update(fs.readFileSync(path.join(workspace, '.git/index')))
+      .digest('hex');
+    await localCommand(
+      '/swarm prepare Deliver answer=42 in an isolated task worktree.',
+    );
+    const temporaryRoot = path.join(profile, '.gemini/tmp');
+    const project = fs
+      .readdirSync(temporaryRoot, { withFileTypes: true })
+      .find((item) => item.isDirectory());
+    const taskRoot = path.join(temporaryRoot, project.name);
+    id = JSON.parse(
+      fs.readFileSync(path.join(taskRoot, 'swarms/latest.json'), 'utf8'),
+    ).id;
+    swarmDirectory = path.join(taskRoot, 'swarms', id);
+    await localCommand('/swarm workspace on');
+    worktreeState = JSON.parse(
+      fs.readFileSync(
+        path.join(taskRoot, 'agent-worktrees', id, 'state.json'),
+        'utf8',
+      ),
+    );
+    source = path.join(worktreeState.directory, 'seed.txt');
+    artifact = path.join(worktreeState.directory, 'deliverable.txt');
+  }
   child = spawn(
     process.execPath,
     [
@@ -454,6 +564,22 @@ try {
     child.once('close', resolve);
   });
   clearTimeout(timer);
+  let isolatedBeforeApply;
+  let actualShellCwd;
+  if (worktreeMode) {
+    isolatedBeforeApply =
+      !fs.existsSync(path.join(workspace, 'deliverable.txt')) &&
+      fs.existsSync(artifact);
+    actualShellCwd = fs.readFileSync(
+      path.join(worktreeState.directory, 'shell-cwd.txt'),
+      'utf8',
+    );
+    await localCommand('/swarm workspace export');
+    await localCommand('/swarm workspace apply');
+    await localCommand('/swarm workspace remove');
+    artifact = path.join(workspace, 'deliverable.txt');
+    source = path.join(workspace, 'seed.txt');
+  }
   fs.writeFileSync(
     reportPath.replace(/\.json$/, '') + '-output.txt',
     stdout + '\nSTDERR\n' + stderr,
@@ -617,7 +743,7 @@ try {
             mentionsWakeIdleMember:
               state?.members.find((member) => member.name === 'analyst')
                 ?.turns === 2,
-            noIdlePolling: requests.length === 20,
+            noIdlePolling: requests.length === (worktreeMode ? 21 : 20),
             assignedPublicIdentity:
               board.some(
                 (post) =>
@@ -638,6 +764,39 @@ try {
                 member.verifiedRevision === state.revision,
             ),
             finalText: stdout.includes('NATIVE_SWARM_DELIVERED'),
+            ...(worktreeMode
+              ? {
+                  isolatedBeforeApply,
+                  actualShellCwd: actualShellCwd === worktreeState.directory,
+                  sourceIndexUnchanged:
+                    originalIndexHash ===
+                    createHash('sha256')
+                      .update(
+                        fs.readFileSync(path.join(workspace, '.git/index')),
+                      )
+                      .digest('hex'),
+                  sourceUserFilesRetained:
+                    fs.readFileSync(
+                      path.join(workspace, 'local.txt'),
+                      'utf8',
+                    ) === 'user unstaged\n' &&
+                    fs.readFileSync(
+                      path.join(workspace, 'user-untracked.txt'),
+                      'utf8',
+                    ) === 'user untracked\n',
+                  localCommandsOnly: localRuns.every(
+                    (run, index) => run.requestCount === (index < 2 ? 0 : 21),
+                  ),
+                  worktreeRemovedAndPatchRetained:
+                    !fs.existsSync(worktreeState.directory) &&
+                    fs.existsSync(
+                      path.join(
+                        path.dirname(worktreeState.directory),
+                        'result.patch',
+                      ),
+                    ),
+                }
+              : {}),
             ...(modelMode
               ? {
                   isolatedProviderModels: [
@@ -660,17 +819,19 @@ try {
               : {}),
           };
   const report = {
-    mode: modelMode
-      ? sessionMode
-        ? 'models-session'
-        : 'models'
-      : recoveryMode
-        ? 'recovery'
-        : budgetMode
-          ? 'budget'
-          : diagnosticMode
-            ? 'diagnostic'
-            : 'delivery',
+    mode: worktreeMode
+      ? 'worktree'
+      : modelMode
+        ? sessionMode
+          ? 'models-session'
+          : 'models'
+        : recoveryMode
+          ? 'recovery'
+          : budgetMode
+            ? 'budget'
+            : diagnosticMode
+              ? 'diagnostic'
+              : 'delivery',
     passed: Object.values(checks).every(Boolean),
     version: metadata.version,
     platform: process.platform,
@@ -684,19 +845,22 @@ try {
     failures,
     state,
     board,
+    ...(worktreeMode ? { localRuns, worktree: worktreeState } : {}),
     ...(recoveryMode ? { owner, recoveryRuns } : {}),
     actualDeliveryHex: fs.existsSync(artifact)
       ? fs.readFileSync(artifact).toString('hex')
       : null,
-    scope: modelMode
-      ? `Actual installed native Swarm with ${sessionMode ? 'LocalSessionInvocation' : 'LocalSubagentInvocation'}, distinct local HTTP provider paths and model IDs for researcher/coder/verifier, persisted dispatched routes and shared budget. Loopback responses only; no real-provider autonomy or paid calls.`
-      : recoveryMode
-        ? 'Generated corrupt Swarm members and binding: initial bounded CLI failure, actual local /swarm cancel <id> with no model request, old resume rejected with exit 42 and no model request, then ordinary conversation restored. Both bad files retained byte for byte and board unchanged. Two loopback requests total; no real provider task or delivery success.'
-        : budgetMode
-          ? 'Native main/member executor budget with a loopback output-limit response: the initial coordinator request creates the isolated seed, then two cumulative dispatches are allowed and the next is blocked before the provider. CLI exits nonzero, member stays paused and the task stays blocked. Not a live-provider delivery or HTTP retry billing counter.'
-          : diagnosticMode
-            ? 'Installed CLI and real local executor receiving a loopback provider output-limit response. Checks the concrete error reaches the paused member, board and coordinator, without marking completion. Not a live-provider task or proof the model respects retry budgets.'
-            : 'Installed CLI, actual native swarm service, real local child executors, public board and member identity, mention-triggered wake, actual file writes/reads and current independent verifier gate. Model responses are loopback fixtures. Not live-provider autonomy, terminal keyboard/visual acceptance or complex reverse engineering.',
+    scope: worktreeMode
+      ? 'Actual CLI prepare/workspace on/native Swarm/write_file/shell cwd/independent review/local export/apply/remove. Generated dirty Git repository; source index, staged/unstaged/untracked content preserved. Loopback model, task-level working-directory isolation, not an OS security sandbox or per-member parallel worktrees.'
+      : modelMode
+        ? `Actual installed native Swarm with ${sessionMode ? 'LocalSessionInvocation' : 'LocalSubagentInvocation'}, distinct local HTTP provider paths and model IDs for researcher/coder/verifier, persisted dispatched routes and shared budget. Loopback responses only; no real-provider autonomy or paid calls.`
+        : recoveryMode
+          ? 'Generated corrupt Swarm members and binding: initial bounded CLI failure, actual local /swarm cancel <id> with no model request, old resume rejected with exit 42 and no model request, then ordinary conversation restored. Both bad files retained byte for byte and board unchanged. Two loopback requests total; no real provider task or delivery success.'
+          : budgetMode
+            ? 'Native main/member executor budget with a loopback output-limit response: the initial coordinator request creates the isolated seed, then two cumulative dispatches are allowed and the next is blocked before the provider. CLI exits nonzero, member stays paused and the task stays blocked. Not a live-provider delivery or HTTP retry billing counter.'
+            : diagnosticMode
+              ? 'Installed CLI and real local executor receiving a loopback provider output-limit response. Checks the concrete error reaches the paused member, board and coordinator, without marking completion. Not a live-provider task or proof the model respects retry budgets.'
+              : 'Installed CLI, actual native swarm service, real local child executors, public board and member identity, mention-triggered wake, actual file writes/reads and current independent verifier gate. Model responses are loopback fixtures. Not live-provider autonomy, terminal keyboard/visual acceptance or complex reverse engineering.',
   };
   fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));

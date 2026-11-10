@@ -16,6 +16,11 @@ import {
   setSwarmBudget,
   setSwarmModel,
   availableAgentModels,
+  agentWorktreeCommand,
+  isSwarmRunning,
+  assertSwarmOwnership,
+  requireSwarmWorktree,
+  isAgentWorkflowRunning,
 } from '@google/gemini-cli-core';
 import {
   CommandKind,
@@ -108,6 +113,35 @@ async function action(
         context.ui.addItem({
           type: MessageType.INFO,
           text: `Swarm ${snapshot.phase}\n${snapshot.objective}\n${i18n.t('角色模型', 'Role models')}: ${JSON.stringify(snapshot.roleModels)}\n${i18n.t('累计预算', 'Cumulative budget')}: ${JSON.stringify(snapshot.budget)}\n${snapshot.stopReason}\n${snapshot.members.map((member) => `@${member.name}: ${member.state} · ${member.model ?? snapshot.roleModels[member.agent] ?? 'inherit'} · ${member.modelsUsed.join(', ')}`).join('\n')}\n${snapshot.boardPath}`,
+        });
+        return;
+      }
+      if (operation === 'workspace') {
+        assertSwarmOwnership(root, swarm.id);
+        if (isSwarmRunning(root, swarm.id) || isAgentWorkflowRunning(root))
+          throw new Error(
+            i18n.t(
+              '请等待运行中的成员收尾后再管理工作树。',
+              'Wait for running members to settle before managing the worktree.',
+            ),
+          );
+        const state = agentWorktreeCommand(
+          root,
+          swarm.id,
+          config.getTargetDir(),
+          args,
+          !swarm.members.some((member) => member.turns > 0),
+          swarm.phase === 'completed',
+        );
+        if (args.trim() === 'on') requireSwarmWorktree(root, swarm.id);
+        context.ui.addItem({
+          type: MessageType.INFO,
+          text: state
+            ? JSON.stringify(state, null, 2)
+            : i18n.t(
+                '当前使用共享工作区。可在启动前用 /swarm workspace on 启用隔离。',
+                'Using the shared workspace. Enable isolation with /swarm workspace on before starting.',
+              ),
         });
         return;
       }
@@ -219,6 +253,11 @@ const operations: Array<[string, string, string]> = [
   ['budget', '设置累计执行预算', 'Set cumulative execution limits'],
   ['model', '设置角色或成员模型', 'Choose a role or member model'],
   [
+    'workspace',
+    '管理隔离工作树与成果补丁',
+    'Manage isolated worktree and result patch',
+  ],
+  [
     'prepare',
     '先创建任务，配置模型后再开始',
     'Prepare a task before choosing models and starting',
@@ -248,9 +287,14 @@ export const swarmCommand: SlashCommand = {
     },
     kind: CommandKind.BUILT_IN,
     isSafeConcurrent: ['board', 'status', 'message', 'cancel'].includes(name),
-    autoExecute: !['message', 'budget', 'cancel', 'model', 'prepare'].includes(
-      name,
-    ),
+    autoExecute: ![
+      'message',
+      'budget',
+      'cancel',
+      'model',
+      'prepare',
+      'workspace',
+    ].includes(name),
     action: (context, args) => action(context, args, name),
   })),
 };

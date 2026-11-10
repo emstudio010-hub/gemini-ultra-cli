@@ -8,6 +8,7 @@ export * from './src/index.js';
 export * from './src/agents/agentWorkflows.js';
 export * from './src/agents/workflowBudget.js';
 export * from './src/agents/agentModelRouting.js';
+export * from './src/agents/agentWorktree.js';
 export * from './src/agents/swarm.js';
 export { Storage } from './src/config/storage.js';
 export {

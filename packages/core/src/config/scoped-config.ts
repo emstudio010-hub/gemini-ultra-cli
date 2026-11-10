@@ -19,6 +19,20 @@ import { WorkspaceContext } from '../utils/workspaceContext.js';
  * This follows the same pattern as `toolCallContext` and `promptIdContext`.
  */
 const workspaceContextOverride = new AsyncLocalStorage<WorkspaceContext>();
+const agentWorkingDirectory = new AsyncLocalStorage<string>();
+export function getAgentWorkingDirectory(): string | undefined {
+  return agentWorkingDirectory.getStore();
+}
+/** Relocates builtin tool paths and shell cwd without relocating session storage. */
+export function withAgentWorkingDirectory<T>(
+  directory: string,
+  run: () => T,
+): T {
+  const resolved = path.resolve(directory);
+  return agentWorkingDirectory.run(resolved, () =>
+    runWithScopedWorkspaceContext(new WorkspaceContext(resolved), run),
+  );
+}
 const memoryInboxAccessOverride = new AsyncLocalStorage<boolean>();
 const autoMemoryExtractionWriteAccessOverride =
   new AsyncLocalStorage<boolean>();
