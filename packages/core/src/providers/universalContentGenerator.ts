@@ -621,24 +621,29 @@ export class UniversalContentGenerator implements ContentGenerator {
       Number.isFinite(configuredIdleMs) && configuredIdleMs >= 1000
         ? configuredIdleMs
         : 120000;
+    let finishDeadline: number | undefined;
     try {
       while (true) {
+        // Completion is a protocol boundary. Keepalive bytes must not extend
+        // the bounded wait for trailing usage metadata.
+        if (finished?.() && finishDeadline === undefined)
+          finishDeadline = Date.now() + Math.min(idleMs, 2000);
+        const remainingMs =
+          finishDeadline === undefined ? idleMs : finishDeadline - Date.now();
+        if (remainingMs <= 0) break;
         let timer: ReturnType<typeof setTimeout> | undefined;
         const timeout = new Promise<ReadableStreamReadResult<Uint8Array>>(
           (resolve, reject) => {
-            timer = setTimeout(
-              () => {
-                if (finished?.()) resolve({ done: true, value: undefined });
-                else
-                  reject(
-                    new Error(
-                      `Provider stream was idle for ${idleMs} ms. Retry or choose a different endpoint.`,
-                    ),
-                  );
-                void reader.cancel().catch(() => {});
-              },
-              finished?.() ? Math.min(idleMs, 2000) : idleMs,
-            );
+            timer = setTimeout(() => {
+              if (finished?.()) resolve({ done: true, value: undefined });
+              else
+                reject(
+                  new Error(
+                    `Provider stream was idle for ${idleMs} ms. Retry or choose a different endpoint.`,
+                  ),
+                );
+              void reader.cancel().catch(() => {});
+            }, remainingMs);
           },
         );
         const chunk = await Promise.race([reader.read(), timeout]).finally(() =>

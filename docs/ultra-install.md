@@ -15,7 +15,7 @@ v24.22.2；校验场景使用本地模型fixture，真实逆向工具需另行�
 Release 下载），执行：
 
 ```sh
-npm install -g ./gemini-ultra-cli-1.0.0-preview.9.tgz
+npm install -g ./gemini-ultra-cli-1.0.0-preview.10.tgz
 gemini-ultra --version
 gemini-ultra
 ```
@@ -69,13 +69,13 @@ Release。每个安装包附带 `.sha256` 文件，便于传输后核对。
 Windows PowerShell 校验安装包：
 
 ```powershell
-Get-FileHash ./gemini-ultra-cli-1.0.0-preview.9.tgz -Algorithm SHA256
-Get-Content ./gemini-ultra-cli-1.0.0-preview.9.tgz.sha256
+Get-FileHash ./gemini-ultra-cli-1.0.0-preview.10.tgz -Algorithm SHA256
+Get-Content ./gemini-ultra-cli-1.0.0-preview.10.tgz.sha256
 ```
 
 macOS 使用
-`shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.9.tgz.sha256`；Linux 使用
-`sha256sum -c gemini-ultra-cli-1.0.0-preview.9.tgz.sha256`。
+`shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.10.tgz.sha256`；Linux 使用
+`sha256sum -c gemini-ultra-cli-1.0.0-preview.10.tgz.sha256`。
 
 ## 自定义逆向工具路径
 
@@ -185,6 +185,8 @@ MiB。
 外接路由单独接入用量日志；原生通道保留已有记录方式。Chat、Responses、Anthropic 的输入、输出、缓存、思考用量会映射到 CLI 统计与上下文元数据；Gemini 协议保留原生用量字段。思考 Token 从候选输出中拆出，避免重复计数。
 
 只有供应商报告的数据才能用于实际用量统计。端点没有返回用量时会提示，零计数不代表未消耗；统计不等同于账单。Chat 会请求尾部用量，收到结束标记后最多再等两秒，避免不关闭的端点让会话卡住。
+
+这两秒是结束后的固定期限；网关继续发送注释、保活或其他尾部字节不会延长期限，期限内到达的用量仍保留。未结束的正常生成仍沿用空闲超时。中途断流会报告不完整，不把它当作正常完成；之后可重试请求。
 
 请求中的 `maxOutputTokens` 会映射到 Chat 的输出限制字段、Responses 的
 `max_output_tokens`、Anthropic 的
