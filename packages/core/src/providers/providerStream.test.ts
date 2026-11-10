@@ -245,6 +245,126 @@ describe('Provider stream completion and recovery', () => {
     },
   );
 
+  it.each([false, true])(
+    'times out heartbeats without complete data events (initialData=%s)',
+    async (initialData) => {
+      vi.stubEnv('GEMINI_ULTRA_STREAM_IDLE_MS', '1000');
+      let heartbeat: ReturnType<typeof setInterval>;
+      let close: ReturnType<typeof setTimeout>;
+      const cancel = vi.fn(() => {
+        clearInterval(heartbeat);
+        clearTimeout(close);
+      });
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          if (initialData)
+            controller.enqueue(
+              frame({
+                choices: [{ delta: { reasoning_content: 'Thinking' } }],
+              }),
+            );
+          heartbeat = setInterval(
+            () =>
+              controller.enqueue(
+                encoder.encode(
+                  initialData
+                    ? 'event: ping\ndata: {"type":"ping"}\n\n'
+                    : ': keepalive\n\n',
+                ),
+              ),
+            100,
+          );
+          close = setTimeout(() => {
+            clearInterval(heartbeat);
+            controller.close();
+          }, 5000);
+        },
+        cancel,
+      });
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(body)));
+      const stream = await generator.generateContentStream(
+        request,
+        'fixture',
+        LlmRole.UTILITY_TOOL,
+      );
+      let ended = false;
+      let error: unknown;
+      const consume = (async () => {
+        try {
+          for await (const chunk of stream) void chunk;
+        } catch (failure) {
+          error = failure;
+        } finally {
+          ended = true;
+        }
+      })();
+      await vi.advanceTimersByTimeAsync(1100);
+      const endedWithinDeadline = ended;
+      await vi.advanceTimersByTimeAsync(5000);
+      await consume;
+      expect(endedWithinDeadline).toBe(true);
+      expect(error).toBeInstanceOf(Error);
+      expect(String(error)).toContain('idle for 1000 ms');
+      expect(cancel).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('refreshes the progress deadline for complete data events during a long stream', async () => {
+    vi.stubEnv('GEMINI_ULTRA_STREAM_IDLE_MS', '1000');
+    const timers: Array<ReturnType<typeof setTimeout>> = [];
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const [index, content] of ['One ', 'two ', 'three'].entries()) {
+          timers.push(
+            setTimeout(
+              () =>
+                controller.enqueue(
+                  frame({ choices: [{ delta: { content } }] }),
+                ),
+              600 * (index + 1),
+            ),
+          );
+        }
+        timers.push(
+          setTimeout(() => {
+            controller.enqueue(
+              frame({ choices: [{ delta: {}, finish_reason: 'stop' }] }),
+            );
+            controller.close();
+          }, 2400),
+        );
+      },
+      cancel() {
+        timers.forEach(clearTimeout);
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(body)));
+    const stream = await generator.generateContentStream(
+      request,
+      'fixture',
+      LlmRole.UTILITY_TOOL,
+    );
+    const chunks: GenerateContentResponse[] = [];
+    let error: unknown;
+    const consume = (async () => {
+      try {
+        for await (const chunk of stream) chunks.push(chunk);
+      } catch (failure) {
+        error = failure;
+      }
+    })();
+    await vi.advanceTimersByTimeAsync(2500);
+    await consume;
+    expect(error).toBeUndefined();
+    expect(
+      chunks
+        .flatMap((chunk) => chunk.candidates?.[0]?.content?.parts ?? [])
+        .map((part) => part.text ?? '')
+        .join(''),
+    ).toBe('One two three');
+    expect(chunks.at(-1)?.candidates?.[0]?.finishReason).toBe('STOP');
+  });
+
   it('finishes within the fixed tail deadline despite keepalives and retains trailing usage', async () => {
     let heartbeat: ReturnType<typeof setInterval>;
     let usage: ReturnType<typeof setTimeout>;

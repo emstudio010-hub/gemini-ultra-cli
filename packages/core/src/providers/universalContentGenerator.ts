@@ -657,15 +657,20 @@ export class UniversalContentGenerator implements ContentGenerator {
         ? configuredIdleMs
         : 120000;
     let finishDeadline: number | undefined;
+    let progressDeadline = Date.now() + idleMs;
     try {
       while (true) {
         // Completion is a protocol boundary. Keepalive bytes must not extend
         // the bounded wait for trailing usage metadata.
         if (finished?.() && finishDeadline === undefined)
           finishDeadline = Date.now() + Math.min(idleMs, 2000);
-        const remainingMs =
-          finishDeadline === undefined ? idleMs : finishDeadline - Date.now();
-        if (remainingMs <= 0) break;
+        const remainingMs = (finishDeadline ?? progressDeadline) - Date.now();
+        if (remainingMs <= 0) {
+          if (finished?.()) break;
+          throw new Error(
+            `Provider stream was idle for ${idleMs} ms. Retry or choose a different endpoint.`,
+          );
+        }
         let timer: ReturnType<typeof setTimeout> | undefined;
         const timeout = new Promise<ReadableStreamReadResult<Uint8Array>>(
           (resolve, reject) => {
@@ -699,7 +704,17 @@ export class UniversalContentGenerator implements ContentGenerator {
           } else if (line.startsWith('data:')) {
             data.push(line.slice(5).replace(/^ /, ''));
           } else if (line === '') {
-            if (data.length) yield { event, data: data.join('\n') };
+            // Transport keepalives are not model progress. A peer sending only
+            // comments or named ping events must still reach the idle deadline.
+            if (
+              data.length &&
+              !['ping', 'heartbeat', 'keepalive'].includes(
+                event?.toLowerCase() ?? '',
+              )
+            ) {
+              yield { event, data: data.join('\n') };
+              progressDeadline = Date.now() + idleMs;
+            }
             data = [];
             event = undefined;
           }

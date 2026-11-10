@@ -15,7 +15,7 @@ v24.22.2；校验场景使用本地模型fixture，真实逆向工具需另行�
 Release 下载），执行：
 
 ```sh
-npm install -g ./gemini-ultra-cli-1.0.0-preview.20.tgz
+npm install -g ./gemini-ultra-cli-1.0.0-preview.21.tgz
 gemini-ultra --version
 gemini-ultra
 ```
@@ -44,6 +44,12 @@ gemini-ultra
 ## 可选输出上限
 
 进入 /provider，选择「输出上限」即可按供应商设置正整数 Token 数。留空恢复现有默认行为；任务自己指定的上限优先。可用范围依模型和供应商而定，此设置不代表该供应商已支持任意长度。设置保存在个人供应商配置中，安装或升级不会覆盖它。
+
+## 流响应长时间没有进展
+
+外接供应商默认允许等待完整数据事件最多 120 秒。普通 SSE 注释心跳以及 ping、heartbeat、keepalive 命名事件不会延长此等待；思考、正文、工具参数等完整数据事件会刷新期限。完成后的用量收集仍有独立的短暂等待，不会被心跳无限延长。
+
+如确需调整，可设置 GEMINI_ULTRA_STREAM_IDLE_MS，单位毫秒，最小 1000；未设置或非法时使用默认值。model.requestTimeoutMs 管理响应头等待，与这个流进展期限不同。
 
 ## 跨电脑逆向环境
 
@@ -76,13 +82,13 @@ Release。每个安装包附带 `.sha256` 文件，便于传输后核对。
 Windows PowerShell 校验安装包：
 
 ```powershell
-Get-FileHash ./gemini-ultra-cli-1.0.0-preview.20.tgz -Algorithm SHA256
-Get-Content ./gemini-ultra-cli-1.0.0-preview.20.tgz.sha256
+Get-FileHash ./gemini-ultra-cli-1.0.0-preview.21.tgz -Algorithm SHA256
+Get-Content ./gemini-ultra-cli-1.0.0-preview.21.tgz.sha256
 ```
 
 macOS 使用
-`shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.20.tgz.sha256`；Linux 使用
-`sha256sum -c gemini-ultra-cli-1.0.0-preview.20.tgz.sha256`。
+`shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.21.tgz.sha256`；Linux 使用
+`sha256sum -c gemini-ultra-cli-1.0.0-preview.21.tgz.sha256`。
 
 ## 自定义逆向工具路径
 

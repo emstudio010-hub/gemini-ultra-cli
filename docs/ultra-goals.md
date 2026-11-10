@@ -349,3 +349,10 @@
   CI包，已有缓存offline安装9秒。安装后实际HTTP工具链2请求、2,566ms、退出0，均发32768、分片write_file落盘、正文与usage完整、无误重试；响应为fixture。
 - E-077：仅一次当前Ess/DeepSeek原生续接，使用E-070最新会话/数据库和E-063源码快照，隔离配置32768、maxAttempts=2、maxSessionTurns=8、240秒观察器。167,219ms自行结束、退出1、INVALID_STREAM，无报告；4主请求/0新子代理/1成功read_file。会话同ID与字节前缀、原note整行、源码和用户配置保留。总Token195,654，其中缓存46,080，非账单金额。
 - 四个真实请求参数均为32768、HTTP200，返回思考长度2072/4188/5178/3969，正文长度全部0；仅第二个有tool_calls结束原因，其他未提供finish_reason。未保存原始网络流或盘点DONE，不断言模型/供应商/超时/适配器根因。提高上限未解决真实失败，停止原样重复付费续跑；下一阶段离线定位流终止与timeout链。交接已写源码docs、工程目录和Obsidian，整体目标active。
+
+## 2026-11-10 心跳导致流无限等待
+
+- E-078/F-024：readSse原先每次reader.read成功都重新给足idleMs，注释心跳可使尚未完成的模型流无限等待。定向修前两个场景失败、持续数据场景通过；现进展deadline仅由完整非心跳SSE数据事件刷新，忽略注释及ping/heartbeat/keepalive命名事件，保持完成后固定尾部deadline。
+- 修后5项定向检查通过：无数据/部分思考后持续心跳会超时，持续有效数据可跨越多个idle窗口，尾部keepalive不延长用量等待，截断后后续请求可恢复。本阶段没有付费模型调用，未证明F-024是E-077真实无正文的根因。
+- 离线追踪确认model.requestTimeoutMs通过updateGlobalFetchTimeouts只改headersTimeout，bodyTimeout保留既有值；不能把E-077三次约48秒的正常HTTP流结束归因于该45秒设置。真实响应根因仍未定位。
+- preview.21分发与安装待本阶段后续完成。整体目标active。
