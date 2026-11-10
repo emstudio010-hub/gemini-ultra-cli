@@ -573,8 +573,10 @@ try {
     isolatedBeforeApply =
       !fs.existsSync(path.join(workspace, 'deliverable.txt')) &&
       fs.existsSync(artifact);
-    canonicalWorktreeDirectory = fs.realpathSync(worktreeState.directory);
-    actualShellCwd = fs.realpathSync(
+    canonicalWorktreeDirectory = fs.realpathSync.native(
+      worktreeState.directory,
+    );
+    actualShellCwd = fs.realpathSync.native(
       fs.readFileSync(
         path.join(worktreeState.directory, 'shell-cwd.txt'),
         'utf8',

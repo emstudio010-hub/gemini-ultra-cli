@@ -660,3 +660,7 @@
 - E-150/F-041：最终CI42907564263 Linux成功，Windows workspace
   on根目录大小写身份误判，macOS仅shell
   cwd原始路径字符串断言false。改为realpath+平台path.relative身份比较，脚本预先保存规范目录和实际cwd；Windows混合盘符输入并入既有快照用例。原失败日志保留，不称交付；准备修复后的同源三平台包。
+
+- E-150/F-041根因：42908273604
+  Linux/macOS通过、Windows仍失败。临时仓库实证8.3短名经fs.realpathSync保持，而Git返回长名，native解析能展开；最终source/身份及fixture
+  shell路径用realpathSync.native+平台relative。既有Windows用例改为真实cmd短名+混合盘符。worktree-path-alias-probe.json证明，保留旧失败，不无改动重跑。准备修正后的最终包。

@@ -66,7 +66,17 @@ it('snapshots staged, unstaged and untracked files without changing source HEAD/
   const id = randomUUID();
   const sourceForTask =
     process.platform === 'win32'
-      ? source.replace(/^[A-Z]:/, (drive) => drive.toLowerCase())
+      ? execFileSync(
+          'cmd.exe',
+          ['/d', '/c', `for %I in ("${source}") do @echo %~sI`],
+          {
+            encoding: 'utf8',
+            windowsHide: true,
+            windowsVerbatimArguments: true,
+          },
+        )
+          .trim()
+          .replace(/^[A-Z]:/, (drive) => drive.toLowerCase())
       : source;
   const state = prepareAgentWorktree(root, id, sourceForTask);
   expect(fs.readFileSync(path.join(state.directory, 'seed.txt'), 'utf8')).toBe(

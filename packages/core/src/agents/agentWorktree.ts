@@ -82,8 +82,10 @@ function text(cwd: string, args: string[]): string {
   return git(cwd, args).toString('utf8').trim();
 }
 function same(a: string, b: string): boolean {
-  // Resolve aliases on Unix and compare drive/path casing using Windows rules.
-  return path.relative(fs.realpathSync(a), fs.realpathSync(b)) === '';
+  // Native resolution also expands Windows 8.3 aliases emitted by runner TEMP.
+  return (
+    path.relative(fs.realpathSync.native(a), fs.realpathSync.native(b)) === ''
+  );
 }
 function assertOwned(root: string, state: AgentWorktree): void {
   if (
@@ -206,7 +208,7 @@ export function prepareAgentWorktree(
     assertOwned(root, old);
     return old;
   }
-  const source = fs.realpathSync(sourceDirectory);
+  const source = fs.realpathSync.native(sourceDirectory);
   if (!same(source, text(source, ['rev-parse', '--show-toplevel'])))
     throw new Error(
       'Worktree mode requires the repository root as the active workspace.',

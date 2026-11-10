@@ -64,6 +64,8 @@ does not apply 来自冲突拒绝用例。
 
 ## 接续目标池
 
+F-041根因补齐：运行42908273604的Linux/macOS通过，Windows仍在根目录比较失败，说明仅大小写修正不足。生成仓库本地实证：cmd返回ULTRA-~2短路径，Git返回长路径；fs.realpathSync仍保留短名，fs.realpathSync.native才展开为同一目录。最终采用native解析+平台relative，准备时也保存规范source；CLI脚本同样规范shell目录。既有Windows快照用例改为真实8.3短路径并混合盘符输入。证据worktree-path-alias-probe.json、github-preview39-windows-path-failed.log、agent-worktree-native-path.log/junit及lint；旧失败保留，不无改动重跑。
+
 首次最终CI运行42907564263：Linux全部通过；Windows在workspace
 on的仓库身份比较失败，macOS工作树链仅原始shell
 cwd字符串比较为false，其余检查通过。F-041修复真实路径比较：resolve
