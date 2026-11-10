@@ -68,6 +68,17 @@ export function handleError(
   config: Config,
   customErrorCode?: string | number,
 ): never {
+  const exitCode = reportError(error, config, customErrorCode);
+  runSyncCleanup();
+  process.exit(exitCode);
+}
+
+/** Report a structured error and return its exit code so native cleanup can drain. */
+export function reportError(
+  error: unknown,
+  config: Config,
+  customErrorCode?: string | number,
+): number {
   const errorMessage = parseAndFormatApiError(
     error,
     config.getContentGeneratorConfig()?.authType,
@@ -89,8 +100,7 @@ export function handleError(
       stats: streamFormatter.convertToStreamStats(metrics, 0),
     });
 
-    runSyncCleanup();
-    process.exit(getNumericExitCode(errorCode));
+    return getNumericExitCode(errorCode);
   } else if (config.getOutputFormat() === OutputFormat.JSON) {
     const formatter = new JsonFormatter();
     const errorCode = customErrorCode ?? extractErrorCode(error);
@@ -102,8 +112,7 @@ export function handleError(
     );
 
     coreEvents.emitFeedback('error', formattedError);
-    runSyncCleanup();
-    process.exit(getNumericExitCode(errorCode));
+    return getNumericExitCode(errorCode);
   } else {
     throw error;
   }

@@ -56,7 +56,7 @@ import { handleSlashCommand } from './nonInteractiveCliCommands.js';
 import { ConsolePatcher } from './ui/utils/ConsolePatcher.js';
 import { handleAtCommand } from './ui/hooks/atCommandProcessor.js';
 import {
-  handleError,
+  reportError,
   handleToolError,
   handleCancellationError,
   isFatalCancellationError,
@@ -744,7 +744,7 @@ export async function runNonInteractive({
     }
 
     if (errorToHandle) {
-      handleError(errorToHandle, config);
+      process.exitCode = reportError(errorToHandle, config);
     }
   });
 }

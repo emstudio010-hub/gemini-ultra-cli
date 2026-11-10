@@ -1102,22 +1102,15 @@ describe('runNonInteractive', () => {
       throw testError;
     });
 
-    let thrownError: Error | null = null;
-    try {
-      await runNonInteractive({
-        config: mockConfig,
-        settings: mockSettings,
-        input: 'Test input',
-        prompt_id: 'prompt-id-error',
-      });
-      // Should not reach here
-      expect.fail('Expected process.exit to be called');
-    } catch (error) {
-      thrownError = error as Error;
-    }
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'Test input',
+      prompt_id: 'prompt-id-error',
+    });
 
-    // Should throw because of mocked process.exit
-    expect(thrownError?.message).toBe('process.exit(1) called');
+    expect(process.exitCode).toBe(1);
+    expect(process.exit).not.toHaveBeenCalled();
 
     expect(mockCoreEvents.emitFeedback).toHaveBeenCalledWith(
       'error',
@@ -1152,20 +1145,15 @@ describe('runNonInteractive', () => {
       ]),
     );
 
-    let thrownError: Error | null = null;
-    try {
-      await runNonInteractive({
-        config: mockConfig,
-        settings: mockSettings,
-        input: 'Test JSON API error',
-        prompt_id: 'prompt-id-json-error',
-      });
-      expect.fail('Expected process.exit to be called');
-    } catch (error) {
-      thrownError = error as Error;
-    }
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'Test JSON API error',
+      prompt_id: 'prompt-id-json-error',
+    });
 
-    expect(thrownError?.message).toBe('process.exit(404) called');
+    expect(process.exitCode).toBe(404);
+    expect(process.exit).not.toHaveBeenCalled();
     expect(mockCoreEvents.emitFeedback).toHaveBeenCalledWith(
       'error',
       JSON.stringify(
@@ -1191,22 +1179,15 @@ describe('runNonInteractive', () => {
       throw fatalError;
     });
 
-    let thrownError: Error | null = null;
-    try {
-      await runNonInteractive({
-        config: mockConfig,
-        settings: mockSettings,
-        input: 'Invalid syntax',
-        prompt_id: 'prompt-id-fatal',
-      });
-      // Should not reach here
-      expect.fail('Expected process.exit to be called');
-    } catch (error) {
-      thrownError = error as Error;
-    }
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'Invalid syntax',
+      prompt_id: 'prompt-id-fatal',
+    });
 
-    // Should throw because of mocked process.exit with custom exit code
-    expect(thrownError?.message).toBe('process.exit(42) called');
+    expect(process.exitCode).toBe(42);
+    expect(process.exit).not.toHaveBeenCalled();
 
     expect(mockCoreEvents.emitFeedback).toHaveBeenCalledWith(
       'error',

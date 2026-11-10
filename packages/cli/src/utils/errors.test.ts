@@ -22,6 +22,7 @@ import {
 } from '@google/gemini-cli-core';
 import {
   handleError,
+  reportError,
   handleToolError,
   handleCancellationError,
   handleMaxTurnsExceededError,
@@ -327,6 +328,44 @@ describe('errors', () => {
           handleError(fatalError, mockConfig);
         }).toThrow('process.exit called with code: 42');
       });
+    });
+  });
+
+  describe('reportError', () => {
+    it.each([OutputFormat.JSON, OutputFormat.STREAM_JSON])(
+      'reports HTTP failure without forcing exit: %s',
+      (format) => {
+        vi.mocked(mockConfig.getOutputFormat).mockReturnValue(format);
+        const failure = Object.assign(new Error('Provider unavailable'), {
+          status: 503,
+        });
+        expect(reportError(failure, mockConfig)).toBe(503);
+        expect(processExitSpy).not.toHaveBeenCalled();
+        expect(runSyncCleanupSpy).not.toHaveBeenCalled();
+        if (format === OutputFormat.JSON) {
+          expect(coreEventsEmitFeedbackSpy).toHaveBeenCalledTimes(1);
+          expect(coreEventsEmitFeedbackSpy).toHaveBeenCalledWith(
+            'error',
+            expect.stringContaining('"code": 503'),
+          );
+          expect(coreEventsEmitFeedbackSpy).toHaveBeenCalledWith(
+            'error',
+            expect.stringContaining('Provider unavailable'),
+          );
+        }
+      },
+    );
+
+    it('preserves a custom error code while allowing natural exit', () => {
+      vi.mocked(mockConfig.getOutputFormat).mockReturnValue(OutputFormat.JSON);
+      expect(reportError(new Error('Fixture'), mockConfig, 42)).toBe(42);
+      expect(processExitSpy).not.toHaveBeenCalled();
+    });
+
+    it('keeps text errors on the existing throw path', () => {
+      const failure = new Error('Provider unavailable');
+      expect(() => reportError(failure, mockConfig)).toThrow(failure);
+      expect(processExitSpy).not.toHaveBeenCalled();
     });
   });
 

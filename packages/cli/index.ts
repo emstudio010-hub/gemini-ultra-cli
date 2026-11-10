@@ -193,7 +193,8 @@ async function run() {
           errorMessage = `\x1b[31m${errorMessage}\x1b[0m`;
         }
         writeToStderr(errorMessage + '\n');
-        process.exit(error.exitCode);
+        process.exitCode = error.exitCode;
+        return;
       }
 
       writeToStderr(
@@ -202,7 +203,7 @@ async function run() {
           prefix: 'An unexpected critical error occurred: ',
         }) + '\n',
       );
-      process.exit(1);
+      process.exitCode = 1;
     });
   }
 }
