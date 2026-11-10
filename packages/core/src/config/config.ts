@@ -143,6 +143,7 @@ import {
 } from '../tools/reverseTools.js';
 import { BinaryInspectTool } from '../tools/binaryInspect.js';
 import { BinaryAnalyzeTool } from '../tools/binaryAnalyze.js';
+import { BinaryDecompileTool } from '../tools/binaryDecompile.js';
 import {
   logRipgrepFallback,
   logFlashFallback,
@@ -4253,6 +4254,9 @@ export class Config implements McpContext, AgentLoopContext {
     );
     maybeRegister(BinaryAnalyzeTool, () =>
       registry.registerTool(new BinaryAnalyzeTool(this, this.messageBus)),
+    );
+    maybeRegister(BinaryDecompileTool, () =>
+      registry.registerTool(new BinaryDecompileTool(this, this.messageBus)),
     );
     maybeRegister(VerifiedPatchTransactionTool, () =>
       registry.registerTool(

@@ -343,10 +343,44 @@ worktree，不应当作 Antigravity 的隔离工作树实现。独立审查员�
 
 消息发送者由运行时分配，成员不能冒充协调者或其他成员。只有当前修改版本通过独立验证，且没有运行、排队或暂停未处理的成员，蜂群才能标为完成；后续成员工作会使旧验证失效。
 
-调查成员可并行，写入与验证成员在当前共享工作区串行执行，并遵循 `/team`
-的会话并发上限。当前使用同一模型路由，不自动创建隔离Git工作树或切换成员模型。跨进程工作区锁只约束本CLI原生工作流，外部编辑仍需用户自行协调。
+调查成员可并行，写入与验证成员串行执行，并遵循 `/team`
+的会话并发上限。成员默认继承会话模型，也可在首轮前用
+`/swarm model researcher 供应商ID:模型ID` 配置角色，或用
+`/swarm model @成员 供应商ID:模型ID` 预设具名成员；`inherit`
+清除当前层覆盖。`/swarm model`
+显示本地已配置模型目录，不探测端点、不显示密钥。运行中的成员不能改模；显式成员调用失败不会偷偷换全局模型。
+
+`/swarm prepare <任务>` 零模型创建，随后可配置模型和 `/swarm workspace on`，再
+`/swarm resume`
+开始。Boost 同样支持 prepare/model/workspace，Teamwork 在原批准流程里配置 model/workspace。
+
+workspace
+on 必须在第一轮前启用，要求当前目录是已有HEAD的Git仓库根目录。它捕获实际工作文件及非忽略未跟踪内容，保留原暂存区/HEAD；整个任务共用一份隔离工作树，writer/verifier仍串行，成员文件工具和shell
+cwd在隔离目录。Git忽略的依赖/缓存不复制，当前不支持submodule及超过64MiB的快照。不是每成员并行分支，也不是OS安全沙箱。
+
+`workspace status|export|apply|remove`
+均是本地命令。完成独立审查后，显式apply先检查冲突再整体回写，不改变原暂存区；未审查、审查后被改动、原目录冲突时保留成果。remove不强制删除；存在ignored文件时也明确拒绝清理，需自行保留/处理后重试。补丁与记录留存。跨进程工作区锁只约束本CLI原生工作流，外部编辑仍需自行协调。
 
 每个蜂群最多12名成员、每成员最多20次唤醒、每轮最多10分钟，留言最多500条/4MiB；达到边界会暂停并保留结果，不无限消耗模型。状态按项目保存在临时目录的
 `swarms/<ID>/`，原CLI进程仍在运行时应在原会话发送指令；另一会话可查看板面。进程退出后，显式恢复会把中断成员标为暂停。
 
 参考：[Antigravity Swarm](https://antigravity.google/docs/swarm/)。本项目独立实现共享留言板和事件唤醒机制。
+
+## Ghidra 单函数静态反编译
+
+preview.40 新增原生工具
+`binary_decompile`，研究及红队分析成员也可调用。先安装官方 Ghidra 和兼容 JDK；Ghidra
+12.1.4 需要 JDK21或更高的受支持版本。每台电脑设置自己的
+`GEMINI_ULTRA_GHIDRA_HOME`（Ghidra安装根目录），以及 `JAVA_HOME`（JDK目录）或
+`GEMINI_ULTRA_TOOL_JAVA`（原生Java可执行文件）。也可通过 PATH 或
+`GEMINI_ULTRA_TOOL_ANALYZEHEADLESS` 找到标准发行版的support目录。`/drill setup`
+显示依赖是否被发现，实际JDK兼容性在调用时检查。无需IDA或开发机路径，Ghidra/JDK不随CLI包分发。
+
+工具参数为本地 `filePath`、可选十六进制虚拟 `address` 和
+`maxChars`。先用 binary_inspect/binary_analyze 确认格式和函数；没有address时选入口或首个本地函数。PIE/共享库可能被Ghidra重定位，务必核对返回的imageBase和地址；文件偏移不能直接当虚拟地址。地址找不到时不会静默反编译别的函数。
+
+样本仅复制到临时分析项目，不执行或修改。直接启动原生Java，不将路径交给shell或批处理；固定内置脚本导出一个函数。每次最多64MiB输入、1GiB
+Java堆、60秒自动分析、30秒单函数反编译、120秒进程上限；错误/超时保留日志，不标为完整。
+
+结果包含函数名/地址、语言/编译器、样本SHA、伪代码SHA和工件路径。完整伪代码保存在项目临时目录
+`decompilations/<ID>/decompiled.c`，附report.json及analysis.log；`maxChars`只截断返回预览，不丢弃完整工件。伪代码是工具推导，不等于原始源码、全文件分析或真实运行结果。未恢复原始类型或调用约定时，需结合指令及证据进一步确认。

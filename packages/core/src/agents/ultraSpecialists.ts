@@ -72,6 +72,7 @@ const readTools = new Set([
   'binary_triage',
   'binary_inspect',
   'binary_analyze',
+  'binary_decompile',
   'drill_preflight',
   'complete_task',
 ]);

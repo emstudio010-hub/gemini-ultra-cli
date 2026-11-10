@@ -68,8 +68,8 @@ export const drillCommand: SlashCommand = {
             ) +
             rows.join('\n') +
             i18n.t(
-              '\n\n无需外部依赖即可使用 binary_triage 做静态初筛。深入反编译可安装 Ghidra + JDK 或 radare2；Android 可选 JADX。IDA 由用户提供许可。将工具加入 PATH，或设置 GEMINI_ULTRA_TOOL_R2、GEMINI_ULTRA_TOOL_JADX、GEMINI_ULTRA_TOOL_ANALYZEHEADLESS 等为完整可执行文件路径。\n每台电脑独立配置模型、MCP 与授权，不依赖开发机目录。',
-              '\n\nThe built-in binary_triage tool works without external tools. Install Ghidra + JDK or radare2 for deeper analysis, and JADX for Android. IDA needs your own license. Add tools to PATH or set GEMINI_ULTRA_TOOL_R2, GEMINI_ULTRA_TOOL_JADX or GEMINI_ULTRA_TOOL_ANALYZEHEADLESS to an executable path.\nConfigure models, MCP and authorization separately on each computer.',
+              '\n\n无需外部依赖即可使用 binary_triage 做静态初筛。binary_decompile 使用 Ghidra + 兼容JDK反编译单个函数并保留完整工件；设置 GEMINI_ULTRA_GHIDRA_HOME 为安装根目录，JAVA_HOME 为JDK目录，或 GEMINI_ULTRA_TOOL_JAVA 为原生Java路径。radare2用于反汇编；Android可选JADX，IDA由用户提供许可。工具可加入PATH，或用 GEMINI_ULTRA_TOOL_R2、GEMINI_ULTRA_TOOL_JADX、GEMINI_ULTRA_TOOL_ANALYZEHEADLESS 指定路径。\n每台电脑独立配置模型、工具、MCP与授权，不依赖开发机目录。',
+              '\n\nbinary_triage works without external tools. binary_decompile uses Ghidra and a compatible JDK to recover one function and retain full artifacts. Set GEMINI_ULTRA_GHIDRA_HOME to its installation root and JAVA_HOME to the JDK, or GEMINI_ULTRA_TOOL_JAVA to native Java. radare2 provides disassembly; JADX is optional for Android. IDA requires your own license. Add tools to PATH or set GEMINI_ULTRA_TOOL_R2, GEMINI_ULTRA_TOOL_JADX or GEMINI_ULTRA_TOOL_ANALYZEHEADLESS.\nConfigure models, tools, MCP and authorization independently on each computer.',
             ),
         });
       },

@@ -36,6 +36,7 @@ toolName = [
   "read_many_files",
   "binary_triage",
   "binary_inspect",
+  "binary_decompile",
   "drill_preflight",
   "drill_query_facts",
   "memory_search_graph",

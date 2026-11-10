@@ -672,3 +672,10 @@
 - E-152：offline缓存安装7050ms/退出0；双命令preview.39，424文件匹配Windows
   CI包，旧包保留；不重复相同fixture/付费任务，不改个人配置/数据库/逆向工具。WI-069交付；真实完整自主交付/引用、复杂反编译继续，goal
   active，不合并master/正式Release。
+
+## 2026-11-11 原生 Ghidra 单函数反编译
+
+- E-153/WI-070：新增binary_decompile及原生工具/只读成员接线，Ghidra+兼容JDK直接Java入口，无shell/batch拼接；副本分析不执行样本，保留完整C式伪代码、imageBase/地址、输入/伪代码SHA及报告日志，预览截断不丢工件。工作区校验、64MiB/1GiB/120秒及分析/反编译子界限，失败不标完成。
+- 本机Ghidra12.1.4/JDK21实际还原自建ELF循环/校验/条件返回，原样本未变；源码CLI链3个loopback请求/15281ms/退出0，实际decompile后读完整工件。4项边界、严格相关lint、core/CLI类型通过；最后finally回收补齐后仅重查相关4项，无付费/全量/冒烟。PIE默认重定位的地址失败保留并补基址诊断，不误认文件偏移或r2地址相同。
+- preview.40待三平台最终包原生Ghidra核对与本机安装。WI-056复杂格式/关联/动态逆向和WI-054真实完整自主交付/引用继续，goal
+  active，不合并master/正式Release。交接docs/ultra-ghidra-decompile-handoff.md。

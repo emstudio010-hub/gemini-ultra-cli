@@ -290,6 +290,7 @@ export const ALL_BUILTIN_TOOL_NAMES = [
   'binary_triage',
   'binary_inspect',
   'binary_analyze',
+  'binary_decompile',
   'verified_patch_transaction',
   'apply_patch',
 ] as const;
@@ -321,6 +322,7 @@ export const PLAN_MODE_TOOLS = [
   'binary_triage',
   'binary_inspect',
   'binary_analyze',
+  'binary_decompile',
 ] as const;
 
 /**

@@ -7,6 +7,7 @@
 import { execFile, execFileSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { DrillStore } from '../drill/drillStore.js';
 import { readDrillGrant } from '../drill/drillGrant.js';
 import { ToolErrorType } from './tool-error.js';
@@ -144,6 +145,32 @@ export async function runDrillPreflight(): Promise<DrillPreflightResult> {
   const tools: DrillPreflightResult['tools'] = {
     'ida-pro-mcp': ida,
     ...Object.fromEntries(discovered),
+  };
+  const ghidraHome =
+    process.env['GEMINI_ULTRA_GHIDRA_HOME'] ||
+    (tools['analyzeHeadless'].available
+      ? path.dirname(path.dirname(tools['analyzeHeadless'].pathOrStatus || ''))
+      : undefined);
+  const javaHome = process.env['JAVA_HOME'];
+  if (!tools['java'].available && javaHome) {
+    const java = path.join(
+      javaHome,
+      'bin',
+      process.platform === 'win32' ? 'java.exe' : 'java',
+    );
+    if (fs.existsSync(java))
+      tools['java'] = { available: true, pathOrStatus: java };
+  }
+  const ghidraDetected =
+    !!ghidraHome &&
+    fs.existsSync(
+      path.join(ghidraHome, 'Ghidra/Framework/Utility/lib/Utility.jar'),
+    );
+  tools['ghidra-decompiler'] = {
+    available: ghidraDetected && tools['java'].available,
+    pathOrStatus: ghidraDetected
+      ? `${ghidraHome}; native Java required; compatibility checked on use`
+      : 'Set GEMINI_ULTRA_GHIDRA_HOME to the installation root and configure JAVA_HOME or GEMINI_ULTRA_TOOL_JAVA',
   };
 
   return {

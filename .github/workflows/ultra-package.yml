@@ -68,7 +68,31 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node scripts/verify-ultra-workflow.mjs $entry artifacts/ultra-release/workflow-record-recovery-verification.json record-recovery
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Verify installed native Ghidra decompilation
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $toolDirectory = Join-Path $env:RUNNER_TEMP 'ultra-ghidra'
+          New-Item -ItemType Directory -Path $toolDirectory | Out-Null
+          gh release download Ghidra_12.1.4_build --repo NationalSecurityAgency/ghidra --pattern ghidra_12.1.4_PUBLIC_20260921.zip --dir $toolDirectory
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $archive = Join-Path $toolDirectory 'ghidra_12.1.4_PUBLIC_20260921.zip'
+          if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'ddac49f903da9d5bac833e5cc79395098b9c33cfd3279be5f31bd00387d2d4db') { throw 'Ghidra release checksum mismatch' }
+          if ($IsWindows) { Expand-Archive -LiteralPath $archive -DestinationPath $toolDirectory }
+          else {
+            & unzip -q $archive -d $toolDirectory
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          $entry = Join-Path $env:RUNNER_TEMP 'ultra-install/node_modules/gemini-ultra-cli/bundle/gemini.js'
+          node scripts/verify-ultra-decompile.mjs $entry artifacts/ultra-release/decompile-verification.json (Join-Path $toolDirectory 'ghidra_12.1.4_PUBLIC')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: gemini-ultra-cli-${{ matrix.os }}
           path: |
@@ -81,6 +105,9 @@ jobs:
             artifacts/ultra-release/swarm-model-session-verification-output.txt
             artifacts/ultra-release/worktree-verification.json
             artifacts/ultra-release/worktree-verification-output.txt
+            artifacts/ultra-release/decompile-verification.json
+            artifacts/ultra-release/decompile-verification-output.txt
+            artifacts/ultra-release/decompile-verification-artifacts/**
             artifacts/ultra-release/swarm-budget-verification.json
             artifacts/ultra-release/swarm-budget-verification-output.txt
             artifacts/ultra-release/swarm-recovery-verification.json
