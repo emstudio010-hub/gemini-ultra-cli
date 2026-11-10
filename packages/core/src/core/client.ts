@@ -49,6 +49,7 @@ import {
   calculateHistoryByteSize,
   COLLAPSE_HISTORY_BYTE_THRESHOLD,
   collapseOlderFunctionResponses,
+  type ChatCompressionOptions,
 } from '../context/chatCompressionService.js';
 import { AgentHistoryProvider } from '../context/agentHistoryProvider.js';
 import type { ContextManager } from '../context/contextManager.js';
@@ -1267,21 +1268,34 @@ export class GeminiClient {
     prompt_id: string,
     force: boolean = false,
     abortSignal?: AbortSignal,
+    options?: ChatCompressionOptions,
   ): Promise<ChatCompressionInfo> {
     // If the model is 'auto', we will use a placeholder model to check.
     // Compression occurs before we choose a model, so calling `count_tokens`
     // before the model is chosen would result in an error.
     const model = this._getActiveModelForCurrentTurn();
 
+    const originalChat = this.getChat();
+    const assertCurrent = () => {
+      abortSignal?.throwIfAborted();
+      if (this.getChat() !== originalChat) {
+        throw new Error(
+          'Chat changed during compression; the stale result was discarded.',
+        );
+      }
+    };
+    assertCurrent();
     const { newHistory, info } = await this.compressionService.compress(
-      this.getChat(),
+      originalChat,
       prompt_id,
       force,
       model,
       this.config,
       this.hasFailedCompressionAttempt,
       abortSignal,
+      options,
     );
+    assertCurrent();
 
     if (
       info.compressionStatus ===
@@ -1305,6 +1319,7 @@ export class GeminiClient {
           resumedData = { conversation, filePath };
         }
 
+        assertCurrent();
         this.chat = await this.startChat(newHistory, resumedData);
         this.updateTelemetryTokenCount();
         this.forceFullIdeContext = true;

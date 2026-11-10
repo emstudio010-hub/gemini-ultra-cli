@@ -354,6 +354,60 @@ describe('ChatCompressionService', () => {
     expect(result.newHistory).toBeNull();
   });
 
+  it('supports explicit single-pass compression', async () => {
+    vi.mocked(mockChat.getHistory).mockReturnValue([
+      { role: 'user', parts: [{ text: 'Original scope.' }] },
+      { role: 'model', parts: [{ text: 'Earlier findings.' }] },
+    ]);
+    vi.mocked(mockChat.getLastPromptTokenCount).mockReturnValue(600000);
+    const result = await service.compress(
+      mockChat,
+      mockPromptId,
+      true,
+      mockModel,
+      mockConfig,
+      false,
+      undefined,
+      { verify: false },
+    );
+    expect(result.info.compressionStatus).toBe(CompressionStatus.COMPRESSED);
+    expect(result.newHistory?.[0].parts?.[0].text).toBe('Initial Summary');
+    expect(mockConfig.getBaseLlmClient().generateContent).toHaveBeenCalledTimes(
+      1,
+    );
+  });
+
+  it('does not run verification after cancellation during the first summary', async () => {
+    vi.mocked(mockChat.getHistory).mockReturnValue([
+      { role: 'user', parts: [{ text: 'Original scope.' }] },
+      { role: 'model', parts: [{ text: 'Earlier findings.' }] },
+    ]);
+    const controller = new AbortController();
+    const reason = new Error('Stop compression');
+    vi.mocked(mockConfig.getBaseLlmClient().generateContent)
+      .mockReset()
+      .mockImplementationOnce(async () => {
+        controller.abort(reason);
+        return {
+          candidates: [{ content: { parts: [{ text: 'Late summary' }] } }],
+        } as GenerateContentResponse;
+      });
+    await expect(
+      service.compress(
+        mockChat,
+        mockPromptId,
+        true,
+        mockModel,
+        mockConfig,
+        false,
+        controller.signal,
+      ),
+    ).rejects.toBe(reason);
+    expect(mockConfig.getBaseLlmClient().generateContent).toHaveBeenCalledTimes(
+      1,
+    );
+  });
+
   it('should compress if over token threshold with verification turn', async () => {
     const history: Content[] = [
       { role: 'user', parts: [{ text: 'msg1' }] },

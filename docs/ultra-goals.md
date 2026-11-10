@@ -438,3 +438,14 @@
 
 - 最终文档已在本地提交，推送因GitHub
   TLS失败待重试；功能提交2b2f348000439251b257f06977539a7cd2215e05先前已成功推送。Obsidian已写入最新状态，不因CI未知重启构建。
+
+## 2026-11-10 手动压缩取消与快速模式
+
+- E-100/F-031：手动/compress原先未传入取消信号，后台任务持续占用pending状态；实际已安装preview.26在等待摘要时输入/compress
+  cancel，没有释放连接，11,641ms观察器终止，原false保留。
+- 新增/compress
+  cancel（/压缩 取消），按当前GeminiClient保存手动AbortController并传入核心；仅取消子命令可并发执行，普通压缩继续排队。取消和会话切换后的迟到摘要在应用前丢弃，保护当前上下文。
+- 新增/compress
+  fast（/压缩 快速）显式单轮摘要，跳过第二轮复核；默认与自动压缩仍保留复核，网络重试规则不变。恢复/compact、/summarize别名，中英提示说明当前模式与取消方法。
+- 14项必要选择检查通过（核心5、命令9），受影响文件严格lint/格式与核心/CLI类型构建通过。首次取消检查把mock实施排在旧mockResolvedValueOnce队列后，未实际触发取消；清理该测试队列后单项复核通过。首次HistoryItem新对象的类型错误已按原HistoryItemCompression类型补齐，原日志保留。等待preview.27终端流程及打包安装，goal
+  active；没有新增付费调用。

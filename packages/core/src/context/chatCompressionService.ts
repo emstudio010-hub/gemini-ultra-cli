@@ -573,6 +573,11 @@ async function truncateHistoryToBudget(
   return truncatedHistory;
 }
 
+export interface ChatCompressionOptions {
+  /** Keep the default second summary pass unless single-pass compression is requested. */
+  verify?: boolean;
+}
+
 export class ChatCompressionService {
   async compress(
     chat: GeminiChat,
@@ -582,6 +587,7 @@ export class ChatCompressionService {
     config: Config,
     hasFailedCompressionAttempt: boolean,
     abortSignal?: AbortSignal,
+    options: ChatCompressionOptions = {},
   ): Promise<{ newHistory: Content[] | null; info: ChatCompressionInfo }> {
     const curatedHistory = chat.getHistory(true);
 
@@ -719,41 +725,45 @@ export class ChatCompressionService {
       ],
       systemInstruction: { text: getCompressionPrompt(config) },
       promptId,
-      // TODO(joshualitt): wire up a sensible abort signal,
       abortSignal: abortSignal ?? new AbortController().signal,
       role: LlmRole.UTILITY_COMPRESSOR,
     });
     const summary = getResponseText(summaryResponse) ?? '';
+    abortSignal?.throwIfAborted();
 
     // Phase 3: The "Probe" Verification (Self-Correction)
     // We perform a second lightweight turn to ensure no critical information was lost.
-    const verificationResponse = await config
-      .getBaseLlmClient()
-      .generateContent({
-        modelConfigKey: { model: modelStringToModelConfigAlias(model) },
-        contents: [
-          ...historyForSummarizer,
-          {
-            role: 'model',
-            parts: [{ text: summary }],
-          },
-          {
-            role: 'user',
-            parts: [
+    const verificationResponse =
+      options.verify === false
+        ? undefined
+        : await config.getBaseLlmClient().generateContent({
+            modelConfigKey: { model: modelStringToModelConfigAlias(model) },
+            contents: [
+              ...historyForSummarizer,
               {
-                text: 'Critically evaluate the <state_snapshot> you just generated. Did you omit any specific technical details, file paths, tool results, or user constraints mentioned in the history? If anything is missing or could be more precise, generate a FINAL, improved <state_snapshot>. Otherwise, repeat the exact same <state_snapshot> again.',
+                role: 'model',
+                parts: [{ text: summary }],
+              },
+              {
+                role: 'user',
+                parts: [
+                  {
+                    text: 'Critically evaluate the <state_snapshot> you just generated. Did you omit any specific technical details, file paths, tool results, or user constraints mentioned in the history? If anything is missing or could be more precise, generate a FINAL, improved <state_snapshot>. Otherwise, repeat the exact same <state_snapshot> again.',
+                  },
+                ],
               },
             ],
-          },
-        ],
-        systemInstruction: { text: getCompressionPrompt(config) },
-        promptId: `${promptId}-verify`,
-        role: LlmRole.UTILITY_COMPRESSOR,
-        abortSignal: abortSignal ?? new AbortController().signal,
-      });
+            systemInstruction: { text: getCompressionPrompt(config) },
+            promptId: `${promptId}-verify`,
+            role: LlmRole.UTILITY_COMPRESSOR,
+            abortSignal: abortSignal ?? new AbortController().signal,
+          });
 
+    abortSignal?.throwIfAborted();
     const finalSummary = (
-      getResponseText(verificationResponse)?.trim() || summary
+      (verificationResponse
+        ? getResponseText(verificationResponse)?.trim()
+        : '') || summary
     ).trim();
 
     if (!finalSummary) {
@@ -800,6 +810,7 @@ export class ChatCompressionService {
       config.getContentGenerator(),
       model,
     );
+    abortSignal?.throwIfAborted();
 
     logChatCompression(
       config,

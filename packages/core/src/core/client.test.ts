@@ -478,6 +478,55 @@ describe('Gemini Client (client.ts)', () => {
   });
 
   describe('tryCompressChat', () => {
+    it('does not apply a compression result received after cancellation', async () => {
+      const { mockOriginalChat } = setup();
+      const controller = new AbortController();
+      const reason = new Error('Stop compression');
+      vi.mocked(
+        ChatCompressionService.prototype.compress,
+      ).mockImplementationOnce(async () => {
+        controller.abort(reason);
+        return {
+          newHistory: [{ role: 'user', parts: [{ text: 'Late snapshot' }] }],
+          info: {
+            originalTokenCount: 1000,
+            newTokenCount: 500,
+            compressionStatus: CompressionStatus.COMPRESSED,
+          },
+        };
+      });
+      await expect(
+        client.tryCompressChat('cancelled', true, controller.signal, {
+          verify: false,
+        }),
+      ).rejects.toBe(reason);
+      expect(client.getChat()).toBe(mockOriginalChat);
+      expect(client['startChat']).not.toHaveBeenCalled();
+    });
+
+    it('discards a compression result after the active chat changes', async () => {
+      setup();
+      const replacement = { getHistory: vi.fn() } as unknown as GeminiChat;
+      vi.mocked(
+        ChatCompressionService.prototype.compress,
+      ).mockImplementationOnce(async () => {
+        client['chat'] = replacement;
+        return {
+          newHistory: [{ role: 'user', parts: [{ text: 'Stale snapshot' }] }],
+          info: {
+            originalTokenCount: 1000,
+            newTokenCount: 500,
+            compressionStatus: CompressionStatus.COMPRESSED,
+          },
+        };
+      });
+      await expect(client.tryCompressChat('changed', true)).rejects.toThrow(
+        'Chat changed during compression',
+      );
+      expect(client.getChat()).toBe(replacement);
+      expect(client['startChat']).not.toHaveBeenCalled();
+    });
+
     const mockGetHistory = vi.fn();
 
     beforeEach(() => {

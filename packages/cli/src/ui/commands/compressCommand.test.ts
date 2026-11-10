@@ -8,8 +8,9 @@ import {
   CompressionStatus,
   type ChatCompressionInfo,
   type GeminiClient,
+  I18nManager,
 } from '@google/gemini-cli-core';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { compressCommand } from './compressCommand.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { MessageType } from '../types.js';
@@ -19,6 +20,9 @@ describe('compressCommand', () => {
   let mockTryCompressChat: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
+    vi.spyOn(I18nManager.getInstance(), 't').mockImplementation(
+      (_zh, en) => en,
+    );
     mockTryCompressChat = vi.fn();
     context = createMockCommandContext({
       services: {
@@ -30,6 +34,7 @@ describe('compressCommand', () => {
       },
     });
   });
+  afterEach(() => vi.restoreAllMocks());
 
   it('should do nothing if a compression is already pending', async () => {
     context.ui.pendingItem = {
@@ -78,6 +83,8 @@ describe('compressCommand', () => {
     expect(mockTryCompressChat).toHaveBeenCalledWith(
       expect.stringMatching(/^compress-\d+$/),
       true,
+      expect.any(AbortSignal),
+      { verify: true },
     );
 
     expect(context.ui.addItem).toHaveBeenCalledWith(
@@ -141,6 +148,81 @@ describe('compressCommand', () => {
       expect(compressCommand.name).toBe('compress');
       expect(compressCommand.altNames).toContain('summarize');
       expect(compressCommand.altNames).toContain('compact');
+      expect(compressCommand.isSafeConcurrent).not.toBe(true);
+      expect(
+        compressCommand.subCommands?.find(
+          (command) => command.name === 'cancel',
+        )?.isSafeConcurrent,
+      ).toBe(true);
     });
+  });
+
+  it('requests a single summary pass for fast compression', async () => {
+    mockTryCompressChat.mockResolvedValue({
+      originalTokenCount: 200,
+      newTokenCount: 100,
+      compressionStatus: CompressionStatus.COMPRESSED,
+    });
+    await compressCommand.action!(context, 'fast');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(mockTryCompressChat).toHaveBeenCalledWith(
+      expect.any(String),
+      true,
+      expect.any(AbortSignal),
+      { verify: false },
+    );
+    expect(context.ui.addItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: MessageType.INFO,
+        text: expect.stringContaining('one summary pass'),
+      }),
+      expect.any(Number),
+    );
+  });
+
+  it('cancels a pending manual operation and allows a new compression afterwards', async () => {
+    let signal: AbortSignal | undefined;
+    mockTryCompressChat
+      .mockImplementationOnce((_id, _force, currentSignal: AbortSignal) => {
+        signal = currentSignal;
+        return new Promise((_resolve, reject) =>
+          currentSignal.addEventListener(
+            'abort',
+            () => reject(currentSignal.reason),
+            { once: true },
+          ),
+        );
+      })
+      .mockResolvedValueOnce({
+        originalTokenCount: 200,
+        newTokenCount: 100,
+        compressionStatus: CompressionStatus.COMPRESSED,
+      });
+    await compressCommand.action!(context, '');
+    await compressCommand.subCommands!.find(
+      (command) => command.name === 'cancel',
+    )!.action!(context, '');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(signal?.aborted).toBe(true);
+    expect(context.ui.addItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: MessageType.INFO,
+        text: 'Compression cancelled; the original context was kept.',
+      }),
+      expect.any(Number),
+    );
+    expect(context.ui.setPendingItem).toHaveBeenLastCalledWith(null);
+    await compressCommand.action!(context, 'fast');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(mockTryCompressChat).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects unknown arguments without starting a model request', async () => {
+    await compressCommand.action!(context, 'unknown');
+    expect(mockTryCompressChat).not.toHaveBeenCalled();
+    expect(context.ui.addItem).toHaveBeenCalledWith(
+      expect.objectContaining({ text: 'Usage: /compress [fast|cancel]' }),
+      expect.any(Number),
+    );
   });
 });
