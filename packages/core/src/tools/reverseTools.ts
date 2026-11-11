@@ -19,6 +19,37 @@ import {
   type ExecuteOptions,
 } from './tools.js';
 import { ToolErrorType } from './tool-error.js';
+import { isSubpath } from '../utils/paths.js';
+
+/** Canonicalize literal filesystem paths, including not-yet-created children. */
+function canonicalPatchPath(file: string): string {
+  try {
+    return fs.realpathSync(file);
+  } catch (error) {
+    if (
+      !(error instanceof Error) ||
+      !('code' in error) ||
+      error.code !== 'ENOENT'
+    )
+      throw error;
+    let entry: fs.Stats | undefined;
+    try {
+      entry = fs.lstatSync(file);
+    } catch (linkError) {
+      if (
+        !(linkError instanceof Error) ||
+        !('code' in linkError) ||
+        linkError.code !== 'ENOENT'
+      )
+        throw linkError;
+    }
+    if (entry?.isSymbolicLink())
+      throw new Error(`Cannot patch a dangling symbolic link: ${file}`);
+    const parent = path.dirname(file);
+    if (parent === file) throw error;
+    return path.join(canonicalPatchPath(parent), path.basename(file));
+  }
+}
 
 export interface BinaryTriageResult {
   samplePath: string;
@@ -212,6 +243,7 @@ export function verifiedPatchTransaction(params: {
   hexPatchOffset?: number;
   hexPatchBytes?: string;
   applyToTarget?: boolean;
+  validateWrite?: (file: string) => string | null;
 }): PatchTransactionResult {
   const resolved = path.resolve(params.targetFile);
   if (!fs.existsSync(resolved)) {
@@ -232,6 +264,18 @@ export function verifiedPatchTransaction(params: {
     `${base}.VERIFICATION.${timestamp}.txt`,
   );
   const rollbackScript = path.join(dir, `rollback_${base}_${timestamp}.mjs`);
+
+  for (const file of [
+    resolved,
+    backupFile,
+    modifiedFile,
+    diffFile,
+    verificationFile,
+    rollbackScript,
+  ]) {
+    const denied = params.validateWrite?.(canonicalPatchPath(file));
+    if (denied) throw new Error(denied);
+  }
 
   const origBuffer = fs.readFileSync(resolved);
   let patchedBuffer: Buffer;
@@ -352,6 +396,7 @@ export function verifiedPatchTransaction(params: {
 export function applyCodexPatch(
   patchText: string,
   workspaceDir: string,
+  validateAccess?: (file: string, check: 'read' | 'write') => string | null,
 ): {
   appliedFiles: string[];
   summary: string[];
@@ -360,12 +405,35 @@ export function applyCodexPatch(
   const appliedFiles: string[] = [];
   const summary: string[] = [];
 
+  const checkedPath = (relative: string, operation: string): string => {
+    const fullPath = path.resolve(workspaceDir, relative);
+    const canonical = canonicalPatchPath(fullPath);
+    if (validateAccess) {
+      for (const check of operation === 'Update'
+        ? (['read', 'write'] as const)
+        : (['write'] as const)) {
+        const denied = validateAccess(canonical, check);
+        if (denied) throw new Error(denied);
+      }
+    } else if (
+      !isSubpath(canonicalPatchPath(path.resolve(workspaceDir)), canonical)
+    ) {
+      throw new Error(`Path not in workspace: ${fullPath}`);
+    }
+    return fullPath;
+  };
+  // Check every operation before the first mkdir/write/unlink. Recheck when used.
+  for (const line of lines) {
+    const header = /^\*\*\* (Add|Update|Delete) File:(.*)$/.exec(line);
+    if (header) checkedPath(header[2].trim(), header[1]);
+  }
+
   let i = 0;
   while (i < lines.length) {
     const line = lines[i];
     if (line.startsWith('*** Add File:')) {
       const relPath = line.replace('*** Add File:', '').trim();
-      const fullPath = path.resolve(workspaceDir, relPath);
+      const fullPath = checkedPath(relPath, 'Add');
       i++;
       const contentLines: string[] = [];
       while (i < lines.length && !lines[i].startsWith('*** ')) {
@@ -382,7 +450,7 @@ export function applyCodexPatch(
 
     if (line.startsWith('*** Delete File:')) {
       const relPath = line.replace('*** Delete File:', '').trim();
-      const fullPath = path.resolve(workspaceDir, relPath);
+      const fullPath = checkedPath(relPath, 'Delete');
       if (fs.existsSync(fullPath)) {
         fs.unlinkSync(fullPath);
         appliedFiles.push(fullPath);
@@ -394,7 +462,7 @@ export function applyCodexPatch(
 
     if (line.startsWith('*** Update File:')) {
       const relPath = line.replace('*** Update File:', '').trim();
-      const fullPath = path.resolve(workspaceDir, relPath);
+      const fullPath = checkedPath(relPath, 'Update');
       if (!fs.existsSync(fullPath)) {
         throw new Error(`Cannot update non-existent file: ${relPath}`);
       }
@@ -582,11 +650,22 @@ class VerifiedPatchInvocation extends BaseToolInvocation<
     return `Creating verified patch transaction for ${this.params.targetFile}`;
   }
 
-  override async execute(_options: ExecuteOptions): Promise<ToolResult> {
+  override async execute({ abortSignal }: ExecuteOptions): Promise<ToolResult> {
     try {
+      abortSignal.throwIfAborted();
+      const targetFile = fs.realpathSync(
+        path.resolve(this.config.getTargetDir(), this.params.targetFile),
+      );
+      for (const check of ['read', 'write'] as const) {
+        const denied = this.config.validatePathAccess(targetFile, check);
+        if (denied) throw new Error(denied);
+      }
+      abortSignal.throwIfAborted();
       const res = verifiedPatchTransaction({
         sessionId: this.config.getSessionId(),
         ...this.params,
+        targetFile,
+        validateWrite: (file) => this.config.validatePathAccess(file, 'write'),
       });
       const applyMsg = res.appliedToTarget
         ? '✓ 补丁事务已应用到目标文件并生成五件套备份:'
@@ -690,11 +769,16 @@ class ApplyPatchInvocation extends BaseToolInvocation<
     return 'Applying Codex V4A multi-file patch';
   }
 
-  override async execute(_options: ExecuteOptions): Promise<ToolResult> {
+  override async execute({ abortSignal }: ExecuteOptions): Promise<ToolResult> {
     try {
+      abortSignal.throwIfAborted();
       const res = applyCodexPatch(
         this.params.patch,
         this.config.getTargetDir(),
+        (file, check) => {
+          abortSignal.throwIfAborted();
+          return this.config.validatePathAccess(file, check);
+        },
       );
       return {
         llmContent: `Applied patch to ${res.appliedFiles.length} file(s):\n${res.summary.join('\n')}`,

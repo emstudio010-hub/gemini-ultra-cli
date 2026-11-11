@@ -1086,3 +1086,13 @@ active。
   9f43992b07765c74cee6ed33f4ea1de46655b73d486e18d1053b1e86231afac4。个人locale/provider
   SHA保持64末值，ultra-tools.json仍未创建；无额外本机业务/启动基准/付费或全量/冒烟重跑。WI-098/F-064工作区读取一致性与项目相对路径修复分发交付，goal
   active；更多模型长任务、语义质量、完整终端UI及复杂跨机逆向继续，不合并master或创建正式Release。
+
+## 2026-11-11 补丁工具工作区写入一致性
+
+WI-099/E-238/F-065：apply_patch和verified_patch_transaction入口缺Config.read/write与预取消检查；多文件补丁前面合法文件会先落盘，才遇到后面非法目标。5项旧回归实际失败。修为按项目目录解析目标、canonical路径检查；多文件所有路径先校验再执行并在每步复核，事务目标及五件套产物均检查write后才读写，预取消无修改。applyCodexPatch独立helper未提供回调时限制canonical
+workspace；有Config时保留其额外工作区规则。literal百分号路径不做URL解码，悬空链接拒绝。不声称多文件内容不匹配时全事务回滚、任意外部并发替换TOCTOU或硬链接隔离。
+
+8项不同定向/strict
+type/lint通过；source实际工具入口与真实Config/独立Storage：14拒绝（只读外部/相对越界/链接Add-Update-Delete、事务staged、未知子目录及混合补丁）、2预取消均无越界写入/无事实DB；合法4增改删、额外工作区保留、相对事务暂存及应用/人工文本回滚通过，事实2条，0模型/外部样本。首source验证器误用不存在getDatabase改现有queryPatchTransactions后通过，原日志保留，没有改产品绕条件。Windows人工raw
+execFile取消未复现残留子进程，native-analysis-cancel-before.json保留，不冒称原生进程树新修复；Ghidra准备期取消仍列后续。候选66待patch-access三平台包/全局安装；65其余基线保留，不改个人配置DB/工具，无全量/冒烟，goal
+active。
