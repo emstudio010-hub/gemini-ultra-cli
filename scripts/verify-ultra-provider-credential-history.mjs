@@ -211,6 +211,8 @@ try {
   assert.ok(
     (replayScreen.match(/\/provider list/g) || []).length > beforeReplay,
   );
+  terminal.write('\x05');
+  await pause(100);
   terminal.write('\x15');
   await pause(200);
   terminal.write('/quit');
@@ -313,12 +315,20 @@ try {
   process.exitCode = 1;
 } finally {
   fs.writeFileSync(output.replace(/\.json$/, '') + '-raw-pty.txt', raw);
-  if (!exited) terminal?.kill();
+  if (!exited && terminal) {
+    terminal.kill();
+    for (let attempt = 0; attempt < 30 && !exited; attempt++) await pause(100);
+  }
   emulator.dispose();
   server.close();
   server.closeAllConnections();
   assert.equal(path.dirname(root), os.tmpdir());
   assert.match(path.basename(root), /^ultra-provider-credential-/);
-  fs.rmSync(root, { recursive: true, force: true });
+  fs.rmSync(root, {
+    recursive: true,
+    force: true,
+    maxRetries: 10,
+    retryDelay: 100,
+  });
 }
 process.stdout.write('', () => process.exit(process.exitCode || 0));
