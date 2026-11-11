@@ -48,6 +48,9 @@ import {
   type HookEventName,
   type OutputFormat,
   detectIdeFromEnv,
+  AuthType,
+  getAuthTypeFromEnv,
+  ProviderManager,
 } from '@google/gemini-cli-core';
 import {
   type Settings,
@@ -850,7 +853,6 @@ export async function loadCliConfig(
     interactive,
   );
 
-  const defaultModel = GEMINI_MODEL_ALIAS_AUTO;
   const rawModel =
     argv.model || process.env['GEMINI_MODEL'] || settings.model?.name;
 
@@ -861,6 +863,17 @@ export async function loadCliConfig(
       ? undefined
       : String(rawModel ?? '').trim() || '';
 
+  let defaultModel = GEMINI_MODEL_ALIAS_AUTO;
+  if (
+    (!specifiedModel || specifiedModel === GEMINI_MODEL_ALIAS_AUTO) &&
+    (settings.security?.auth?.selectedType ?? getAuthTypeFromEnv()) ===
+      AuthType.GATEWAY
+  ) {
+    const providers = ProviderManager.getInstance();
+    const provider = providers.getActiveProvider();
+    const model = providers.getActiveModel();
+    if (provider && model) defaultModel = `${provider.id}:${model}`;
+  }
   const resolvedModel =
     specifiedModel === GEMINI_MODEL_ALIAS_AUTO
       ? defaultModel

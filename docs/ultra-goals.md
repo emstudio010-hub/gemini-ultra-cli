@@ -812,3 +812,6 @@
 - 旧实现5项回归失败，修复后6项与严格相关lint/type通过。源码原生ConPTY同会话实际first→second端点，再Third→custom-model，2次loopback请求/0目录/自然退出0；供应商CLI链源码通过，目录401时退出42且原文件字节不变。无付费或启动微基准重复。
 - 候选preview.48显式三平台provider范围，新鲜包/安装/相关命令；未受影响Swarm/Teamwork/Ghidra沿用47完整基线。普通push/默认手动仍full。最终源和安装待追加，goal
   active，详docs/ultra-provider-session-handoff.md。
+
+- E-179追加：首轮48源2de06ee/run43022218738三平台provider检查失败，未安装。正文前有2次数值分类，默认gateway模型仍为Gemini
+  auto；现CLI初始化采用活跃供应商限定模型，保留显式参数/环境/设置及Google模式。14项定向模型选择检查、严格lint/type与CI=true源码链通过，正文1POST/失败目录1GET。旧供应商项不重复，失败保留，本机profile污染检查已隔离。

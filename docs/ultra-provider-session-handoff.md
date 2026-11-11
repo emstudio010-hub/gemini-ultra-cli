@@ -18,6 +18,15 @@ second后一次请求实际命中/second/chat/completions、shared-model。手�
 
 工程证据目录C:\Users\Administrator\Documents\ChatGPT\gmncliu：provider-command-before.log/-junit.xml、provider-command-final-test.log/-junit.xml、provider-command-final-types.log、provider-command-release-lint.log、provider-route-source.json/-output.txt、provider-cli-source.json/-output.txt。全部自建临时profile/loopback假密钥，旧失败保留。
 
+## 默认网关启动额外分类修复
+
+首轮48源2de06ee/run43022218738三平台失败，未安装。正文前有2次NumericalClassifierStrategy请求：默认网关在Config中仍为Gemini
+auto，生成器才在后端转到活跃供应商，分类器JSON重试后才返回正文。前一源码链1次请求不能代表CI；首轮3次POST和错误日志保留，没有放宽计数掩盖问题。
+
+初始化现在对已保存或环境识别的gateway，在未显式指定模型（或指定auto）时直接采用活跃供应商限定模型ID。显式CLI/环境/设置模型优先，无活跃供应商或模型保持auto，Google登录保持auto。新增9项边界加原5项模型选择共14项通过（220项未运行），严格相关lint/type通过。旧检查曾读取本机个人供应商，现隔离为空fixture，未改动个人配置；修前3失败/3通过及检查污染失败保留。
+
+修后源码在CI=true环境运行相关原生命令链通过：1次正文POST和1次预期失败目录GET，无额外分类，所有checks通过。因实际失败才新增该验证，未重复ConPTY/付费/未受影响逆向协作。证据：gateway-startup-before.log、gateway-startup-junit.xml、gateway-startup-final-lint.log/-types.log、provider-cli-gateway-source.json/-output.txt、github-preview48-first-run.json、preview48-linux-provider-job.log、github-run-43022218738/。
+
 ## 分发与剩余目标
 
 CI增加显式verification_scope=provider：三平台新鲜打包、实际安装及相关供应商链。普通push与默认手动full继续全部原生检查。本轮产品提交skip

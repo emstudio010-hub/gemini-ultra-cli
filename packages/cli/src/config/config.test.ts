@@ -177,6 +177,12 @@ const originalStdinIsTTY = process.stdin.isTTY;
 
 beforeEach(() => {
   delete process.env['GEMINI_MODEL'];
+  // Startup selection tests must never inherit the developer's provider profile.
+  vi.spyOn(ServerConfig.ProviderManager, 'getInstance').mockReturnValue(
+    new ServerConfig.ProviderManager(
+      path.join(os.tmpdir(), `ultra-config-${process.pid}-no-provider.json`),
+    ),
+  );
   // Restore ExtensionManager mocks by re-assigning them
   ExtensionManager.prototype.getExtensions = vi.fn().mockReturnValue([]);
   ExtensionManager.prototype.loadExtensions = vi
@@ -197,6 +203,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  if (vi.isMockFunction(ServerConfig.ProviderManager.getInstance))
+    vi.mocked(ServerConfig.ProviderManager.getInstance).mockRestore();
   process.argv = originalArgv;
   if (originalGeminiModel !== undefined) {
     process.env['GEMINI_MODEL'] = originalGeminiModel;
@@ -1948,6 +1956,119 @@ describe('loadCliConfig model selection', () => {
 
     expect(config.getModel()).toBe('auto');
   });
+});
+
+describe('gateway startup model selection', () => {
+  beforeEach(() => {
+    const manager = new ServerConfig.ProviderManager(
+      '/mock/gateway-providers.json',
+    );
+    vi.spyOn(manager, 'getActiveProvider').mockReturnValue({
+      id: 'fixture',
+      name: 'Fixture',
+      baseUrl: 'https://fixture.invalid/v1',
+      apiKey: '',
+      protocol: 'openai-chat',
+      models: ['selected-model'],
+      defaultModel: 'selected-model',
+      updatedAt: '2026-11-11T00:00:00Z',
+    });
+    vi.spyOn(manager, 'getActiveModel').mockReturnValue('selected-model');
+    vi.spyOn(ServerConfig.ProviderManager, 'getInstance').mockReturnValue(
+      manager,
+    );
+    vi.spyOn(ServerConfig, 'getAuthTypeFromEnv').mockReturnValue(
+      ServerConfig.AuthType.GATEWAY,
+    );
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it.each([
+    {
+      label: 'saved gateway',
+      auth: ServerConfig.AuthType.GATEWAY,
+      argv: [],
+      model: undefined,
+      expected: 'fixture:selected-model',
+    },
+    {
+      label: 'detected gateway',
+      auth: undefined,
+      argv: [],
+      model: undefined,
+      expected: 'fixture:selected-model',
+    },
+    {
+      label: 'auto gateway alias',
+      auth: ServerConfig.AuthType.GATEWAY,
+      argv: ['--model', 'auto'],
+      model: undefined,
+      expected: 'fixture:selected-model',
+    },
+    {
+      label: 'explicit CLI model',
+      auth: ServerConfig.AuthType.GATEWAY,
+      argv: ['--model', 'other:explicit'],
+      model: 'settings-model',
+      expected: 'other:explicit',
+    },
+    {
+      label: 'explicit settings model',
+      auth: ServerConfig.AuthType.GATEWAY,
+      argv: [],
+      model: 'settings-model',
+      expected: 'settings-model',
+    },
+    {
+      label: 'Google login',
+      auth: ServerConfig.AuthType.LOGIN_WITH_GOOGLE,
+      argv: [],
+      model: undefined,
+      expected: 'auto',
+    },
+  ])(
+    'uses the correct startup model for $label',
+    async ({ auth, argv: flags, model, expected }) => {
+      process.argv = ['node', 'script.js', ...flags];
+      const settings = createTestMergedSettings({
+        security: { auth: { selectedType: auth } },
+        model: { name: model },
+      });
+      const argv = await parseArguments(settings);
+      const config = await loadCliConfig(settings, 'gateway-fixture', argv);
+      expect(config.getModel()).toBe(expected);
+    },
+  );
+
+  it('keeps an explicit environment model ahead of the active gateway model', async () => {
+    process.env['GEMINI_MODEL'] = 'environment-model';
+    process.argv = ['node', 'script.js'];
+    const settings = createTestMergedSettings({
+      security: { auth: { selectedType: ServerConfig.AuthType.GATEWAY } },
+    });
+    const argv = await parseArguments(settings);
+    const config = await loadCliConfig(settings, 'gateway-fixture', argv);
+    expect(config.getModel()).toBe('environment-model');
+  });
+
+  it.each(['provider', 'model'])(
+    'retains auto when the gateway has no active %s',
+    async (missing) => {
+      const manager = ServerConfig.ProviderManager.getInstance();
+      if (missing === 'provider')
+        vi.mocked(manager.getActiveProvider).mockReturnValue(undefined);
+      else vi.mocked(manager.getActiveModel).mockReturnValue(undefined);
+      process.argv = ['node', 'script.js'];
+      const settings = createTestMergedSettings({
+        security: { auth: { selectedType: ServerConfig.AuthType.GATEWAY } },
+      });
+      const argv = await parseArguments(settings);
+      const config = await loadCliConfig(settings, 'gateway-fixture', argv);
+      expect(config.getModel()).toBe('auto');
+    },
+  );
 });
 
 describe('loadCliConfig folderTrust', () => {
