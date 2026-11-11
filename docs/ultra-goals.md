@@ -804,3 +804,11 @@
 - E-178：offline已有缓存安装7252ms/退出0，双命令preview.47，425文件匹配Windows
   CI包，旧包保留。包SHA010f1ed8…，入口SHA30eff066…，完整值见交接。WI-079交付，目标池首页更新47；未重复本机业务链/启动微基准/付费任务。goal
   active，真实Teamwork长任务与更多模型/复杂逆向未验收，不合并master/正式Release。docs/ultra-teamwork-delivery-handoff.md。
+
+## 2026-11-11 供应商会话同步与语言一致性
+
+- E-179/WI-080：修复/provider
+  use和add未同步当前会话限定模型，保存成功才切换路由。手填模型跳过目录并保留已有模型；目录失败保留原配置，保存失败不切换。命令/列表/反馈按locale即时切换，use补全每供应商唯一ID。
+- 旧实现5项回归失败，修复后6项与严格相关lint/type通过。源码原生ConPTY同会话实际first→second端点，再Third→custom-model，2次loopback请求/0目录/自然退出0；供应商CLI链源码通过，目录401时退出42且原文件字节不变。无付费或启动微基准重复。
+- 候选preview.48显式三平台provider范围，新鲜包/安装/相关命令；未受影响Swarm/Teamwork/Ghidra沿用47完整基线。普通push/默认手动仍full。最终源和安装待追加，goal
+  active，详docs/ultra-provider-session-handoff.md。

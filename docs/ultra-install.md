@@ -15,7 +15,7 @@ v24.22.2；校验场景使用本地模型fixture，真实逆向工具需另行�
 Release 下载），执行：
 
 ```sh
-npm install -g ./gemini-ultra-cli-1.0.0-preview.47.tgz
+npm install -g ./gemini-ultra-cli-1.0.0-preview.48.tgz
 gemini-ultra --version
 gemini-ultra
 ```
@@ -40,6 +40,13 @@ gemini-ultra
    的静态初筛不依赖 IDA 或 Ghidra。深入反编译需要用户安装至少一种对应工具。
 5. `/drill` 或 `/演练台`
    打开本地控制中心，管理提示词、规则、模型与协作状态。`/drill stop` 关闭。
+
+`/provider use <名称或ID>`
+同时切换持久化选择与当前会话模型，后续请求立即使用新供应商。 `/provider use`
+的补全只列供应商 ID，每个供应商一项。命令说明和反馈随 `/language` 切换。
+`/provider add <名称> <URL> <Key> [模型]`
+手填模型时跳过模型列表请求；更新已有供应商时保留其他已配置模型。省略模型则尝试获取列表；列表为空或失败时保留原配置，提示手填模型或进入
+`/provider` 编辑。
 
 ## 可选输出上限
 
@@ -111,13 +118,13 @@ Release。每个安装包附带 `.sha256` 文件，便于传输后核对。
 Windows PowerShell 校验安装包：
 
 ```powershell
-Get-FileHash ./gemini-ultra-cli-1.0.0-preview.47.tgz -Algorithm SHA256
-Get-Content ./gemini-ultra-cli-1.0.0-preview.47.tgz.sha256
+Get-FileHash ./gemini-ultra-cli-1.0.0-preview.48.tgz -Algorithm SHA256
+Get-Content ./gemini-ultra-cli-1.0.0-preview.48.tgz.sha256
 ```
 
 macOS 使用
-`shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.47.tgz.sha256`；Linux 使用
-`sha256sum -c gemini-ultra-cli-1.0.0-preview.47.tgz.sha256`。
+`shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.48.tgz.sha256`；Linux 使用
+`sha256sum -c gemini-ultra-cli-1.0.0-preview.48.tgz.sha256`。
 
 ## 自定义逆向工具路径
 
