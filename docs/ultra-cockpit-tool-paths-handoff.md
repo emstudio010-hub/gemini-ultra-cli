@@ -1,6 +1,6 @@
 # Gemini Ultra CLI 演练台工具路径配置交接
 
-日期：2026-11-11。WI-093/E-221/F-060，候选preview.61。沿用R26/code-audit自有源码case、lead/cae/doc、scope授权granted。没有真实模型、外部安全目标、个人配置/数据库/逆向工具改动。
+日期：2026-11-11。WI-093/E-221/F-060，preview.61 已安装。沿用R26/code-audit自有源码case、lead/cae/doc、scope授权granted。没有真实模型、外部安全目标、个人配置/数据库/逆向工具改动。
 
 ## 发现与实现
 
@@ -26,5 +26,25 @@ loopback状态请求，没有提交任务或调用模型。Node副本仅验证�
 
 相关严格type/lint通过；首类型检查发现中文含逗号的翻译key漏引号，修正后通过，原日志保留。没有全量、冒烟、未变更协作链或付费模型重跑。工程证据：cockpit-preflight-before.json/-log、verify-cockpit-preflight-before.mjs、cockpit-tool-paths-api.json/-log、verify-cockpit-tool-paths.mjs、cockpit-tool-paths-browser.json、cockpit-tool-paths-en.jpg、cockpit-tool-paths-types.log、cockpit-tool-paths-final-types.log、cockpit-tool-paths-lint.log。
 
-候选61三平台包与全局安装待接续。现有工具/协作基线保留，更多模型/长任务、语义准确性和跨机复杂逆向继续，goal
-active。不合并master或创建正式Release。
+## 分发与全局安装
+
+E-222：产品源 `1e46960d73c83c5b9a805149901ba922388e3d0a`，
+[run 43074841995](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/43074841995)
+三平台tool-paths范围completed/success。独立下载核对版本61、源chunk、包SHA、六rg身份/权限及安装4基础工具。包内实际包含tool-paths
+API、双语编辑表单、toolPathRevision与Promise身份保护。每平台12实际CLI命令8退出0/4预期42/0模型/无超时，备份/损坏SHA保持。4组源HTTP和浏览器流程只证明本机源服务界面，不把它写成三平台真实浏览器验收。旧协作链skipped，47至60基线保留。
+
+初独立核对使用了jobs已成功、整体run仍in_progress的较早JSON而拒绝；原快照github-preview61-run-before-completion.json保留，读取同一run终态后核对通过，没有重启workflow或业务。
+
+E-223：Windows
+CI包offline已有缓存安装7316ms/退出0，双命令preview.61，425文件逐一匹配CI包，旧包保留。包SHA256
+`05b63c99410ae66cc3022b9395e7df51c0fc7b70d05e9619b5dd4f8cb3e9fc80`，入口SHA256
+`017cb8e1fa3a5942fcdb61c53ca1bf0ebbe4ce23a2bb6110bec2feb519d06d98`。没有追加本机业务、启动基准或付费任务。
+
+最终证据：github-preview61-run.json、github-preview61-artifacts-result.json、github-preview61-artifacts-verification.log、github-run-43074841995/、global-preview61-install-result.json、global-install-github-preview61-full-result.json、cockpit-tool-paths-personal-config.json。个人locale
+SHA
+`4fcce506592e55074156cab2f5fea35cce0d48ea5f8c919b69cd71ffc735f2c8`、providers
+SHA `e0bff750cd1f18458cffc175ad3683d1851bbc58958fb4182dd15d9e128e4332`
+保持，ultra-tools.json仍未创建。本轮隔离源服务已停止。源码、工程正式报告及Obsidian全文同步。
+
+goal
+active。现有工具/协作基线保留，更多模型/长任务、原生协作看板、语义准确性和跨机复杂逆向继续。不合并master或创建正式Release。
