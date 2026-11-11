@@ -122,6 +122,7 @@ describe('A2AClientManager', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
@@ -177,6 +178,151 @@ describe('A2AClientManager', () => {
   });
 
   describe('loadAgent', () => {
+    it('preserves cancellation supplied by a Request object to the cached resolver', async () => {
+      await manager.loadAgent('RequestSignal', {
+        type: 'url',
+        url: 'http://local/card',
+      });
+      const options = vi.mocked(DefaultAgentCardResolver).mock.calls[0][0];
+      const controller = new AbortController();
+      const request = new Request('http://local/card', {
+        signal: controller.signal,
+      });
+      await options!.fetchImpl!(request);
+      const signal = vi.mocked(fetch).mock.calls.at(-1)?.[1]?.signal;
+      expect(signal?.aborted).toBe(false);
+      controller.abort();
+      expect(signal?.aborted).toBe(true);
+    });
+
+    it('does not repeat an unauthenticated 401 request without an auth handler', async () => {
+      await manager.loadAgent('Unauthenticated', {
+        type: 'url',
+        url: 'http://local/card',
+      });
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+      } as Response);
+      const options = vi.mocked(DefaultAgentCardResolver).mock.calls[0][0];
+      const response = await options!.fetchImpl!('http://local/card');
+      expect(response.status).toBe(401);
+      expect(fetch).toHaveBeenCalledOnce();
+      expect(authFetchMock).not.toHaveBeenCalled();
+    });
+
+    it('bounds a stalled resolver without caching a late result', async () => {
+      vi.useFakeTimers();
+      let release!: (card: AgentCard) => void;
+      vi.mocked(DefaultAgentCardResolver).mockReturnValue({
+        resolve: () =>
+          new Promise<AgentCard>((resolve) => {
+            release = resolve;
+          }),
+      } as unknown as DefaultAgentCardResolver);
+      const pending = manager
+        .loadAgent('SlowCard', { type: 'url', url: 'http://local/card' })
+        .catch((error: unknown) => error);
+      await vi.advanceTimersByTimeAsync(10001);
+      expect(await pending).toMatchObject({
+        message: expect.stringContaining(
+          'Agent card discovery exceeded 10 seconds',
+        ),
+      });
+      release(mockAgentCard);
+      await Promise.resolve();
+      expect(manager.getClient('SlowCard')).toBeUndefined();
+      expect(manager.getAgentCard('SlowCard')).toBeUndefined();
+      expect(ClientFactory).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('bounds response body parsing after headers and aborts its request', async () => {
+      vi.useFakeTimers();
+      let requestSignal: AbortSignal | undefined;
+      vi.mocked(fetch).mockImplementation(async (_input, init) => {
+        requestSignal = init?.signal ?? undefined;
+        return { ok: true, json: () => new Promise(() => {}) } as Response;
+      });
+      vi.mocked(DefaultAgentCardResolver).mockReturnValue({
+        resolve: async (url: string) => {
+          const options = vi
+            .mocked(DefaultAgentCardResolver)
+            .mock.calls.at(-1)?.[0];
+          const response = await options!.fetchImpl!(url);
+          return response.json();
+        },
+      } as unknown as DefaultAgentCardResolver);
+      const pending = manager
+        .loadAgent('BodyCard', { type: 'url', url: 'http://local/card' })
+        .catch((error: unknown) => error);
+      await vi.advanceTimersByTimeAsync(9999);
+      expect(requestSignal?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(2);
+      expect(await pending).toMatchObject({
+        message: expect.stringContaining('exceeded 10 seconds'),
+      });
+      expect(requestSignal?.aborted).toBe(true);
+      expect(manager.getClient('BodyCard')).toBeUndefined();
+    });
+
+    it('shares one discovery deadline across 401 retry and a stalled auth callback', async () => {
+      vi.useFakeTimers();
+      const cancel = vi.fn().mockResolvedValue(undefined);
+      let requestSignal: AbortSignal | undefined;
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        body: { cancel },
+      } as unknown as Response);
+      authFetchMock.mockImplementationOnce(async (_input, init) => {
+        requestSignal = init.signal;
+        return new Promise(() => {});
+      });
+      vi.mocked(DefaultAgentCardResolver).mockReturnValue({
+        resolve: async (url: string) => {
+          const options = vi
+            .mocked(DefaultAgentCardResolver)
+            .mock.calls.at(-1)?.[0];
+          const response = await options!.fetchImpl!(url);
+          return response.json();
+        },
+      } as unknown as DefaultAgentCardResolver);
+      const pending = manager
+        .loadAgent(
+          'AuthCard',
+          { type: 'url', url: 'http://local/card' },
+          {} as AuthenticationHandler,
+        )
+        .catch((error: unknown) => error);
+      await vi.advanceTimersByTimeAsync(6000);
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(requestSignal?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(4001);
+      expect(await pending).toMatchObject({
+        message: expect.stringContaining('exceeded 10 seconds'),
+      });
+      expect(requestSignal?.aborted).toBe(true);
+      expect(manager.getClient('AuthCard')).toBeUndefined();
+    });
+
+    it('leaves task transport signals independent of completed card discovery', async () => {
+      await manager.loadAgent(
+        'Transport',
+        { type: 'url', url: 'http://local/card' },
+        {} as AuthenticationHandler,
+      );
+      const transportFetch = vi.mocked(createAuthenticatingFetchWithRetry).mock
+        .calls[0][0];
+      const controller = new AbortController();
+      await transportFetch('http://local/task', { signal: controller.signal });
+      expect(fetch).toHaveBeenCalledWith(
+        'http://local/task',
+        expect.objectContaining({ signal: controller.signal }),
+      );
+      expect(controller.signal.aborted).toBe(false);
+    });
+
     it('should create and cache an A2AClient', async () => {
       const agentCard = await manager.loadAgent('TestAgent', {
         type: 'url',
@@ -281,7 +427,10 @@ describe('A2AClientManager', () => {
       await cardFetch('http://test.url');
 
       expect(fetch).toHaveBeenCalledWith('http://test.url', expect.anything());
-      expect(authFetchMock).toHaveBeenCalledWith('http://test.url', undefined);
+      expect(authFetchMock).toHaveBeenCalledWith(
+        'http://test.url',
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
     });
 
     it('should log a debug message upon loading an agent', async () => {

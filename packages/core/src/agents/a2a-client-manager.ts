@@ -44,6 +44,7 @@ export type SendMessageResult =
 // Remote agents can take 10+ minutes (e.g. Deep Research).
 // Use a dedicated dispatcher so the global 5-min timeout isn't affected.
 const A2A_TIMEOUT = 1800000; // 30 minutes
+const AGENT_CARD_TIMEOUT = 10000;
 
 /**
  * Orchestrates communication with remote A2A agents.
@@ -102,18 +103,29 @@ export class A2AClientManager {
       );
     }
 
+    let discoverySignal: AbortSignal | undefined;
     // Use unauthenticated fetch for the agent card unless explicitly required.
     // Some servers reject unexpected auth headers on the card endpoint (e.g. 400).
     const cardFetch = async (
       input: RequestInfo | URL,
       init?: RequestInit,
     ): Promise<Response> => {
+      const callerSignal =
+        init?.signal === undefined && input instanceof Request
+          ? input.signal
+          : init?.signal;
+      const signal = AbortSignal.any([
+        discoverySignal ?? AbortSignal.timeout(AGENT_CARD_TIMEOUT),
+        ...(callerSignal ? [callerSignal] : []),
+      ]);
+      const requestInit = { ...init, signal };
       // Try without auth first
-      const response = await this.a2aFetch(input, init);
+      const response = await this.a2aFetch(input, requestInit);
 
-      // Retry with auth if we hit a 401/403
-      if ((response.status === 401 || response.status === 403) && authFetch) {
-        return authFetch(input, init);
+      // Retry only when an authentication handler can add credentials.
+      if ((response.status === 401 || response.status === 403) && authHandler) {
+        await response.body?.cancel();
+        return authFetch(input, requestInit);
       }
 
       return response;
@@ -135,7 +147,34 @@ export class A2AClientManager {
       }
     } else {
       urlIdentifier = options.url;
-      rawCard = await resolver.resolve(options.url, '');
+      const controller = new AbortController();
+      discoverySignal = controller.signal;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const deadline = new Promise<never>((_resolve, reject) => {
+          timer = setTimeout(() => {
+            const error = new Error(
+              'Agent card discovery exceeded 10 seconds. Check the remote endpoint and reload agents. Long-running agent tasks use a separate timeout.',
+            );
+            // Reject before abort listeners so the caller gets this diagnostic
+            // even if an auth handler or response body ignores cancellation.
+            reject(error);
+            controller.abort(error);
+          }, AGENT_CARD_TIMEOUT);
+        });
+        // Bound the complete resolver, including response.json() and auth
+        // callbacks, not just the time to receive response headers.
+        rawCard = await Promise.race([
+          resolver.resolve(options.url, ''),
+          deadline,
+        ]);
+      } finally {
+        clearTimeout(timer);
+        // Release outstanding card requests (including discarded auth replies)
+        // while keeping the cached resolver usable for future discoveries.
+        discoverySignal = undefined;
+        controller.abort();
+      }
     }
 
     // TODO: Remove normalizeAgentCard once @a2a-js/sdk handles
