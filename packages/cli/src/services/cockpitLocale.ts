@@ -40,6 +40,12 @@ export const cockpitTranslations: Record<string, string> = {
   'Bypass · 免人工审批': 'Bypass · Skip manual approvals',
   演练授权记录: 'Drill authorization record',
   多代理协作: 'Agent collaboration',
+  '原生 Agent 任务': 'Native Agent tasks',
+  '读取当前项目的 Teamwork、Boost、Grill me 和 Swarm。选择任务查看进度，打开演练台时每4秒更新所选详情；目录按需刷新。':
+    'Read this project’s Teamwork, Boost, Grill me and Swarm tasks. Select a task for progress. Its details update every 4 seconds while the cockpit is open; refresh the catalog on demand.',
+  读取项目任务: 'Load project tasks',
+  上一页: 'Previous page',
+  下一页: 'Next page',
   协作方式: 'Collaboration mode',
   按任务自动判断: 'Automatic',
   单代理: 'Single agent',

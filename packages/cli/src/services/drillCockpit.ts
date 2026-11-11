@@ -31,6 +31,9 @@ import {
   drillToolNames,
   savedDrillToolPaths,
   saveDrillToolPath,
+  listAgentTasks,
+  readAgentTaskDetails,
+  agentTaskSelectionSchema,
   type Config,
 } from '@google/gemini-cli-core';
 import { registerCleanup } from '../utils/cleanup.js';
@@ -132,6 +135,59 @@ async function handleRequest(
   if (!current) throw new RequestError(409, 'CLI 会话尚未就绪或已关闭。');
   const { config } = current;
   const mgr = ProviderManager.getInstance();
+  if (req.method === 'GET' && pathname === '/api/agent-tasks') {
+    const value =
+      new URL(req.url || '/', address).searchParams.get('page') || '1';
+    if (!/^[1-9]\d{0,5}$/.test(value))
+      throw new RequestError(400, 'Invalid task page.');
+    try {
+      const catalog = listAgentTasks(
+        config.storage.getProjectTempDir(),
+        Number(value),
+      );
+      reply(res, 200, {
+        ...catalog,
+        entries: catalog.entries.map((entry) => ({
+          ...entry,
+          objective: entry.objective?.slice(0, 300),
+        })),
+      });
+    } catch {
+      throw new RequestError(
+        400,
+        I18nManager.getInstance().t(
+          '任务目录无法读取，原文件保留。',
+          'Task catalog unavailable; original files retained.',
+        ),
+      );
+    }
+    return;
+  }
+  if (req.method === 'GET' && pathname === '/api/agent-task') {
+    const query = new URL(req.url || '/', address).searchParams;
+    const selected = agentTaskSelectionSchema.safeParse({
+      mode: query.get('mode'),
+      id: query.get('id'),
+    });
+    if (!selected.success)
+      throw new RequestError(400, 'Invalid task mode or ID.');
+    try {
+      reply(
+        res,
+        200,
+        readAgentTaskDetails(config.storage.getProjectTempDir(), selected.data),
+      );
+    } catch {
+      throw new RequestError(
+        400,
+        I18nManager.getInstance().t(
+          '任务详情无法读取或模式不匹配，原文件保留。',
+          'Task details unavailable or mode mismatch; original files retained.',
+        ),
+      );
+    }
+    return;
+  }
   if (req.method === 'GET' && pathname === '/api/status') {
     const store = DrillStore.getInstance();
     reply(res, 200, {

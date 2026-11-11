@@ -68,6 +68,10 @@ export {
   type AgentTaskCatalogEntry,
 } from './src/agents/agentTaskCatalog.js';
 export {
+  readAgentTaskDetails,
+  agentTaskSelectionSchema,
+} from './src/agents/agentTaskDetails.js';
+export {
   readUltraRuntime,
   saveUltraRuntime,
   listCollaborationTasks,

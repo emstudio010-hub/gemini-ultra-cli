@@ -1008,3 +1008,9 @@ active。
 - E-223：offline已有缓存安装7316ms/退出0，双命令preview.61，425文件匹配Windows
   CI包，旧包保留。个人locale/provider
   SHA保持60末值，ultra-tools.json仍未创建，无额外本机业务/启动基准/付费重跑。WI-093界面与F-060缓存修复及分发交付，目标active；源界面在隔离会话夹具中验证，不冒充完整安装终端/三平台浏览器/真实逆向。更多模型长任务、原生协作看板和复杂跨机逆向继续，不合并master/正式Release。docs/ultra-cockpit-tool-paths-handoff.md。
+
+## 2026-11-11 演练台原生协作看板
+
+WI-094/E-224/F-061：旧页面只展示普通会话子任务，新增项目原生任务目录及只读详情投影，四模式/20项分页/成员与最近留言/里程碑与最近结果/用量；目录按需，所选详情仅在演练台可见时4秒刷新。saved预算直接读，不走会迁移账本的summary，不补旧预算，未知请求和上限均null，常规有界文件/链接拒绝；token/Origin保留。长文本只预览及全文路径，正文不在此面板验证，原文textContent防HTML执行。浏览器F-061
+button样式覆盖hidden，补显式规则；二十卡片改紧凑原生选择器。3核心项通过；未知Swarm上限改null后仅复核受影响项；初根cwd导致setup未收集失败保留。源3组HTTP覆盖认证/四模式/22项20+2分页/坏文件及模式拒绝，29文件SHA保持，0模型/任务。实际浏览器Swarm预览与留言、宿主受控成员状态变化自动刷新、分页、Teamwork未知及英文Boost7/30结果通过；29文件仅宿主fixture变更的members.json变化，不冒充新模型任务。候选62待cockpit-tasks范围CI/安装，goal
+active，个人配置DB工具未改。

@@ -15,7 +15,7 @@ v24.22.2；校验场景使用本地模型fixture，真实逆向工具需另行�
 Release 下载），执行：
 
 ```sh
-npm install -g ./gemini-ultra-cli-1.0.0-preview.61.tgz
+npm install -g ./gemini-ultra-cli-1.0.0-preview.62.tgz
 gemini-ultra --version
 gemini-ultra
 ```
@@ -431,6 +431,9 @@ GettingStarted.md安装C/C++工具链后，到Ghidra安装目录的support/gradl
 :Decompiler:buildNatives，成功后Ghidra会优先使用build/os下的组件。CLI不会擅自编译或改动本机工具安装。
 
 ## 保存和读取工作流报告
+
+演练台新增「原生 Agent 任务」：点击「读取项目任务」，再选择 Teamwork、Boost、Grill
+me 或 Swarm。目录每页20项，按需刷新；所选详情在演练台可见时每4秒更新。可查看成员状态、最近共享留言、里程碑、当前阶段、用量与结果预览，并取得该任务的完整 status/reports 命令。长结果附全文档案路径；面板显示预览和路径，完整正文校验与导出仍使用 reports。旧任务用量缺失时显示未知，坏记录保留并标注；查看沿用当前批准和活动任务选择。任务控制继续使用终端里的原生命令。
 
 用 `/teamwork list`、`/boost list`、`/grill-me list` 或 `/swarm list`
 查看当前项目的同一份 Agent 任务目录；四种任务一起列出，按保存时间排序，每页20项。`/swarm list 2`
