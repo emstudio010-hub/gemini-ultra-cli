@@ -1,6 +1,6 @@
 # Gemini Ultra CLI 启动阻塞修复交接
 
-日期：2026-11-11。WI-076/E-167，preview.44候选。沿用自有源码case
+日期：2026-11-11。WI-076/E-167至169，preview.44已安装。沿用自有源码case
 R26/code-audit、lead/cae/doc，仅本地启动路径与分发核对，不改个人供应商配置、数据库或逆向工具。
 
 ## 证据与根因
@@ -13,7 +13,7 @@ low再/quit：输入框4025ms、本地命令5047ms、CLI退出0、零模型请�
 
 Evidence→Finding→Path：preview43-startup-phases.jsonl、preview43-interactive-import.cpuprofile及-cpu-summary.json
 → F-043启动导入提前同步探测 →
-E-167按需异步编辑器发现及遥测硬件库延迟加载。原CLI主/子进程均有退出0记录；首次诊断将NODE_OPTIONS注入了node-pty宿主，观察脚本在报告后仍保活。确认CLI已退出后只结束对应宿主PID，原日志保留，不将辅助脚本退出1改写为0。后续将探针限定注入CLI，最终安装观察无需该注入。
+E-167按需异步编辑器发现及遥测硬件库延迟加载。原CLI主/子进程均有退出0记录；观察脚本在报告后仍保活，确认CLI已退出后只结束对应宿主PID，原日志保留，不将辅助脚本退出1改写为0。最初将保活与NODE_OPTIONS探针联系，最终无探针观察仍出现，已更正：是观察宿主的收尾问题，不据此推断Agent保活或断言探针是原因。工程观察脚本现于报告和清理后显式结束宿主；没有为这个脚本收尾问题重复运行CLI。
 
 ## 实现
 
@@ -41,6 +41,20 @@ flowchart LR
   C --> F[Esc关闭并取消查找]
 ```
 
-## 分发与目标池
+## 最终分发与安装
 
-候选preview.44准备隔离分支三平台工件、Windows安装及一次最终包启动/编辑器设置观察；不重复其他本机fixture或付费任务，不合并master、不正式Release。goal保持active，真实Boost/Swarm有界成功证据保留；更多模型/Teamwork长任务、复杂逆向及摘要准确性仍有未验收边界。此修复不证明真实外部编辑器能启动，也不证明所有电脑的启动性能。
+- E-168：源3f63cdbda4cf4114979079d1e9e511a5feabb8ec，[run42929901162](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/42929901162)三平台completed/success。最终版本/包SHA/源码/安装身份和六个rg原生文件/权限核对通过；既有Swarm/Boost长交接、独立选模/Session/预算与损坏恢复、工作树/报告导出及原生Ghidra同源链通过，模型均loopback，不扩张成更多真实供应商验收。
+- E-169：Windows包SHA
+  `3c79df4424f65967b121dd6335fce31a720d88759a3498bb9da6459bf3d217eb`，入口SHA
+  `6474170ae84ae396100fe823dd738fcb810f8c5b38df14ce01071025a695375d`。offline已有缓存安装7000ms/退出0，双命令均1.0.0-preview.44，425文件匹配CI包，旧包保留。
+- 最终已安装包一次ConPTY：输入框1776ms、本地/effort
+  low确认2536ms；/editor在3624ms时出现实际编辑器选项，随后Esc关闭、/quit正常退出0，0模型请求，总5406ms包含按键等待、发现及退出。修前preview.43同类观察4025/5047ms。此处无启动探针，但缓存/观察方式差异仍在，不称稳定加速比例或跨平台交互基准。报告的exitCode是目标CLI退出；观察宿主保活后被单独结束的事实如上，不混为产品退出失败或辅助成功。
+
+最终工程证据：github-preview44-run.json、github-preview44-artifacts-result.json、github-run-42929901162/、global-preview44-install-result.json、global-install-github-preview44-full-result.json、preview44-interactive-installed-result.json/-output.txt/-log、preview44-observer-host-retained.json。未重复其他本机fixture或付费任务，个人配置/数据库/本机逆向工具保持。
+
+## 目标池接续
+
+WI-076交付，不合并master、不正式Release，goal保持active。此修复不证明真实外部编辑器能启动或所有电脑的启动性能。真实Boost/Swarm有界成功证据保留，更多模型/Teamwork长任务、复杂逆向及摘要准确性继续。
+
+WI-077下一步优先核对远程Agent卡片发现的加载上限：静态代码中registry.registerRemoteAgent会await
+loadAgent，而A2AClientManager.cardFetch复用30分钟任务传输dispatcher。还未用迟滞本地服务复现，不将静态候选直接记作已证实卡顿；仅在隔离本地fixture确认后决定修复，保留远程长任务的正常传输额度，不请求外部安全目标或付费模型。
