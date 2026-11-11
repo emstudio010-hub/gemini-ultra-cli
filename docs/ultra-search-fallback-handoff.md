@@ -1,6 +1,6 @@
 # Gemini Ultra CLI 搜索兜底取消与失败处理交接
 
-日期：2026-11-11。WI-095/E-227/F-062，候选preview.63。沿用R26/code-audit自有源码case、lead/cae/doc、scope授权granted。没有真实搜索、付费模型、外部安全目标或个人配置/数据库/逆向工具改动。
+日期：2026-11-11。WI-095/E-227/F-062，preview.63 已安装。沿用R26/code-audit自有源码case、lead/cae/doc、scope授权granted。没有真实搜索、付费模型、外部安全目标或个人配置/数据库/逆向工具改动。
 
 ## 发现与实现
 
@@ -31,5 +31,23 @@ package.json，不是候选包版本。
 
 工程证据：web-search-fallback-before*、web-search-fallback-junit.xml/-log、web-search-fallback-boundaries*、web-search-fallback-cancel-final*、web-search-fallback-types/lint及final-*、web-search-fallback-source.json/-output.txt及BOM/transport/tool-name/assertion失败原件、web-search-fallback-source-final-chain.log。无全量、冒烟、未变更协作链或付费检查。
 
-候选63待search-fallback范围三平台包和全局安装。goal
-active；原红队与逆向/协作基线保持，最低Node22.19运行、更多模型长任务/语义质量与复杂跨机逆向仍需相应证据。不合并master或创建正式Release。
+## 分发与全局安装
+
+E-228：产品源 `e2ed2b697c897e590df9c089c68b0c76f35e1020`，
+[run 43082219156](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/43082219156)
+三平台search-fallback范围completed/success，独立下载核对版本63、源chunk、包SHA、六rg身份/权限及安装4基础工具。包内实际含10秒/2MiB及无法解析页面的失败处理；每平台安装包实际两CLI进程均自然退出0、6次本地模型协议和2次搜索loopback请求。503在原生tool
+response中以error字符串含HTTP503回传，成功保留标题/摘要/来源；两最终标记均独立读原始输出确认，0超时/断言失败/坏HTTP正文泄漏。取消/期限/大小和原生引用边界由本机9项检查证明，不把这些边界写成三平台全部重跑。旧无关链skipped，47至62基线保留，不误算公网搜索或新真实供应商验收。
+
+E-229：Windows
+CI包offline已有缓存安装7759ms/退出0，双命令preview.63，425文件逐一匹配CI包，旧包保留。包SHA256
+`2eb799c9ea454339a36f1681f46a948112954dbb094abfffe10b729376beaac5`，入口SHA256
+`b4067287065e9622cc5ed8a46ef75d1aad7e6ea212f911c0785d6f7f10094703`。没有追加本机业务、启动基准或付费任务。
+
+最终证据：github-preview63-run.json、github-preview63-artifacts-result.json、github-preview63-artifacts-verification.log、github-run-43082219156/、global-preview63-install-result.json、global-install-github-preview63-full-result.json、web-search-fallback-personal-config.json。个人locale
+SHA
+`4fcce506592e55074156cab2f5fea35cce0d48ea5f8c919b69cd71ffc735f2c8`、providers
+SHA `e0bff750cd1f18458cffc175ad3683d1851bbc58958fb4182dd15d9e128e4332`
+保持，ultra-tools.json仍未创建。源码、工程正式报告及Obsidian全文同步。
+
+goal
+active。原红队与逆向/协作基线保持，最低Node22.19运行、更多模型长任务/语义质量与复杂跨机逆向仍需相应证据。不合并master或创建正式Release。
