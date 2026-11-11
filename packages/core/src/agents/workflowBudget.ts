@@ -10,6 +10,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { z } from 'zod';
 import type { AgentWorkflow } from './agentWorkflows.js';
 import { assertNoPendingSwarm } from './swarm.js';
+import { withAgentTaskLock } from './agentTaskLock.js';
 
 const limitsSchema = z.object({
   maxRequests: z.number().int().min(1).max(10000).default(240),
@@ -319,6 +320,9 @@ export function activateWorkflowBudget(
   root: string,
   record: AgentWorkflow,
 ): void {
+  withAgentTaskLock(root, () => activateBudget(root, record));
+}
+function activateBudget(root: string, record: AgentWorkflow): void {
   assertNoPendingSwarm(root);
   const budget = workflowBudget(root, record);
   owns(budget);

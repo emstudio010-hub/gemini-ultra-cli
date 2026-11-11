@@ -9,6 +9,7 @@ import { randomUUID } from 'node:crypto';
 import { lock, checkSync } from 'proper-lockfile';
 import { z } from 'zod';
 import { latestSwarm, assertNoPendingSwarm } from './swarm.js';
+import { withAgentTaskLock } from './agentTaskLock.js';
 import { workflowContext, workflowMilestoneTitle } from './workflowContext.js';
 import {
   saveWorkflowReportText,
@@ -233,6 +234,16 @@ export function createAgentWorkflow(
   objective: string,
   previousApprovalMode: string,
 ): AgentWorkflow {
+  return withAgentTaskLock(projectTempDir, () =>
+    createWorkflowState(projectTempDir, mode, objective, previousApprovalMode),
+  );
+}
+function createWorkflowState(
+  projectTempDir: string,
+  mode: AgentWorkflowMode,
+  objective: string,
+  previousApprovalMode: string,
+): AgentWorkflow {
   if (
     hasOpenWorkflowBudget(projectTempDir) ||
     ['active', 'blocked'].includes(latestSwarm(projectTempDir)?.phase ?? '')
@@ -422,13 +433,16 @@ export async function runAgentWorkflow(
       );
     }
     combined.throwIfAborted();
-    assertWorkflowBudgetOwnership(projectTempDir, record);
-    active.set(directory, { id, controller });
-    record.phase = 'running';
     const current = record;
-    workflowBudget(projectTempDir, current);
-    assertWorkflowBudget(projectTempDir, id);
-    activateWorkflowBudget(projectTempDir, current);
+    withAgentTaskLock(projectTempDir, () => {
+      assertNoPendingSwarm(projectTempDir);
+      assertWorkflowBudgetOwnership(projectTempDir, current);
+      active.set(directory, { id, controller });
+      current.phase = 'running';
+      workflowBudget(projectTempDir, current);
+      assertWorkflowBudget(projectTempDir, id);
+      activateWorkflowBudget(projectTempDir, current);
+    });
     return await withWorkflowBudget(
       projectTempDir,
       id,

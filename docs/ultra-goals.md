@@ -936,3 +936,11 @@ active。
   SHA保持55末值。WI-088修复与分发交付，goal
   active；已有保存状态冲突保护不是独立CLI同时抢占的事务锁证明，后续继续核实。真实Teamwork
   E-198仍预算blocked，更多模型/长会话语义/复杂跨机逆向继续，不合并master/正式Release。docs/ultra-workflow-exclusion-handoff.md。
+
+## 2026-11-11 跨进程任务创建抢占
+
+WI-089/E-209/F-057
+in_progress：已安装56的两个独立CLI在各自发布latest绑定前暂停，再同时放行，实际两者退出0、生成2个active
+Swarm、仅一latest绑定，0模型。原始输出/记录/两个屏障保留。新增规范化项目临时目录上的共享短时agent-task-transition锁，创建Swarm/工作流、预算激活/恢复、直接运行启动转换共用；同步嵌套可重入，模型/工具执行和成员等待不持锁，争用立即42并可重试。标准proper-lockfile
+30秒stale；夹具屏障上限20秒低于lease，不改生产检查或返回值。源码三组真实双CLI竞争Swarm/Swarm、Teamwork/Boost、Swarm/Teamwork通过：9
+CLI进程/每组一0一42/只有胜者记录和绑定/0模型/无残留锁。6项相关定向检查（锁异常释放/过期目录夹具、完整审查修正、Swarm累计预算、直接运行冲突及取消收尾）通过，无全量或冒烟；严格type/lint接续。未修改个人locale/供应商/数据库/工具，未重试付费任务。更多并发恢复/取消交错、硬崩溃与网络文件系统未验收，不合并master/正式Release。

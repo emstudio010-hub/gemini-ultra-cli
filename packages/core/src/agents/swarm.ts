@@ -11,6 +11,7 @@ import { lock, lockSync } from 'proper-lockfile';
 import { z } from 'zod';
 import type { WorkflowAgentRunner } from './agentWorkflows.js';
 import { hasOpenWorkflowBudget } from './workflowBudget.js';
+import { withAgentTaskLock } from './agentTaskLock.js';
 import { swarmContextSnapshot, swarmMemberContext } from './swarmContext.js';
 import {
   inAgentWorktree,
@@ -316,6 +317,9 @@ function appendPost(
   }
 }
 export function createSwarm(root: string, objective: string): Swarm {
+  return withAgentTaskLock(root, () => createSwarmState(root, objective));
+}
+function createSwarmState(root: string, objective: string): Swarm {
   if (hasOpenWorkflowBudget(root))
     throw new Error(
       'Resolve the pending workflow with resume or cancel before starting a swarm.',
@@ -324,6 +328,7 @@ export function createSwarm(root: string, objective: string): Swarm {
     throw new Error(
       'Resolve the active swarm with finish or cancel before starting another.',
     );
+  assertNoPendingSwarm(root);
   const swarm = swarmSchema.parse({
     id: randomUUID(),
     objective,
@@ -1057,6 +1062,10 @@ export function cancelSavedSwarm(root: string, requestedId?: string): Swarm {
 export async function resumeSwarm(root: string, id: string): Promise<void> {
   const engine = engines.get(engineKey(root, id));
   if (engine) await engine.wait(new AbortController().signal);
+  if (readSwarm(root, id).phase === 'completed') return;
+  withAgentTaskLock(root, () => resumeSwarmState(root, id));
+}
+function resumeSwarmState(root: string, id: string): void {
   const swarm = readSwarm(root, id);
   if (swarm.phase === 'completed') return;
   if (swarm.accountingUnknown) throw new Error(unavailable);

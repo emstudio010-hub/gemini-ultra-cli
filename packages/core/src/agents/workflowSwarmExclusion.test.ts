@@ -173,6 +173,7 @@ it('waits for cancelled Swarm members to settle before allowing workflow activat
     expect(() =>
       createAgentWorkflow(root, 'boost', 'A new task', 'default'),
     ).toThrow('pending swarm');
+    expect(() => createSwarm(root, 'A new swarm')).toThrow('pending swarm');
     expect(snapshot()).toEqual(before);
   } finally {
     release();
