@@ -1,6 +1,6 @@
 # Gemini Ultra CLI 二进制工具工作区读取交接
 
-日期：2026-11-11。WI-098/E-235/F-064，候选preview.65。沿用R26/code-audit自有源码case、lead/cae/doc、scope授权granted；radare2按本地tool-index已核对的安装路径使用。本轮无模型、外部目标、个人配置/数据库/本机逆向工具改动。
+日期：2026-11-11。WI-098/E-235/F-064，preview.65已安装。沿用R26/code-audit自有源码case、lead/cae/doc、scope授权granted；radare2按本地tool-index已核对的安装路径使用。本轮无模型、外部目标、个人配置/数据库/本机逆向工具改动。
 
 ## 问题与修复
 
@@ -29,5 +29,23 @@ helper仍返回初筛的既有行为，未把它算新归档可靠性修复。
 
 工程：binary-read-access-before*、binary-read-access-fixture-failure-junit.xml、binary-read-access-before-final*、binary-read-access-junit.xml/-log、binary-read-access-types/final-types/lint/final-lint/script-final-lint.log、binary-read-access-source.json/-log/-final.log及storage-fixture-failure.json。没有全量/冒烟或未变更协作/付费请求重跑。
 
-候选65待binary-read-access范围三平台包与全局安装，64原生PTY及63最低Node等基线保留。goal
+65的binary-read-access范围三平台包与全局安装已完成，64原生PTY及63最低Node等基线保留。goal
 active；更多模型长任务、语义质量、完整终端UI及复杂跨机逆向继续。不合并master或创建正式Release。
+
+## 三平台分发与安装
+
+E-236：产品源631e8b8e730080cb1aa1d9eba7c77cf725bd99a4/run43089577016三平台binary-read-access范围completed/success，minimum-node和旧无关链skipped。独立核对版本65、源chunk、包/入口SHA、六rg身份权限及安装4基础工具。每平台从分发包导出实际工具类并使用真实Config/独立Storage：3工具各拒绝直接外部路径和工作区链接，共6次拒绝，Path
+not in
+workspace且无人工样本内容泄漏；允许项目相对PE初筛归档恰1条，路径/SHA对应、允许/拒绝文件SHA保持，0模型。CI不安装r2，本机source额外2真实rabin2/r2正向项单列；不是三平台完整CLI工具调度或复杂逆向验收。47至64未受影响基线保留。
+
+E-237：offline已有缓存安装7779ms/退出0，双命令preview.65，425文件匹配Windows
+CI包，旧包保留。包SHA256
+ae288ad2abb4c975416a8aeec16d8ff1790c83f486530d80e6bdd04e888bb855，入口SHA256
+9f43992b07765c74cee6ed33f4ea1de46655b73d486e18d1053b1e86231afac4。个人locale/provider
+SHA保持64末值，ultra-tools.json仍未创建；无额外本机业务/启动基准/付费或全量/冒烟重跑。WI-098/F-064工作区读取一致性与项目相对路径修复分发交付，goal
+active；更多模型长任务、语义质量、完整终端UI及复杂跨机逆向继续，不合并master或创建正式Release。
+
+最终工程证据：github-preview65-run.json、github-preview65-artifacts-result.json、github-preview65-artifacts-verification.log、github-run-43089577016/、global-preview65-install-result.json、global-install-github-preview65-full-result.json、binary-read-access-personal-config.json。个人locale
+SHA 4fcce506592e55074156cab2f5fea35cce0d48ea5f8c919b69cd71ffc735f2c8；providers
+SHA
+e0bff750cd1f18458cffc175ad3683d1851bbc58958fb4182dd15d9e128e4332。源码交接、工程正式报告与Obsidian全文同步。
