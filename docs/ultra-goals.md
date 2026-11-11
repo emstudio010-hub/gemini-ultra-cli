@@ -770,3 +770,8 @@
 - 单次卡片发现10秒覆盖resolver/正文/认证重试，逾期中止连接并明确诊断、迟到结果不缓存；成功/失败清理计时器，缓存解析器后续可用。调用者Request/init取消保留，无auth不重复401，重试同一期限，任务30分钟dispatcher/signal独立不变。35管理器定向用例（6新增）、严格相关lint/type通过。
 - 源码CLI遇永不返回响应头端点10018ms中止，报告诊断后主会话继续1次loopback响应、退出0、总11956ms，无外层超时，无付费调用/全量/冒烟。修前有效延迟、修后永不返回不是同一性能场景，不作加速百分比；10秒是单次发现，非整个启动总上限。候选45待三平台/安装，交接docs/ultra-agent-discovery-handoff.md，goal
   active，不合并master/正式Release。
+
+- E-171：preview.45源dcc2227dc9dc1e4bd46e318f2b6fd8bc9b1301b8/run42933116187三平台completed/success。新增迟滞远程卡片检查：三平台约10秒中止卡片连接，1次loopback主模型请求，CLI退出0，所有checks通过；既有Swarm/Boost/Teamwork/Ghidra/r2同源链保留。
+- E-172：offline缓存安装7339ms退出0，双命令preview.45，425文件匹配Windows
+  CI包；包SHA04b345aa…/入口SHAe3b4d549…，旧包保留。WI-077本地交付，10秒是单卡片上限不是全启动上限；认证、多扩展、真实远程长任务/更多模型/Teamwork长会话/复杂逆向继续，goal
+  active，不合并master/正式Release。

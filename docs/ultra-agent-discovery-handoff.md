@@ -1,6 +1,6 @@
 # Gemini Ultra CLI 远程 Agent 发现上限交接
 
-日期：2026-11-11。WI-077/E-170，preview.45候选。沿用自有源码case
+日期：2026-11-11。WI-077/E-170至172，preview.45已安装。沿用自有源码case
 R26/code-audit、lead/cae/doc，仅本地CLI与迟滞loopback服务，无外部安全目标、付费模型调用或个人配置变更。
 
 ## 复现与修复
@@ -42,7 +42,14 @@ flowchart LR
 
 ## 分发与目标池
 
-候选preview.45准备三平台最终包核对与Windows安装；CI新增同源已安装CLI迟滞发现检查，单平台一次本地卡片失败和一次loopback主模型响应。不重复其他本机fixture/真实付费任务，不合并master、不正式Release。
+- E-171：源dcc2227dc9dc1e4bd46e318f2b6fd8bc9b1301b8，GitHub run
+  [42933116187](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/42933116187)三平台completed/success。CI新增同源已安装CLI迟滞卡片检查；Windows/Linux/macOS均单卡片约10秒中止、1次loopback主模型请求、退出0，所有检查通过。原生Swarm/Boost/Teamwork已有链和Ghidra/r2链保持。
+- E-172：Windows包SHA
+  `04b345aa2b5e5632e441de641fc67a09aa0f1595e06689e9d1163857c3ef7a0c`，入口SHA
+  `e3b4d5498b7449ddbeae30ae53294188fe8109a0706e56fb3679862b4b9a4a75`。offline已有缓存安装7339ms/退出0，双命令均1.0.0-preview.45，425文件匹配Windows
+  CI包，旧包保留。
+
+最终工程证据：github-preview45-run.json、github-preview45-artifacts-result.json、github-run-42933116187/三平台工件、global-preview45-install-result.json、global-install-github-preview45-full-result.json、agent-card-deadline-delivery-junit.xml/-test.log、agent-card-deadline-source.json/-source-output.txt、github-preview45-artifacts.log。未重复其他本机fixture/真实付费任务，不合并master、不正式Release。
 
 10秒是单次卡片发现上限，不是整个启动总上限；多个依次加载的扩展或认证提供器创建阶段可能另有等待。未证明所有外部认证方案、真实远程长任务、所有电脑交互启动或整体正式上线。WI-077本地完成，goal
 active；继续维护完整目标，不用这个定向场景替代真实Teamwork长任务、更多模型、复杂逆向或摘要准确性的剩余验收。
