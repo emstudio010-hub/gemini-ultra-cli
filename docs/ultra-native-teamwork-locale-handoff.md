@@ -1,6 +1,6 @@
 # Gemini Ultra CLI 原生 Teamwork 本地化交付交接
 
-日期：2026-11-11。WI-090/E-212，候选preview.58。沿用R26/code-audit自有源码case、lead/cae/doc，scope授权granted。一次新真实任务，不是旧本地化/恢复任务重跑；无外部安全目标、Codex子代理或个人配置/数据库/逆向工具改动。
+日期：2026-11-11。WI-090/E-212，preview.58 已安装。沿用R26/code-audit自有源码case、lead/cae/doc，scope授权granted。一次新真实任务，不是旧本地化/恢复任务重跑；无外部安全目标、Codex子代理或个人配置/数据库/逆向工具改动。
 
 ## 原生真实任务与实现归属
 
@@ -46,7 +46,22 @@ flowchart LR
 cause保留，落败action不执行且原锁仍存在。locale文件严格指向临时目录，最后恢复临时实例偏好再撤销环境变量；本机locale
 SHA保持57末值。相关严格type/lint通过，没有全量/冒烟或重复付费任务。
 
-源码中文原生链通过：3次CLI进程（一次目录初始化、两竞争），一方0/一方预期42，仅一记录和正确绑定，落败方实际输出精确中文提示，原锁已释放，0模型。源码报告版本来自上游nightly根包。三平台包/安装结果待追加；既有57三平台三组英文竞争/注册锁基线保留。工程目录C:\Users\Administrator\Documents\ChatGPT\gmncliu：preview57-live-teamwork-lock-locale-_、run-live-teamwork57.mjs、approve-live-teamwork57.mjs、review-live-teamwork57.mjs、task-lock-locale-before_、task-lock-locale-junit.xml、task-lock-locale.log、task-lock-locale-types.log、task-lock-locale-lint.log、task-lock-locale-source\*。临时任务profile和原始报告保留，未写入真实项目的全局任务目录。
+源码中文原生链通过：3次CLI进程（一次目录初始化、两竞争），一方0/一方预期42，仅一记录和正确绑定，落败方实际输出精确中文提示，原锁已释放，0模型。源码报告版本来自上游nightly根包。三平台包/安装通过；既有57三平台三组英文竞争/注册锁基线保留。工程目录C:\Users\Administrator\Documents\ChatGPT\gmncliu：preview57-live-teamwork-lock-locale-_、run-live-teamwork57.mjs、approve-live-teamwork57.mjs、review-live-teamwork57.mjs、task-lock-locale-before_、task-lock-locale-junit.xml、task-lock-locale.log、task-lock-locale-types.log、task-lock-locale-lint.log、task-lock-locale-source\*。临时任务profile和原始报告保留，未写入真实项目的全局任务目录。
+
+## 分发与全局安装
+
+E-213：产品源 `dcc219232cba46dca5fbec099a892ba9be4eb07c`，
+[run 43064940526](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/43064940526)
+三平台 completed/success，限定task-lock-locale范围。独立下载核对版本/源chunk/包SHA、六份rg哈希/执行权限、安装与4基础工具。每平台中文原生竞争链3
+CLI/一轮双进程、一0一预期42、精确中文busy提示、唯一胜者记录/绑定/owner一致、无残留锁或CRITICAL、0模型；独立读原始中文输出，不只信passed。57英文三组竞争和旧未受影响链沿用，skipped不能当重新验收。
+
+E-214：Windows
+CI包offline已有缓存安装7869ms/退出0，双命令preview.58，425文件逐一匹配CI包，旧包保留。包SHA256为
+`8be4b6d79a66575546b42f0f334066d96a403c54d419de80cc7edf06dcebb384`，入口SHA256为
+`425dd35f3b45522cf58dfa72fa8b53fb0e5eb43784aa5a43ec54050710aab18c`。不重跑本机业务链、启动基准或真实Teamwork任务。个人provider与locale
+SHA仍为任务前值。
+
+最终证据：github-preview58-run.json、github-preview58-artifacts-result.json、github-run-43064940526/、global-preview58-install-result.json、global-install-github-preview58-full-result.json。真实交付独立审查preview57-live-teamwork-lock-locale-independent-review.json把实际补丁SHA/原生两replace/0整文件写入/两静态verdict与宿主验证分开。WI-090交付，源码/工程正式报告/Obsidian全文同步。
 
 goal
 active。真实Teamwork已有这一次有界交付，更多模型/长任务、报告状态口吻、恢复/取消交错、长会话语义准确性与复杂跨机逆向继续。不合并master或创建正式Release。
