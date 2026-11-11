@@ -396,6 +396,21 @@ export type BackgroundProcessRecord = Omit<BackgroundProcess, 'pid'> & {
 };
 
 export class ShellExecutionService {
+  private static cancelledBeforeStart(): ShellExecutionHandle {
+    return {
+      pid: undefined,
+      result: Promise.resolve({
+        output: '',
+        rawOutput: Buffer.from(''),
+        exitCode: null,
+        signal: null,
+        error: null,
+        aborted: true,
+        pid: undefined,
+        executionMethod: 'none',
+      }),
+    };
+  }
   private static activePtys = new Map<number, ActivePty>();
   private static activeChildProcesses = new Map<number, ActiveChildProcess>();
   private static backgroundLogPids = new Set<number>();
@@ -478,6 +493,7 @@ export class ShellExecutionService {
     shouldUseNodePty: boolean,
     shellExecutionConfig: ShellExecutionConfig,
   ): Promise<ShellExecutionHandle> {
+    if (abortSignal.aborted) return this.cancelledBeforeStart();
     if (shouldUseNodePty) {
       const ptyInfo = await getPty();
       if (ptyInfo) {
@@ -702,6 +718,12 @@ export class ShellExecutionService {
         false,
       );
       cmdCleanup = prepared.cleanup;
+
+      if (abortSignal.aborted) {
+        cmdCleanup?.();
+        cmdCleanup = undefined;
+        return this.cancelledBeforeStart();
+      }
 
       const {
         program: finalExecutable,
@@ -1290,6 +1312,12 @@ export class ShellExecutionService {
         true,
       );
       cmdCleanup = prepared.cleanup;
+
+      if (abortSignal.aborted) {
+        cmdCleanup?.();
+        cmdCleanup = undefined;
+        return this.cancelledBeforeStart();
+      }
 
       const {
         program: finalExecutable,

@@ -1050,3 +1050,12 @@ active。
   completed/success，整个package job
   skipped，无产品重建。各平台从原run43082219156下载相同preview.63包，独立source-run/headSHA、包/入口SHA、engines与Node22.19精确版本核对，原产品源仍e2ed2b697c897e590df9c089c68b0c76f35e1020。三份包SHA均与原63工件相同，每平台5loopback协议请求、4工具/1二进制记录/1note及6rg身份/主机执行通过；仅最低环境基础链验收，不误称PTY/复杂逆向/新真实模型验收。产品继续63，全局不重装；系统Node仍24.19.0/原路径，provider/locale
   SHA保持，工具配置仍未创建。WI-096最低运行环境证据交付，目标active；更多模型/长任务/语义质量及跨机复杂逆向继续，不合并master/正式Release。docs/ultra-minimum-node-handoff.md。
+
+## 2026-11-11 PTY与命令准备期取消
+
+WI-097/E-232/F-063：ShellExecutionService入口/prepareCommand后缺signal检查，已取消或准备中取消仍spawn且错过abort监听；4旧定向实际均失败。新增统一aborted/none/无pid结果、入口早退、PTY及管道准备后检查与一次cleanup，不spawn/fallback。8不同定向（4新+4相关旧）及strict
+type/lint通过；脚本首Node全局/空catch
+lint改显式globalThis/注释后单独通过。实际source服务7场景0模型：4取消组合均无pid/marker/正确cleanup；原生lydell-node-pty
+stdin/stdout
+tty=true，输入fixture-input并捕获输出/自然退出0；人工父子进程运行中取消后147ms均终止且服务不活跃；pipe执行输出/退出0。通过产品shell配置/转义和NoopSandboxManager，不冒充UI按键/resize/长时FD泄漏或不可信软件验收。POSIX允许Z视为已终止非立即回收。候选64待shell-lifecycle范围三平台包/安装，63最低环境基线保持，个人配置DB工具未改，goal
+active。

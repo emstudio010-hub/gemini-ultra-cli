@@ -280,6 +280,63 @@ describe('ShellExecutionService', () => {
   });
 
   // Helper function to run a standard execution simulation
+  describe('Cancellation before process creation', () => {
+    it.each([true, false])(
+      'does not spawn an already cancelled command (PTY=%s)',
+      async (pty) => {
+        const controller = new AbortController();
+        controller.abort(new Error('Cancel before dispatch'));
+        const handle = await ShellExecutionService.execute(
+          'never-run',
+          '/test/dir',
+          onOutputEventMock,
+          controller.signal,
+          pty,
+          shellExecutionConfig,
+        );
+        expect(mockPtySpawn).not.toHaveBeenCalled();
+        expect(mockCpSpawn).not.toHaveBeenCalled();
+        expect(handle.pid).toBeUndefined();
+        expect(await handle.result).toMatchObject({
+          aborted: true,
+          executionMethod: 'none',
+        });
+      },
+    );
+    it.each([true, false])(
+      'cleans preparation and does not spawn after cancellation during preparation (PTY=%s)',
+      async (pty) => {
+        const controller = new AbortController();
+        const manager = new NoopSandboxManager();
+        const prepare = manager.prepareCommand.bind(manager);
+        const cleanup = vi.fn();
+        vi.spyOn(manager, 'prepareCommand').mockImplementation(
+          async (options) => {
+            const result = await prepare(options);
+            controller.abort(new Error('Cancel during preparation'));
+            return { ...result, cleanup };
+          },
+        );
+        const handle = await ShellExecutionService.execute(
+          'never-run',
+          '/test/dir',
+          onOutputEventMock,
+          controller.signal,
+          pty,
+          { ...shellExecutionConfig, sandboxManager: manager },
+        );
+        expect(mockPtySpawn).not.toHaveBeenCalled();
+        expect(mockCpSpawn).not.toHaveBeenCalled();
+        expect(cleanup).toHaveBeenCalledTimes(1);
+        expect(handle.pid).toBeUndefined();
+        expect(await handle.result).toMatchObject({
+          aborted: true,
+          executionMethod: 'none',
+        });
+      },
+    );
+  });
+
   const simulateExecution = async (
     command: string,
     simulation: (
