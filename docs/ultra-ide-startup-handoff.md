@@ -1,6 +1,6 @@
 # Gemini Ultra CLI IDE 发现与完整参数提交交接
 
-日期：2026-11-11。WI-078/E-173，preview.46候选。沿用自有源码case
+日期：2026-11-11。WI-078/E-173至175，preview.46已安装。沿用自有源码case
 R26/code-audit、lead/cae/doc；只修改本地CLI启动和输入交互，不改个人供应商配置、数据库或逆向工具，不调用付费模型。
 
 ## 问题与实际修复
@@ -39,7 +39,19 @@ flowchart LR
   E --> F[完整参数Enter直接提交]
 ```
 
-## 分发与目标池
+## 最终分发与安装
 
-preview.46最终候选待三平台工件/身份与Windows安装一次启动观察。WI-078本地修复完成，goal
-active，不合并master/正式Release。没有宣称所有电脑交互启动、文件伴侣真实IDE安装、真实远程任务、Teamwork长任务或更多模型已全部验收；最终包交付后继续原完整目标，避免仅追微小性能数字。
+- E-174：最终源5c20696c5fe92a6eee4ab278b8f9ec19415c4a9d，[run43014761447](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/43014761447)三平台completed/success。版本/源码/包SHA/安装/六rg文件及权限核对；既有长交接全文读取、协作/Session/独立选模/工作树/预算恢复/报告、迟滞卡片中止与原生Ghidra链通过。所有模型为loopback，不新增真实付费。
+- E-175：Windows包SHA
+  `d97b8aa578c6ca9a651d73c7859535c4931cc69d8f089028f2b923090047bf83`，入口SHA
+  `009a2aaaae2ffa6aae9787c6afaa39c0e2913752c3e7aedd036744991e0db371`。offline已有缓存安装10641ms/退出0，双命令46，425文件匹配Windows
+  CI包，旧包保留。
+- 最终已安装包一次ConPTY：输入框1771ms、/effort
+  low确认2018ms、/ide按普通终端环境提示不支持2250ms；/quit自然退出0，timedOut=false，零模型请求，总3738ms含模拟按键和退出。原45参考1917/2735ms；不称稳定百分比或跨平台交互基准，也不称真实IDE伴侣连接已验收。没有为脚本timedOut字段再跑CLI。
+
+最终工程证据：github-preview46-run.json、github-preview46-artifacts-result.json、github-run-43014761447/、global-preview46-install-result.json、global-install-github-preview46-full-result.json、preview46-installed-exact-submit-result.json/-output.txt/-log、ide-probe-compatible-junit.xml、ide-probe-exact-completion-final-junit.xml。早期run42936582726、run42937838265与watchdog失败记录保留；候选文件身份错误均在安装前挡住。脚本首次在旧run.json尚未替换时自检也明确拒绝，未因此重复业务验证或安装错误包。
+
+## 目标池接续
+
+WI-078交付，goal
+active，不合并master/正式Release。没有宣称所有电脑交互启动、文件伴侣真实IDE连接、真实远程任务、Teamwork长任务或更多模型已全部验收。接下来回到Teamwork实际产品交付和模型/语言操作一致性；保留原完整目标，避免继续只追微小性能数字。
