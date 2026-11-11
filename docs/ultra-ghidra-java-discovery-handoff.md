@@ -1,6 +1,6 @@
 # Gemini Ultra CLI Ghidra Java 选择一致性交接
 
-日期：2026-11-11。WI-083/E-189/F-051，候选 preview.51。沿用 R26/code-audit 自有源码 case、lead/cae/doc，Ghidra 原生静态链沿用 R22 与既有 scope。没有外部安全目标或付费模型调用，不修改个人配置、数据库和本机工具安装。
+日期：2026-11-11。WI-083/E-189/F-051，preview.51 已安装。沿用 R26/code-audit 自有源码 case、lead/cae/doc，Ghidra 原生静态链沿用 R22 与既有 scope。没有外部安全目标或付费模型调用，不修改个人配置、数据库和本机工具安装。
 
 ## 问题与修复
 
@@ -40,7 +40,19 @@ flowchart LR
 
 工程证据目录 C:\Users\Administrator\Documents\ChatGPT\gmncliu：`java-discovery-before-junit.xml`、`java-discovery-before.log`、`java-discovery-junit.xml`、`java-discovery-test.log`、`java-discovery-types.log`、`java-discovery-lint.log`、`java-discovery-final-lint.log`。
 
-候选51使用 ghidra-runtime 范围：三平台新鲜包/安装；每平台三次本地巡检，分别核对坏 JAVA_HOME、坏显式覆盖、有效覆盖优先于坏 JAVA_HOME，均不得请求模型；随后使用真实 Ghidra/JDK 静态反编译既有生成 ELF 的循环分支函数，读取并校验完整工件。既有样本不执行，不把 loopback 模型当真实模型自主逆向验收。
+51使用 ghidra-runtime 范围：三平台新鲜包/安装；每平台三次本地巡检，分别核对坏 JAVA_HOME、坏显式覆盖、有效覆盖优先于坏 JAVA_HOME，均不得请求模型；随后使用真实 Ghidra/JDK 静态反编译既有生成 ELF 的循环分支函数，读取并校验完整工件。既有样本不执行，不把 loopback 模型当真实模型自主逆向验收。
 
-最终源码、CI 和安装结果待本阶段追加。未受影响协作基线47、供应商48、长报告49、完成提交修正和命令语言50保留，不冒充本版本重新验收。goal
-active，真实 Teamwork 长任务、更多模型、摘要准确性、复杂格式/多函数/动态逆向与跨机器实际交互继续；不合并 master 或创建正式 Release。
+E-190：产品源 `bea986f6d187e1651cbef3556b8a5ac2679b9f67`，
+[run 43034637488](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/43034637488)
+三平台 completed/success。版本/源码身份/包哈希、六份 rg 哈希及执行权限、安装与4个基础工具核对通过。每平台3条原生巡检命令全部退出0/0模型；真实 Ghidra/JDK 链各3次 loopback 请求/退出0，函数00400090、样本 SHA 和完整代码哈希匹配，全部 checks 为真；macOS 原生组件构建成功，日志保留。未受影响旧步骤 skipped。
+
+E-191：Windows
+CI 包 offline 已有缓存安装7677ms/退出0，双命令 preview.51，425文件匹配，旧包保留。包 SHA256 为
+`62f97c9de048753bda564656a54359d997907c16a655fa518cd7d3bf67bbbbc8`，入口 SHA256 为
+`e5993b03b7dade6af152292f1221277bf75504eebf19237ac34fff2801c71341`。没有重复本机反编译、启动微基准或付费任务。旧版误报与旧单测失败记录保留，`java-discovery-independent-before-review.json`
+对原失败输出独立复核，没有重新调用 CLI。
+
+最终证据：`github-preview51-run.json`、`github-preview51-artifacts-result.json`、`github-run-43034637488/`、`global-preview51-install-result.json`、`global-install-github-preview51-full-result.json`。WI-083修复与分发交付，源码、工程正式报告和 Obsidian 交接同步。
+
+未受影响协作基线47、供应商48、长报告49、完成提交修正和命令语言50保留，不冒充本版本重新验收。goal
+active，真实 Teamwork 长任务、更多模型、摘要准确性、复杂格式/多函数/动态逆向与跨机器实际交互继续；下一阶段检查长会话摘要完整性，不自动重复失败或已通过的付费任务。不合并 master 或创建正式 Release。
