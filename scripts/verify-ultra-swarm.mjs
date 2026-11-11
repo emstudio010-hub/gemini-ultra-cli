@@ -14,10 +14,11 @@ const entry = path.resolve(process.argv[2]);
 const reportPath = path.resolve(process.argv[3]);
 const budgetMode = process.argv[4] === 'budget';
 const worktreeMode = process.argv[4] === 'worktree';
-const contextMode = process.argv[4] === 'context';
+const fullResultsMode = process.argv[4] === 'full-results';
+const contextMode = process.argv[4] === 'context' || fullResultsMode;
 const longHandoff =
   'Seed investigation evidence.\n' +
-  'evidence '.repeat(400) +
+  'evidence '.repeat(fullResultsMode ? 4200 : 400) +
   '\nREQUIRED_FULL_SWARM_MIDDLE\n' +
   'evidence '.repeat(400) +
   '\nRequired deliverable: answer=42\n';
@@ -29,10 +30,12 @@ const recoveryMode = process.argv[4] === 'recovery';
 let recoveryReady = false;
 const diagnosticMode = process.argv[4] === 'diagnostic' || budgetMode;
 const metadata = JSON.parse(
-  fs.readFileSync(
-    path.join(path.dirname(path.dirname(entry)), 'package.json'),
-    'utf8',
-  ),
+  fs
+    .readFileSync(
+      path.join(path.dirname(path.dirname(entry)), 'package.json'),
+      'utf8',
+    )
+    .replace(/^\uFEFF/, ''),
 );
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'ultra-native-swarm-'));
 const profile = path.join(scratch, 'profile');
@@ -743,6 +746,80 @@ try {
         .filter(Boolean)
         .map((line) => JSON.parse(line))
     : [];
+  let fullResultEvidence;
+  if (fullResultsMode && state) {
+    assert.equal(exitCode, 0, stdout + stderr);
+    const member = state.members.find((entry) => entry.name === 'analyst');
+    assert.ok(member.fullResult, 'Long result must have an immutable archive');
+    const archive = path.join(
+      swarmDirectory,
+      'results',
+      `full-${member.fullResult.sha256}.md`,
+    );
+    const original = fs.readFileSync(archive, 'utf8');
+    assert.equal(original, longHandoff);
+    const retained = ['members.json', 'owner.json', 'board.jsonl'].map(
+      (name) => [
+        name,
+        createHash('sha256')
+          .update(fs.readFileSync(path.join(swarmDirectory, name)))
+          .digest('hex'),
+      ],
+    );
+    await localCommand(`/swarm status ${id}`);
+    assert.ok(localRuns.at(-1).output.includes(archive));
+    await localCommand(`/swarm reports ${id}`);
+    const reportRoot = path.join(
+      path.dirname(path.dirname(swarmDirectory)),
+      'agent-reports',
+      id,
+    );
+    const snapshots = fs.readdirSync(reportRoot);
+    assert.equal(snapshots.length, 1);
+    const exportedDirectory = path.join(reportRoot, snapshots[0]);
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(exportedDirectory, 'manifest.json'), 'utf8'),
+    );
+    const analyst = manifest.reports.find((report) =>
+      report.label.startsWith('@analyst '),
+    );
+    const exported = fs.readFileSync(
+      path.join(exportedDirectory, analyst.file),
+      'utf8',
+    );
+    assert.equal(exported, longHandoff);
+    assert.equal(analyst.sha256, member.fullResult.sha256);
+    assert.ok(
+      fs.statSync(path.join(swarmDirectory, 'members.json')).size < 12000,
+    );
+    const after = retained.map(([name]) => [
+      name,
+      createHash('sha256')
+        .update(fs.readFileSync(path.join(swarmDirectory, name)))
+        .digest('hex'),
+    ]);
+    assert.deepEqual(after, retained);
+    fullResultEvidence = {
+      archive: { ...member.fullResult, file: archive },
+      exported: {
+        sha256: analyst.sha256,
+        bytes: analyst.bytes,
+        text: exported,
+      },
+      retainedBefore: retained,
+      retainedAfter: after,
+      recordBytes: fs.statSync(path.join(swarmDirectory, 'members.json')).size,
+      criticalEvidenceAfter12000:
+        original.indexOf('REQUIRED_FULL_SWARM_MIDDLE') > 12000,
+      localCommandsNoRequests: localRuns.every(
+        (run) => run.requestCount === 21,
+      ),
+    };
+    fs.appendFileSync(
+      reportPath.replace(/\.json$/, '') + '-output.txt',
+      '\nLOCAL FULL RESULTS\n' + JSON.stringify(localRuns, null, 2),
+    );
+  }
   const owner =
     recoveryMode && swarmDirectory
       ? JSON.parse(
@@ -832,14 +909,17 @@ try {
               ? {
                   fullHandoffRead,
                   allMemberTurnsHaveContext: contextInputs.length === 4,
-                  retainedLongResult:
-                    state?.members.find((member) => member.name === 'analyst')
-                      ?.result === longHandoff,
-                  boardRetainsOriginal: board.some(
-                    (post) =>
-                      post.sender === 'analyst' &&
-                      post.text.includes('REQUIRED_FULL_SWARM_MIDDLE'),
-                  ),
+                  retainedLongResult: fullResultsMode
+                    ? fullResultEvidence?.exported.text === longHandoff
+                    : state?.members.find((member) => member.name === 'analyst')
+                        ?.result === longHandoff,
+                  boardRetainsOriginal: fullResultsMode
+                    ? !!fullResultEvidence?.criticalEvidenceAfter12000
+                    : board.some(
+                        (post) =>
+                          post.sender === 'analyst' &&
+                          post.text.includes('REQUIRED_FULL_SWARM_MIDDLE'),
+                      ),
                 }
               : {}),
             assignedPublicIdentity:
@@ -925,21 +1005,23 @@ try {
               : {}),
           };
   const report = {
-    mode: contextMode
-      ? 'context'
-      : worktreeMode
-        ? 'worktree'
-        : modelMode
-          ? sessionMode
-            ? 'models-session'
-            : 'models'
-          : recoveryMode
-            ? 'recovery'
-            : budgetMode
-              ? 'budget'
-              : diagnosticMode
-                ? 'diagnostic'
-                : 'delivery',
+    mode: fullResultsMode
+      ? 'full-results'
+      : contextMode
+        ? 'context'
+        : worktreeMode
+          ? 'worktree'
+          : modelMode
+            ? sessionMode
+              ? 'models-session'
+              : 'models'
+            : recoveryMode
+              ? 'recovery'
+              : budgetMode
+                ? 'budget'
+                : diagnosticMode
+                  ? 'diagnostic'
+                  : 'delivery',
     passed: Object.values(checks).every(Boolean),
     version: metadata.version,
     platform: process.platform,
@@ -950,6 +1032,7 @@ try {
     timedOut,
     checks,
     ...(contextMode ? { contextInputs } : {}),
+    ...(fullResultsMode ? { fullResultEvidence, localRuns } : {}),
     requests,
     failures,
     state,
@@ -966,17 +1049,19 @@ try {
     actualDeliveryHex: fs.existsSync(artifact)
       ? fs.readFileSync(artifact).toString('hex')
       : null,
-    scope: worktreeMode
-      ? 'Actual CLI prepare/workspace on/native Swarm/write_file/shell cwd/independent review/local export/apply/remove. Generated dirty Git repository; source index, staged/unstaged/untracked content preserved. Loopback model, task-level working-directory isolation, not an OS security sandbox or per-member parallel worktrees.'
-      : modelMode
-        ? `Actual installed native Swarm with ${sessionMode ? 'LocalSessionInvocation' : 'LocalSubagentInvocation'}, distinct local HTTP provider paths and model IDs for researcher/coder/verifier, persisted dispatched routes and shared budget. Loopback responses only; no real-provider autonomy or paid calls.`
-        : recoveryMode
-          ? 'Generated corrupt Swarm members and binding: initial bounded CLI failure, actual local /swarm cancel <id> with no model request, old resume rejected with exit 42 and no model request, then ordinary conversation restored. Both bad files retained byte for byte and board unchanged. Two loopback requests total; no real provider task or delivery success.'
-          : budgetMode
-            ? 'Native main/member executor budget with a loopback output-limit response: the initial coordinator request creates the isolated seed, then two cumulative dispatches are allowed and the next is blocked before the provider. CLI exits nonzero, member stays paused and the task stays blocked. Not a live-provider delivery or HTTP retry billing counter.'
-            : diagnosticMode
-              ? 'Installed CLI and real local executor receiving a loopback provider output-limit response. Checks the concrete error reaches the paused member, board and coordinator, without marking completion. Not a live-provider task or proof the model respects retry budgets.'
-              : 'Installed CLI, actual native swarm service, real local child executors, public board and member identity, mention-triggered wake, actual file writes/reads and current independent verifier gate. Model responses are loopback fixtures. Not live-provider autonomy, terminal keyboard/visual acceptance or complex reverse engineering.',
+    scope: fullResultsMode
+      ? 'Native CLI Swarm with a researcher result over 12000 characters, later verifier reading its full archive, actual file delivery and current verdict; local status and complete result export retain original state/board/owner bytes. Loopback models only, no paid task or earlier lost-text recovery claim.'
+      : worktreeMode
+        ? 'Actual CLI prepare/workspace on/native Swarm/write_file/shell cwd/independent review/local export/apply/remove. Generated dirty Git repository; source index, staged/unstaged/untracked content preserved. Loopback model, task-level working-directory isolation, not an OS security sandbox or per-member parallel worktrees.'
+        : modelMode
+          ? `Actual installed native Swarm with ${sessionMode ? 'LocalSessionInvocation' : 'LocalSubagentInvocation'}, distinct local HTTP provider paths and model IDs for researcher/coder/verifier, persisted dispatched routes and shared budget. Loopback responses only; no real-provider autonomy or paid calls.`
+          : recoveryMode
+            ? 'Generated corrupt Swarm members and binding: initial bounded CLI failure, actual local /swarm cancel <id> with no model request, old resume rejected with exit 42 and no model request, then ordinary conversation restored. Both bad files retained byte for byte and board unchanged. Two loopback requests total; no real provider task or delivery success.'
+            : budgetMode
+              ? 'Native main/member executor budget with a loopback output-limit response: the initial coordinator request creates the isolated seed, then two cumulative dispatches are allowed and the next is blocked before the provider. CLI exits nonzero, member stays paused and the task stays blocked. Not a live-provider delivery or HTTP retry billing counter.'
+              : diagnosticMode
+                ? 'Installed CLI and real local executor receiving a loopback provider output-limit response. Checks the concrete error reaches the paused member, board and coordinator, without marking completion. Not a live-provider task or proof the model respects retry budgets.'
+                : 'Installed CLI, actual native swarm service, real local child executors, public board and member identity, mention-triggered wake, actual file writes/reads and current independent verifier gate. Model responses are loopback fixtures. Not live-provider autonomy, terminal keyboard/visual acceptance or complex reverse engineering.',
   };
   fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));

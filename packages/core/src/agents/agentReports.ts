@@ -11,6 +11,7 @@ import { readAgentWorkflow, type AgentWorkflowMode } from './agentWorkflows.js';
 import { readSwarm, readSwarmBoard } from './swarm.js';
 import type { UiLocale } from '../i18n/i18nManager.js';
 import { readWorkflowReportText } from './workflowReportText.js';
+import { readSwarmResultText } from './swarmResultText.js';
 
 const digest = (value: string) =>
   createHash('sha256').update(value).digest('hex');
@@ -153,7 +154,7 @@ export function exportSwarmReports(
     { kind: 'swarm', record, board },
     record.members.map((member) => ({
       label: `@${member.name} · ${member.agent} · ${member.state} · turns=${member.turns}`,
-      text: member.result,
+      text: readSwarmResultText(root, id, member),
     })),
     path.join(root, 'swarms', id, 'members.json'),
     locale,

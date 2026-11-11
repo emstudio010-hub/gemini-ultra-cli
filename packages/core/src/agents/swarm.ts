@@ -12,6 +12,12 @@ import { z } from 'zod';
 import type { WorkflowAgentRunner } from './agentWorkflows.js';
 import { hasOpenWorkflowBudget } from './workflowBudget.js';
 import { withAgentTaskLock } from './agentTaskLock.js';
+import {
+  swarmResultArchiveSchema,
+  saveSwarmResultText,
+  readSwarmResultText,
+  swarmResultArchivePath,
+} from './swarmResultText.js';
 import { swarmContextSnapshot, swarmMemberContext } from './swarmContext.js';
 import {
   inAgentWorktree,
@@ -35,6 +41,7 @@ const memberSchema = z.object({
   lastRead: z.number().int().nonnegative().default(0),
   turns: z.number().int().nonnegative().default(0),
   result: z.string().max(12000).default(''),
+  fullResult: swarmResultArchiveSchema.optional(),
   verifiedRevision: z.number().int().optional(),
   verifiedTree: z.string().optional(),
   model: agentModelSpecSchema.optional(),
@@ -358,6 +365,11 @@ export function swarmSnapshot(root: string, id: string) {
     members: swarm.members.map((member) => ({
       ...member,
       result: member.result.slice(0, 2000),
+      ...(member.fullResult
+        ? {
+            fullResultPath: swarmResultArchivePath(root, id, member.fullResult),
+          }
+        : {}),
     })),
     boardPath: path.join(directory(root, id), 'board.jsonl'),
     recentPosts: readSwarmBoard(root, id).slice(-12),
@@ -669,6 +681,8 @@ export class SwarmEngine {
       throw new Error(
         'A current independent verifier verdict is required before finishing.',
       );
+    for (const member of swarm.members)
+      readSwarmResultText(this.root, this.id, member);
     acceptReviewedAgentWorktree(this.root, this.id, verifier.verifiedTree);
     swarm.phase = 'completed';
     saveSwarm(this.root, swarm);
@@ -796,7 +810,9 @@ export class SwarmEngine {
       );
       swarm = readSwarm(this.root, this.id);
       member = swarm.members.find((entry) => entry.name === name)!;
-      member.result = result.text.slice(0, 12000);
+      const saved = saveSwarmResultText(this.root, this.id, result.text);
+      member.result = saved.result;
+      member.fullResult = saved.fullResult;
       member.modelsUsed = modelsUsed;
       // A late research result may invalidate an auditor that started earlier.
       if (member.agent !== 'workflow-auditor') swarm.revision++;
@@ -847,7 +863,7 @@ export class SwarmEngine {
         this.root,
         this.id,
         name,
-        `${member.state}: ${result.text}`.slice(0, 4000),
+        `${member.state}: ${member.result}`.slice(0, 4000),
       );
       if (swarm.budget.failedTurns >= swarm.budget.maxFailedTurns)
         blockSwarm(this.root, swarm, 'failed-turn');
@@ -858,6 +874,9 @@ export class SwarmEngine {
       member.result = (
         error instanceof Error ? error.message : 'Member execution failed.'
       ).slice(0, 12000);
+      member.fullResult = undefined;
+      member.verifiedRevision = undefined;
+      member.verifiedTree = undefined;
       member.modelsUsed = modelsUsed;
       // Peer cancellation and a blocked task do not spend another failure allowance.
       if (swarm.phase === 'active' && !signal.aborted)

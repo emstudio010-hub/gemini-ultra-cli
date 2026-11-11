@@ -969,3 +969,8 @@ approval，实际早经宿主批准、状态completed，以真实流程记录为
 - E-214：offline缓存安装7869ms/退出0，双命令preview.58，425文件匹配Windows
   CI包，旧包保留；包SHA8be4b6d7…/入口SHA425dd35f…完整值见交接。不重跑本机业务/启动基准/真实Teamwork，个人provider及locale
   SHA保持，临时凭据已移除。WI-090真实原生交付与分发完成，目标active；E-185/198旧失败保留，不能拿一次单里程碑小任务声称任意长任务或多模型全面上线。更多报告状态口吻/恢复取消交错/长会话语义/跨机复杂逆向继续，不合并master/正式Release。docs/ultra-native-teamwork-locale-handoff.md。
+
+E-215修复本地完成：13不同定向检查通过（4主回归、4档案边界/重用、同字节长度篡改digest/拒绝覆盖1、旧context3、旧取消导出1），strict
+type/lint通过。最终源码原生21loopback请求/自然退出0/三成员4唤醒/独立verdict，read_file读取12000后完整证据；完整结果41490字符/字节、SHA7863e07c…，members状态3113字节。实际/swarm
+status ID显示档案路径，/swarm reports
+ID导出原全文及SHA一致，两本地命令0新增请求，members/owner/board哈希保持。初源码status路径失败后补真实CLI显示，最终通过，原失败保留。旧安装58截断链fixture主动拒绝400，不误算付费服务故障；无真实模型重试。候选59待三平台swarm-full-results包/安装，目标active。
