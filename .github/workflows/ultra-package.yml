@@ -26,14 +26,20 @@ on:
             tool-paths,
             cockpit-tasks,
             search-fallback,
+            minimum-node,
           ]
         default: full
+      package_run_id:
+        description: 'Existing package run ID; used only for minimum-node scope'
+        type: string
+        required: false
 
 permissions:
   contents: read
 
 jobs:
   package:
+    if: inputs.verification_scope != 'minimum-node'
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -314,3 +320,58 @@ jobs:
             artifacts/ultra-release/workflow-completion-repair-verification.json
             artifacts/ultra-release/workflow-completion-repair-verification-output.txt
           if-no-files-found: error
+
+  minimum-node:
+    if: inputs.verification_scope == 'minimum-node'
+    permissions:
+      contents: read
+      actions: read
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.19.0
+      - name: Download the existing package and verify provenance
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PACKAGE_RUN_ID: ${{ inputs.package_run_id }}
+          PACKAGE_RUNNER: ${{ matrix.os }}
+        run: |
+          if ($env:PACKAGE_RUN_ID -notmatch '^[1-9][0-9]+$') { throw 'A numeric package run ID is required.' }
+          New-Item -ItemType Directory -Force artifacts/runtime | Out-Null
+          gh run view $env:PACKAGE_RUN_ID --repo emstudio010-hub/gemini-ultra-cli --json databaseId,status,conclusion,headBranch,headSha,workflowName,event,url | Set-Content -Encoding utf8 artifacts/runtime/source-run.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          gh run download $env:PACKAGE_RUN_ID --repo emstudio010-hub/gemini-ultra-cli --name "gemini-ultra-cli-$env:PACKAGE_RUNNER" --dir artifacts/package
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/verify-ultra-minimum-node.mjs prepare artifacts/package artifacts/runtime/source-run.json artifacts/runtime/package-plan.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Install the same archive at the minimum runtime
+        shell: pwsh
+        run: |
+          $plan = Get-Content -Raw -Encoding utf8 artifacts/runtime/package-plan.json | ConvertFrom-Json
+          $prefix = Join-Path $env:RUNNER_TEMP 'ultra-minimum-node'
+          npm install --prefix $prefix --ignore-scripts --no-audit --no-fund $plan.archive
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Verify core tools and SQLite at Node 22.19.0
+        shell: pwsh
+        run: |
+          $installed = Join-Path $env:RUNNER_TEMP 'ultra-minimum-node/node_modules/gemini-ultra-cli'
+          $entry = Join-Path $installed 'bundle/gemini.js'
+          node scripts/verify-ultra-install.mjs $entry artifacts/runtime/install-verification.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/verify-ultra-minimum-node.mjs complete artifacts/runtime/package-plan.json $installed artifacts/runtime/install-verification.json artifacts/runtime/minimum-node-verification.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gemini-ultra-minimum-node-${{ matrix.os }}
+          path: artifacts/runtime/

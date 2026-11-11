@@ -1035,3 +1035,13 @@ active。
   CI包，旧包保留；个人locale/provider
   SHA保持62末值，工具配置仍未创建，无重复本机业务/启动基准/付费任务。WI-095/F-062搜索伪成功和取消/无界读取修复分发交付。goal
   active，Node最低版本、更多真实模型/长任务/语义质量及复杂跨机逆向仍待各自证据；不合并master/正式Release。docs/ultra-search-fallback-handoff.md。
+
+## 2026-11-11 声明最低Node的运行验收
+
+WI-096/E-230：包/轻入口/安装文档声明>=22.19.0，但原三平台CI使用24，缺最低环境实际链证据。官方v22.19.0
+Windows x64 ZIP与SHASUMS256核对SHA
+ea3fad0e…后只解压工程目录，不改PATH/系统Node。明确以该exe运行已安装63的版本及基础链，5loopback模型协议/4工具成功，SQLite二进制及note内容哈希一致，6rg身份/主机执行通过，3626ms链耗时非启动基准。新增existing
+workflow minimum-node范围复用成功旧包run
+ID：源码/provenance/SHA/engines/入口核对、三平台22.19临时安装同包及工具/SQLite链；整体package
+job跳过，无重建、旧业务或付费重跑。本地helper对旧包与已存最低结果prepare/complete通过，lint通过；待三平台最低环境CI，产品源仍e2ed2b6/63，全局不重装，goal
+active。
