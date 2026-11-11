@@ -89,6 +89,26 @@ export function detectIdeFromEnv(): IdeInfo {
   return IDE_DEFINITIONS.vscode;
 }
 
+/**
+ * Whether process-tree probing can add information beyond environment and
+ * connection hints. Ordinary terminal sessions have no IDE integration; doing
+ * a Windows-wide CIM process scan for them only delays command readiness.
+ */
+export function shouldProbeIdeProcess(): boolean {
+  return Boolean(
+    process.env['GEMINI_CLI_IDE_PID'] ||
+      process.env['GEMINI_CLI_IDE_WORKSPACE_PATH'] ||
+      process.env['GEMINI_CLI_IDE_SERVER_PORT'] ||
+      process.env['GEMINI_CLI_IDE_SERVER_STDIO_COMMAND'] ||
+      process.env['TERM_PROGRAM'] === 'vscode' ||
+      process.env['TERM_PROGRAM'] === 'sublime' ||
+      process.env['TERM_PROGRAM'] === 'Zed' ||
+      process.env['ZED_SESSION_ID'] ||
+      process.env['XCODE_VERSION_ACTUAL'] ||
+      isJetBrains(),
+  );
+}
+
 function verifyVSCode(
   ide: IdeInfo,
   ideProcessInfo: {

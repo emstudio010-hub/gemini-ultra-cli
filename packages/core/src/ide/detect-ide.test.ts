@@ -5,7 +5,11 @@
  */
 
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { detectIde, IDE_DEFINITIONS } from './detect-ide.js';
+import {
+  detectIde,
+  IDE_DEFINITIONS,
+  shouldProbeIdeProcess,
+} from './detect-ide.js';
 
 beforeEach(() => {
   // Ensure Antigravity detection doesn't interfere with other tests
@@ -13,6 +17,11 @@ beforeEach(() => {
 });
 
 describe('detectIde', () => {
+  it('does not request a process scan in an ordinary terminal', () => {
+    expect(shouldProbeIdeProcess()).toBe(false);
+    vi.stubEnv('TERM_PROGRAM', 'vscode');
+    expect(shouldProbeIdeProcess()).toBe(true);
+  });
   const ideProcessInfo = { pid: 123, command: 'some/path/to/code' };
   const ideProcessInfoNoCode = { pid: 123, command: 'some/path/to/fork' };
 

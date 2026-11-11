@@ -19,7 +19,11 @@ import { getIdeProcessInfo } from './process-utils.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { detectIde, IDE_DEFINITIONS } from './detect-ide.js';
+import {
+  detectIde,
+  IDE_DEFINITIONS,
+  shouldProbeIdeProcess,
+} from './detect-ide.js';
 import * as os from 'node:os';
 
 import {
@@ -71,6 +75,7 @@ describe('IdeClient', () => {
     // Mock dependencies
     vi.spyOn(process, 'cwd').mockReturnValue('/test/workspace/sub-dir');
     vi.mocked(detectIde).mockReturnValue(IDE_DEFINITIONS.vscode);
+    vi.mocked(shouldProbeIdeProcess).mockReturnValue(true);
     vi.mocked(getIdeProcessInfo).mockResolvedValue({
       pid: 12345,
       command: 'test-ide',

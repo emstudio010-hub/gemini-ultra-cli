@@ -4,7 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { detectIde, type IdeInfo } from '../ide/detect-ide.js';
+import {
+  detectIde,
+  shouldProbeIdeProcess,
+  type IdeInfo,
+} from '../ide/detect-ide.js';
 import { ideContextStore } from './ideContext.js';
 import {
   IdeContextNotificationSchema,
@@ -96,6 +100,10 @@ export class IdeClient {
     if (!IdeClient.instancePromise) {
       IdeClient.instancePromise = (async () => {
         const client = new IdeClient();
+        if (!shouldProbeIdeProcess()) {
+          client.currentIde = undefined;
+          return client;
+        }
         client.ideProcessInfo = await getIdeProcessInfo();
         const connectionConfig = client.ideProcessInfo
           ? await getConnectionConfigFromFile(client.ideProcessInfo.pid)
