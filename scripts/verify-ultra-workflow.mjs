@@ -6,7 +6,7 @@ import process from 'node:process';
 import console from 'node:console';
 import { Buffer } from 'node:buffer';
 import { setTimeout, clearTimeout } from 'node:timers';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 
@@ -26,9 +26,9 @@ const contextObjective =
   'Create deliverable.txt containing answer=42, preserving seed.txt.';
 const longHandoff =
   'Seed investigation evidence.\n' +
-  'evidence '.repeat(400) +
+  Array.from({ length: 120 }, () => 'evidence '.repeat(20)).join('\n') +
   '\nREQUIRED_FULL_HANDOFF_MIDDLE\n' +
-  'evidence '.repeat(400) +
+  Array.from({ length: 80 }, () => 'evidence '.repeat(20)).join('\n') +
   '\nRequired deliverable: answer=42\n';
 let fullHandoffRead = false;
 const contextInputs = [];
@@ -543,6 +543,13 @@ try {
         fs.readFileSync(path.join(exported, snapshot, 'manifest.json'), 'utf8'),
       );
       assert.equal(manifest.reports.length, 5);
+      for (const report of manifest.reports.slice(0, 2)) {
+        assert.equal(
+          report.sha256,
+          createHash('sha256').update(longHandoff).digest('hex'),
+        );
+        assert.equal(report.bytes, Buffer.byteLength(longHandoff));
+      }
       assert.equal(
         fs.readFileSync(path.join(exported, snapshot, '001.md'), 'utf8'),
         longHandoff,
@@ -671,7 +678,22 @@ try {
                   contextInputs.every((input) => input.objectiveCopies === 1),
                 originalReportsPreserved: record.reports
                   .filter((report) => report.agent === 'researcher')
-                  .every((report) => report.text === longHandoff),
+                  .every(
+                    (report) =>
+                      report.fullText &&
+                      report.fullText.chars === longHandoff.length &&
+                      report.fullText.bytes ===
+                        Buffer.byteLength(longHandoff) &&
+                      !report.text.includes('REQUIRED_FULL_HANDOFF_MIDDLE') &&
+                      fs.readFileSync(
+                        path.join(
+                          path.dirname(recordFile),
+                          `${id}.reports`,
+                          `full-${report.fullText.sha256}.md`,
+                        ),
+                        'utf8',
+                      ) === longHandoff,
+                  ),
                 completeReportsExportedLocally:
                   !!localReportIndex &&
                   fs.existsSync(localReportIndex) &&

@@ -15,7 +15,7 @@ v24.22.2；校验场景使用本地模型fixture，真实逆向工具需另行�
 Release 下载），执行：
 
 ```sh
-npm install -g ./gemini-ultra-cli-1.0.0-preview.48.tgz
+npm install -g ./gemini-ultra-cli-1.0.0-preview.49.tgz
 gemini-ultra --version
 gemini-ultra
 ```
@@ -120,13 +120,13 @@ Release。每个安装包附带 `.sha256` 文件，便于传输后核对。
 Windows PowerShell 校验安装包：
 
 ```powershell
-Get-FileHash ./gemini-ultra-cli-1.0.0-preview.48.tgz -Algorithm SHA256
-Get-Content ./gemini-ultra-cli-1.0.0-preview.48.tgz.sha256
+Get-FileHash ./gemini-ultra-cli-1.0.0-preview.49.tgz -Algorithm SHA256
+Get-Content ./gemini-ultra-cli-1.0.0-preview.49.tgz.sha256
 ```
 
 macOS 使用
-`shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.48.tgz.sha256`；Linux 使用
-`sha256sum -c gemini-ultra-cli-1.0.0-preview.48.tgz.sha256`。
+`shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.49.tgz.sha256`；Linux 使用
+`sha256sum -c gemini-ultra-cli-1.0.0-preview.49.tgz.sha256`。
 
 ## 自定义逆向工具路径
 
@@ -401,7 +401,13 @@ Java堆、60秒自动分析、30秒单函数反编译、120秒进程上限；错
 `decompilations/<ID>/decompiled.c`，附report.json及analysis.log；`maxChars`只截断返回预览，不丢弃完整工件。伪代码是工具推导，不等于原始源码、全文件分析或真实运行结果。未恢复原始类型或调用约定时，需结合指令及证据进一步确认。官方Ghidra通用包不包含macOS和Linux
 ARM的部分原生组件。只有Java与Utility.jar不足以反编译；巡检会检查对应平台的decompiler。在这些电脑上按Ghidra
 GettingStarted.md安装C/C++工具链后，到Ghidra安装目录的support/gradle运行 ./gradlew
-:Decompiler:buildNatives，成功后Ghidra会优先使用build/os下的组件。CLI不会擅自编译或改动本机工具安装。工作流会将较长阶段交接保存在项目临时目录 agent-workflows/<ID>.reports/ 的完整Markdown镜像中，提示词给出首尾预览、文件路径及SHA-256；原工作流JSON仍保留正文。需要中段证据或修正审查时可直接读取完整镜像，不能将预览截断理解为没有证据。镜像属于运行记录，请勿编辑；如提示内容改变，应先保留并按原工作流记录恢复。成员/阶段审查与预算规则保持不变。使用 /boost
-reports [ID]、/teamwork reports [ID]、/grill-me reports [ID] 或 /swarm reports
-[ID]
+:Decompiler:buildNatives，成功后Ghidra会优先使用build/os下的组件。CLI不会擅自编译或改动本机工具安装。
+
+## 保存和读取工作流报告
+
+Boost、Teamwork 和需求访谈的长阶段结果完整保存在项目临时目录
+`agent-workflows/<ID>.reports/`。超过16000字符的正文先完整归档，工作流JSON只存短预览、哈希和长度；后续成员需要中段证据时读取完整文件，避免把预览当作全文。归档属于运行记录，请勿编辑或提前删除；缺失、变更或校验不符时，交接和导出会报错，需保留现场并恢复原文。单份归档最多8MiB，超出上限或保存失败会阻塞任务，不会默默丢弃尾部并报成功。旧版本已经截断的内容无法恢复。现有100份阶段记录窗口保留；Swarm成员结果沿用其原有存储边界。
+
+使用 /boost reports [ID]、/teamwork reports [ID]、/grill-me reports [ID]
+或 /swarm reports [ID]
 可在本地生成已保存报告索引，不调用模型。无ID查看当前项目最近记录，显式ID取历史任务；输出indexPath指向全部已保存阶段正文/成员结果，附任务快照和逐份哈希，Swarm附公开留言。中文/英文跟随/language，原正文不翻译。导出保留完成/受阻/取消等原状态，不恢复、审批或回写；源记录和预算不变，相同快照复用，改过的导出文件不覆盖。正文提到的外部源文件/工具工件仍在原路径，不自动复制或重新验证；私有任务信息由你决定是否分享。

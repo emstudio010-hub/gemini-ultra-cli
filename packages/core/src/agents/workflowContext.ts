@@ -7,6 +7,10 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createHash } from 'node:crypto';
 import type { AgentWorkflow } from './agentWorkflows.js';
+import {
+  readWorkflowReportText,
+  workflowReportArchivePath,
+} from './workflowReportText.js';
 
 const previewChars = 1200;
 const digest = (text: string) =>
@@ -65,10 +69,11 @@ export function workflowMilestoneTitle(
 export function workflowContext(root: string, record: AgentWorkflow): string {
   const recent = record.reports.slice(-4).map((report, offset) => {
     const reportIndex = Math.max(0, record.reports.length - 4) + offset;
-    const truncated = report.text.length > previewChars;
+    const original = readWorkflowReportText(root, record.id, report);
+    const truncated = original.length > previewChars;
     const text = truncated
-      ? `${report.text.slice(0, 900)}\n[preview omitted; read the full report file]\n${report.text.slice(-300)}`
-      : report.text;
+      ? `${original.slice(0, 900)}\n[preview omitted; read the full report file]\n${original.slice(-300)}`
+      : original;
     return {
       agent: report.agent,
       stage: report.stage,
@@ -78,9 +83,11 @@ export function workflowContext(root: string, record: AgentWorkflow): string {
       truncated,
       ...(truncated
         ? {
-            fullReport: reportFile(root, record, reportIndex),
-            chars: report.text.length,
-            sha256: digest(report.text),
+            fullReport: report.fullText
+              ? workflowReportArchivePath(root, record.id, report.fullText)
+              : reportFile(root, record, reportIndex),
+            chars: original.length,
+            sha256: digest(original),
           }
         : {}),
     };

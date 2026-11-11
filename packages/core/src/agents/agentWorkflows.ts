@@ -11,6 +11,11 @@ import { z } from 'zod';
 import { latestSwarm } from './swarm.js';
 import { workflowContext, workflowMilestoneTitle } from './workflowContext.js';
 import {
+  saveWorkflowReportText,
+  workflowReportArchivePath,
+  workflowReportArchiveSchema,
+} from './workflowReportText.js';
+import {
   inAgentWorktree,
   readAgentWorktree,
   acceptReviewedAgentWorktree,
@@ -78,6 +83,7 @@ const workflowSchema = workflowPlanSchema.extend({
         stage: z.string(),
         completed: z.boolean(),
         text: z.string().max(16000),
+        fullText: workflowReportArchiveSchema.optional(),
         modelsUsed: z.array(z.string().max(512)).max(16).optional(),
       }),
     )
@@ -130,7 +136,16 @@ export function agentWorkflowSummary(
     recentReports: record.reports.slice(-4).map((report) => ({
       ...report,
       text: report.text.slice(0, 4000),
-      truncated: report.text.length > 4000,
+      truncated: !!report.fullText || report.text.length > 4000,
+      ...(report.fullText
+        ? {
+            fullReport: workflowReportArchivePath(
+              projectTempDir,
+              record.id,
+              report.fullText,
+            ),
+          }
+        : {}),
     })),
     budget: workflowBudgetSummary(projectTempDir, record),
   };
@@ -469,15 +484,22 @@ export async function runAgentWorkflow(
               completed: false,
               text: `${stopped}\nMember diagnostic: ${result.text}`,
             };
+          let savedText: ReturnType<typeof saveWorkflowReportText>;
+          try {
+            savedText = saveWorkflowReportText(projectTempDir, id, result.text);
+          } catch (error) {
+            result = {
+              completed: false,
+              text: `Stage report archive failed: ${error instanceof Error ? error.message : 'storage error'}`,
+            };
+            savedText = { text: result.text };
+          }
           current.reports.push({
             agent,
             stage: title,
             completed: result.completed,
             modelsUsed,
-            text:
-              result.text.length > 16000
-                ? `${result.text.slice(0, 15950)}\n[Report truncated; remaining text not stored.]`
-                : result.text,
+            ...savedText,
           });
           current.reports = current.reports.slice(-100);
           persist();
