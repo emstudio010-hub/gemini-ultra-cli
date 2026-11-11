@@ -43,6 +43,7 @@ const memberSchema = z.object({
   turns: z.number().int().nonnegative().default(0),
   result: z.string().max(12000).default(''),
   fullResult: swarmResultArchiveSchema.optional(),
+  lastError: z.string().max(12000).optional(),
   verifiedRevision: z.number().int().optional(),
   verifiedTree: z.string().optional(),
   model: agentModelSpecSchema.optional(),
@@ -149,6 +150,11 @@ function readPointer(root: string) {
 }
 export type Swarm = z.infer<typeof swarmSchema>;
 export type SwarmMember = z.infer<typeof memberSchema>;
+/** A failed attempt must not replace evidence from an earlier accepted result. */
+function recordMemberFailure(member: SwarmMember, message: string): void {
+  member.lastError = message.slice(0, 12000);
+  if (!member.result && !member.fullResult) member.result = member.lastError;
+}
 export type SwarmAgentRunner = (
   agent: SwarmMember['agent'],
   prompt: string,
@@ -371,6 +377,7 @@ export function swarmSnapshot(root: string, id: string) {
     members: swarm.members.map((member) => ({
       ...member,
       result: member.result.slice(0, 2000),
+      lastError: member.lastError?.slice(0, 2000),
       ...(member.fullResult
         ? {
             fullResultPath: swarmResultArchivePath(root, id, member.fullResult),
@@ -720,9 +727,17 @@ export class SwarmEngine {
     }
     if (member.turns >= 20) {
       member.state = 'paused';
-      member.result =
-        'Member reached the 20-turn wake budget; task-wide counters are retained for all successors.';
+      recordMemberFailure(
+        member,
+        'Member reached the 20-turn wake budget; task-wide counters are retained for all successors.',
+      );
       saveSwarm(this.root, swarm);
+      appendPost(
+        this.root,
+        this.id,
+        name,
+        `paused: ${member.lastError}`.slice(0, 4000),
+      );
       return;
     }
     member.state = 'queued';
@@ -821,6 +836,7 @@ export class SwarmEngine {
       const saved = saveSwarmResultText(this.root, this.id, result.text);
       member.result = saved.result;
       member.fullResult = saved.fullResult;
+      member.lastError = undefined;
       member.modelsUsed = modelsUsed;
       // A late research result may invalidate an auditor that started earlier.
       if (member.agent !== 'workflow-auditor') swarm.revision++;
@@ -879,13 +895,14 @@ export class SwarmEngine {
       const swarm = readSwarm(this.root, this.id);
       const member = swarm.members.find((entry) => entry.name === name)!;
       if (member.state !== 'killed') member.state = 'paused';
-      member.result = (
-        error instanceof Error ? error.message : 'Member execution failed.'
-      ).slice(0, 12000);
-      member.fullResult = undefined;
+      const hadResult = !!member.result || !!member.fullResult;
+      recordMemberFailure(
+        member,
+        error instanceof Error ? error.message : 'Member execution failed.',
+      );
       member.verifiedRevision = undefined;
       member.verifiedTree = undefined;
-      member.modelsUsed = modelsUsed;
+      if (!hadResult) member.modelsUsed = modelsUsed;
       // Peer cancellation and a blocked task do not spend another failure allowance.
       if (swarm.phase === 'active' && !signal.aborted)
         swarm.budget.failedTurns++;
@@ -894,7 +911,7 @@ export class SwarmEngine {
         this.root,
         this.id,
         name,
-        `paused: ${member.result}`.slice(0, 4000),
+        `paused: ${member.lastError}`.slice(0, 4000),
       );
       if (swarm.budget.failedTurns >= swarm.budget.maxFailedTurns)
         blockSwarm(this.root, swarm, 'failed-turn');

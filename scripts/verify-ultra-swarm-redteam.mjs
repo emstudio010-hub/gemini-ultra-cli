@@ -182,7 +182,7 @@ try {
   await engine.wait(globalThis.AbortSignal.timeout(5000));
   assert.equal(count, 2);
   assert.equal(state().members[0].state, 'paused');
-  assert.match(state().members[0].result, /authorization/i);
+  assert.match(state().members[0].lastError, /authorization/i);
   assert.throws(() => engine.finish(), /paused/i);
   core.writeDrillGrant(true);
   engine.post('coordinator', '@alpha resume after authorization is restored');

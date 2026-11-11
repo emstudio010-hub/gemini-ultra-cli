@@ -112,8 +112,9 @@ export function swarmContextSnapshot(
     budget: swarm.accountingUnknown
       ? { ...swarm.budget, requests: null, failedTurns: null, turns: null }
       : swarm.budget,
-    members: swarm.members.map(({ brief, result, ...member }) => ({
+    members: swarm.members.map(({ brief, result, lastError, ...member }) => ({
       ...member,
+      lastError: lastError ? preview(root, swarm.id, lastError) : undefined,
       brief:
         brief === swarm.objective
           ? {
@@ -148,6 +149,9 @@ export function swarmMemberContext(
       agent: entry.agent,
       state: entry.state,
       verifiedRevision: entry.verifiedRevision,
+      lastError: entry.lastError
+        ? preview(root, swarm.id, entry.lastError)
+        : undefined,
       result:
         swarmResultPreview(root, swarm.id, entry) ??
         preview(root, swarm.id, entry.result),

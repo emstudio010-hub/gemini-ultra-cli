@@ -89,6 +89,7 @@ export function readAgentTaskDetails(root: string, selection: unknown) {
         state: member.state,
         turns: member.turns,
         preview: member.result.slice(0, 1200),
+        lastError: member.lastError?.slice(0, 1200),
         previewOnly: !!member.fullResult || member.result.length > 1200,
         fullResultPath: member.fullResult
           ? swarmResultArchivePath(root, id, member.fullResult)

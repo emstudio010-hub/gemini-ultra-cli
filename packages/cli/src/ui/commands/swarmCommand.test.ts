@@ -81,6 +81,45 @@ function savedFiles() {
   );
 }
 
+it.each(['zh', 'en'] as const)(
+  'shows the latest member error separately in %s status',
+  async (locale) => {
+    I18nManager.getInstance().setLocale(locale);
+    const swarm = createSwarm(root, 'Preserve previous report');
+    const file = path.join(root, 'swarms', swarm.id, 'members.json');
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        ...swarm,
+        members: [
+          {
+            name: 'reader',
+            agent: 'researcher',
+            brief: 'Read source',
+            state: 'paused',
+            result: 'Prior evidence retained',
+            lastError: 'Transport interrupted',
+          },
+        ],
+      }),
+    );
+    const before = fs.readFileSync(file);
+    const { context } = resumeContext();
+    await swarmCommand.subCommands!.find(
+      (command) => command.name === 'status',
+    )!.action!(context, swarm.id);
+    const text = JSON.stringify(vi.mocked(context.ui.addItem).mock.calls);
+    expect(text).toContain(
+      locale === 'zh' ? '最近一轮错误' : 'Latest turn error',
+    );
+    expect(text).not.toContain(
+      locale === 'zh' ? 'Latest turn error' : '最近一轮错误',
+    );
+    expect(text).toContain('Transport interrupted');
+    expect(fs.readFileSync(file)).toEqual(before);
+  },
+);
+
 it('resumes the specified historical swarm rather than the newer terminal task, preserving spent requests', async () => {
   const older = createSwarm(root, 'Historical selected swarm');
   consumeSwarmRequest(root);

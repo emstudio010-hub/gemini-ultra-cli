@@ -147,7 +147,7 @@ async function action(
         const snapshot = swarmSnapshot(root, swarm.id);
         context.ui.addItem({
           type: MessageType.INFO,
-          text: `Swarm ${snapshot.phase}\n${snapshot.objective}\n${i18n.t('角色模型', 'Role models')}: ${JSON.stringify(snapshot.roleModels)}\n${i18n.t('累计预算', 'Cumulative budget')}: ${JSON.stringify(snapshot.budget)}\n${snapshot.stopReason}\n${snapshot.members.map((member) => `@${member.name}: ${member.state} · ${member.model ?? snapshot.roleModels[member.agent] ?? 'inherit'} · ${member.modelsUsed.join(', ')}${member.fullResultPath ? `\n${i18n.t('完整成员结果', 'Full member result')}: ${member.fullResultPath}` : ''}`).join('\n')}\n${snapshot.boardPath}\nID: ${snapshot.id}`,
+          text: `Swarm ${snapshot.phase}\n${snapshot.objective}\n${i18n.t('角色模型', 'Role models')}: ${JSON.stringify(snapshot.roleModels)}\n${i18n.t('累计预算', 'Cumulative budget')}: ${JSON.stringify(snapshot.budget)}\n${snapshot.stopReason}\n${snapshot.members.map((member) => `@${member.name}: ${member.state} · ${member.model ?? snapshot.roleModels[member.agent] ?? 'inherit'} · ${member.modelsUsed.join(', ')}${member.lastError ? `\n${i18n.t('最近一轮错误', 'Latest turn error')}: ${member.lastError}` : ''}${member.fullResultPath ? `\n${i18n.t('完整成员结果', 'Full member result')}: ${member.fullResultPath}` : ''}`).join('\n')}\n${snapshot.boardPath}\nID: ${snapshot.id}`,
         });
         return;
       }
