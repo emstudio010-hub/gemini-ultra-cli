@@ -10,6 +10,9 @@ import {
   runDrillPreflight,
   DrillStore,
   I18nManager,
+  drillToolNames,
+  savedDrillToolPaths,
+  saveDrillToolPath,
 } from '@google/gemini-cli-core';
 import {
   type CommandContext,
@@ -52,13 +55,112 @@ export const drillCommand: SlashCommand = {
   altNames: ['演练台', 'd'],
   get description() {
     return t(
-      '打开演练台控制中心。用法: /drill [setup | ui | status | preflight | grant | facts | stop]',
-      'Open the Drill Cockpit. Usage: /drill [setup | ui | status | preflight | grant | facts | stop]',
+      '打开演练台控制中心。用法: /drill [setup | tools | ui | status | preflight | grant | facts | stop]',
+      'Open the Drill Cockpit. Usage: /drill [setup | tools | ui | status | preflight | grant | facts | stop]',
     );
   },
   kind: CommandKind.BUILT_IN,
   autoExecute: false,
   subCommands: [
+    {
+      name: 'tools',
+      get description() {
+        return t(
+          '查看或保存逆向工具路径：tools <工具> <完整路径>；tools reset <工具>',
+          'View or save reverse-tool paths: tools <name> <absolute-path>; tools reset <name>',
+        );
+      },
+      kind: CommandKind.BUILT_IN,
+      autoExecute: false,
+      action: async (context, args) => {
+        try {
+          const input = args.trim();
+          if (!input) {
+            const saved = savedDrillToolPaths();
+            context.ui.addItem({
+              type: MessageType.INFO,
+              text:
+                t(
+                  '本机已保存的逆向工具路径',
+                  'Saved reverse-tool paths on this computer',
+                ) +
+                `\n${saved.file}\n` +
+                (Object.entries(saved.paths)
+                  .map(([name, value]) => `${name}: ${value}`)
+                  .join('\n') || t('尚未保存路径。', 'No saved paths.')) +
+                t(
+                  '\n用法：/drill tools <工具> <完整路径>；/drill tools reset <工具>\n支持：',
+                  '\nUsage: /drill tools <name> <absolute-path>; /drill tools reset <name>\nSupported: ',
+                ) +
+                drillToolNames.join(', ') +
+                t(
+                  '\n环境变量优先。Java优先使用显式路径、JAVA_HOME，然后已保存路径和PATH。路径保存后即时生效，不会运行或安装工具。',
+                  '\nEnvironment variables take precedence. Java uses its explicit override, JAVA_HOME, saved path, then PATH. Changes apply immediately; saving does not run or install tools.',
+                ),
+            });
+            return;
+          }
+          const reset = /^reset\s+(\S+)\s*$/.exec(input);
+          const set = /^(\S+)\s+(.+)$/.exec(input);
+          if (!reset && !set)
+            throw new Error(
+              t(
+                '用法：/drill tools <工具> <完整路径>；/drill tools reset <工具>',
+                'Usage: /drill tools <name> <absolute-path>; /drill tools reset <name>',
+              ),
+            );
+          const name = reset?.[1] || set![1];
+          if (!drillToolNames.some((tool) => tool === name))
+            throw new Error(
+              t('不支持的工具。可用：', 'Unsupported tool. Available: ') +
+                drillToolNames.join(', '),
+            );
+          let selected = set?.[2].trim();
+          if (reset) selected = undefined;
+          else if (
+            selected &&
+            ((selected.startsWith('"') && selected.endsWith('"')) ||
+              (selected.startsWith("'") && selected.endsWith("'")))
+          )
+            selected = selected.slice(1, -1);
+          const saved = saveDrillToolPath(name, selected);
+          const override =
+            process.env[`GEMINI_ULTRA_TOOL_${name.toUpperCase()}`] ||
+            (name === 'java' ? process.env['JAVA_HOME'] : undefined);
+          context.ui.addItem({
+            type: MessageType.INFO,
+            text:
+              (reset
+                ? t(
+                    `已清除 ${name} 的保存路径。`,
+                    `Cleared the saved path for ${name}.`,
+                  )
+                : t(
+                    `已保存 ${name}，后续发现与执行即时使用该设置。`,
+                    `Saved ${name}; subsequent discovery and execution use this setting immediately.`,
+                  )) +
+              `\n${saved.file}` +
+              (saved.backup
+                ? t('\n原文件备份：', '\nOriginal file backup: ') + saved.backup
+                : '') +
+              (override
+                ? t(
+                    '\n当前环境变量仍优先于保存路径。',
+                    '\nThe current environment override still takes precedence over the saved path.',
+                  )
+                : ''),
+          });
+        } catch (error) {
+          context.ui.addItem({
+            type: MessageType.ERROR,
+            text:
+              error instanceof Error
+                ? error.message
+                : t('工具路径保存失败。', 'Could not save tool paths.'),
+          });
+        }
+      },
+    },
     {
       name: 'setup',
       altNames: ['安装', '环境'],

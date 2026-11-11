@@ -5,6 +5,7 @@
  */
 import * as fs from 'node:fs';
 import path from 'node:path';
+import { configuredDrillToolPath } from './drillToolPaths.js';
 
 type JavaDiscovery = { available: boolean; pathOrStatus?: string };
 
@@ -14,7 +15,7 @@ export async function discoverGhidraJava(
 ): Promise<JavaDiscovery> {
   const explicit = process.env['GEMINI_ULTRA_TOOL_JAVA'];
   const javaHome = process.env['JAVA_HOME'];
-  const source = explicit
+  let source = explicit
     ? 'GEMINI_ULTRA_TOOL_JAVA'
     : javaHome
       ? 'JAVA_HOME'
@@ -28,9 +29,13 @@ export async function discoverGhidraJava(
           process.platform === 'win32' ? 'java.exe' : 'java',
         )
       : undefined);
-  const found = selected
-    ? { available: true, pathOrStatus: selected }
-    : await fromPath();
+  const saved = selected ? undefined : configuredDrillToolPath('java');
+  if (saved?.error) return { available: false, pathOrStatus: saved.error };
+  if (saved?.path) source = saved.source || 'saved Java path';
+  const found =
+    selected || saved?.path
+      ? { available: true, pathOrStatus: selected || saved?.path }
+      : await fromPath();
   if (!found.available || !found.pathOrStatus)
     return {
       available: false,
@@ -52,7 +57,7 @@ export async function discoverGhidraJava(
   } catch {
     return {
       available: false,
-      pathOrStatus: `${source}: ${file} is unavailable or not executable. Configure a native Java executable${source === 'PATH' ? '.' : ` or clear ${source} to use a lower-priority source.`}`,
+      pathOrStatus: `${source}: ${file} is unavailable or not executable. Configure a native Java executable${saved?.path ? ' or use /drill tools reset java to select PATH.' : source === 'PATH' ? '.' : ` or clear ${source} to use a lower-priority source.`}`,
     };
   }
 }

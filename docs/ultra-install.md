@@ -15,7 +15,7 @@ v24.22.2；校验场景使用本地模型fixture，真实逆向工具需另行�
 Release 下载），执行：
 
 ```sh
-npm install -g ./gemini-ultra-cli-1.0.0-preview.59.tgz
+npm install -g ./gemini-ultra-cli-1.0.0-preview.60.tgz
 gemini-ultra --version
 gemini-ultra
 ```
@@ -136,6 +136,22 @@ macOS 使用
 `sha256sum -c gemini-ultra-cli-1.0.0-preview.49.tgz.sha256`。
 
 ## 自定义逆向工具路径
+
+可直接在CLI保存本机工具路径，下次启动继续使用，无需修改shell配置：
+
+```text
+/drill tools
+/drill tools r2 "D:\Tools\radare2\bin\r2.exe"
+/drill tools rabin2 "D:\Tools\radare2\bin\rabin2.exe"
+/drill tools analyzeHeadless "D:\Tools\ghidra\support\analyzeHeadless.bat"
+/drill tools reset r2
+```
+
+Linux/macOS同样使用完整绝对路径，例如`/drill tools r2 /opt/radare2/bin/r2`。路径有空格时可加一层引号，保存即时生效。`tools`列出支持的工具及保存位置，`reset`只移除该工具的已保存路径，不删除工具文件。设置保存在当前用户的`~/.gemini/ultra-tools.json`；`GEMINI_ULTRA_TOOLS_FILE`可指定独立配置文件。迁移到其他电脑时重新选取当地路径，不复制开发机的绝对路径设置。
+
+工具优先选择`GEMINI_ULTRA_TOOL_*`环境变量，其次已保存路径，最后PATH。Java额外保留`JAVA_HOME`优先级：显式Java变量→JAVA_HOME→保存路径→PATH；无效高优先设置不会悄悄回退。r2/rabin2/java须原生可执行文件，Windows不接受bat/cmd，POSIX文件须可执行。保存只检查文件可访问及权限，不执行工具、不下载、不证明版本兼容。巡检和二进制工具使用同一份发现逻辑。
+
+有效配置更新前生成唯一`.bak`备份，写入采用同目录临时文件替换；保存失败保留原配置。损坏、超大或链接配置文件会明确报错并保留，修复原文件后再保存；不会自动清空。此配置仅记录工具路径，供应商、MCP与演练授权仍分别配置。
 
 可用变量包括
 `GEMINI_ULTRA_TOOL_R2`、`GEMINI_ULTRA_TOOL_RABIN2`、`GEMINI_ULTRA_TOOL_JADX`、`GEMINI_ULTRA_TOOL_ANALYZEHEADLESS`、`GEMINI_ULTRA_TOOL_JAVA`

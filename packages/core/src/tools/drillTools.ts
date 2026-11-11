@@ -11,6 +11,7 @@ import * as path from 'node:path';
 import { DrillStore } from '../drill/drillStore.js';
 import { readDrillGrant } from '../drill/drillGrant.js';
 import { ToolErrorType } from './tool-error.js';
+import { configuredDrillToolPath } from './drillToolPaths.js';
 import {
   discoverGhidraDecompiler,
   discoverGhidraJava,
@@ -41,7 +42,9 @@ export function toolPathEnv(name: string): string {
 function configuredTool(
   name: string,
 ): { available: boolean; pathOrStatus: string } | undefined {
-  const configured = process.env[toolPathEnv(name)];
+  const setting = configuredDrillToolPath(name);
+  if (setting.error) return { available: false, pathOrStatus: setting.error };
+  const configured = setting.path;
   if (!configured) return undefined;
   try {
     if (!fs.statSync(configured).isFile())
@@ -54,7 +57,7 @@ function configuredTool(
   } catch {
     return {
       available: false,
-      pathOrStatus: `${configured} (unavailable or not executable; check ${toolPathEnv(name)})`,
+      pathOrStatus: `${configured} (unavailable or not executable; check ${setting.source})`,
     };
   }
 }
