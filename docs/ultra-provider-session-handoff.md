@@ -1,6 +1,6 @@
 # Gemini Ultra CLI 供应商会话与语言一致性交接
 
-日期：2026-11-11。WI-080/E-179，候选 preview.48。上一阶段47已交付；不改个人供应商配置、数据库或逆向工具，不调用付费模型。
+日期：2026-11-11。WI-080/E-179至181，preview.48 已安装。上一阶段47已交付；不改个人供应商配置、数据库或逆向工具，不调用付费模型。
 
 ## 修复与证据
 
@@ -32,5 +32,13 @@ auto，生成器才在后端转到活跃供应商，分类器JSON重试后才返
 CI增加显式verification_scope=provider：三平台新鲜打包、实际安装及相关供应商链。普通push与默认手动full继续全部原生检查。本轮产品提交skip
 ci后显式派发provider范围，不重复未受影响的Swarm/Teamwork/Ghidra；完整基线沿用47/run43018021899，不能称48重新验证全部逆向/协作。
 
-最终源、CI、包SHA、全局安装待追加。goal
+E-180：最终产品源 `4a0907914d189446f141e7c3ca889b642009371c`，
+[run 43024019734](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/43024019734)
+三平台completed/success，显式provider范围。包版本/源码身份/SHA、六份原生搜索二进制hash和权限、安装及4个原生基础工具检查通过。每平台相关供应商链均为8条命令：7条退出0，故意失败的目录请求退出42；本地命令0模型，正文1POST、失败目录1GET，没有分类器重试，全部checks通过。原Swarm/Teamwork/Ghidra步骤按范围跳过，完整基线仍为47/run43018021899，未将其冒充48重新验收。
+
+E-181：Windows包SHA
+`8cf209b982b2649afb2c9ec2bdd346e0bd01b3dbacc9d291e53fa14db20e5bff`，入口SHA
+`80b39086bf4b42cfc0c2e92f026553fe84b7bb777096c766cfe27e28c8226d46`。offline已有缓存安装7998ms/退出0，双命令preview.48，425文件逐字节匹配CI包，旧包保留；未重复ConPTY、付费任务或未受影响的业务链。最终证据github-preview48-run.json、github-preview48-artifacts-result.json、github-run-43024019734/、global-preview48-install-result.json、global-install-github-preview48-full-result.json。首轮失败包未安装，旧证据保留。
+
+WI-080交付，源码/工程/Obsidian同份交接同步。goal
 active，只推送codex分支，不合并master/正式Release。真实Teamwork长任务、更多模型、长会话摘要准确性、复杂逆向及其他机器交互仍未全部验收。
