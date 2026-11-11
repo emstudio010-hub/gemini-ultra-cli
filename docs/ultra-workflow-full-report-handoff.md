@@ -1,6 +1,6 @@
 # Gemini Ultra CLI 长阶段报告完整保存交接
 
-日期：2026-11-11。WI-081/E-182，候选preview.49。沿用R26/code-audit自有源码case、lead/cae/doc；scope
+日期：2026-11-11。WI-081/E-182至184，preview.49已安装。沿用R26/code-audit自有源码case、lead/cae/doc；scope
 granted，case
 guard退出0。现有case初始化已完成，不运行会覆盖历史scope和timeline的重新初始化。没有外部扫描、付费模型、个人配置/数据库/逆向工具改动。
 
@@ -37,7 +37,19 @@ flowchart LR
 
 ## 分发与剩余边界
 
-候选49使用显式workflow-reports范围做三平台新鲜包/安装/本次长报告链。未受影响Swarm、Teamwork草案流程、供应商配置和Ghidra不重复；完整基线47/run43018021899，供应商及默认网关基线48/run43024019734。最终源、run、包SHA和全局安装待追加。
+49使用显式workflow-reports范围做三平台新鲜包/安装/本次长报告链。未受影响Swarm、Teamwork草案流程、供应商配置和Ghidra不重复；完整基线47/run43018021899，供应商及默认网关基线48/run43024019734。
+
+E-183：最终产品源 `e48af067a1de34707894e67a7afe5a7242acfebd`，
+[run 43026662717](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/43026662717)
+三平台completed/success，workflow-reports范围；包版本/源码身份/SHA、六份rg哈希/权限、安装及4个原生基础工具核对通过。每平台实际安装包链均13次loopback请求/11调度/退出0，五阶段完成。两份研究报告各36290字节/字符，状态预览各1245字符；SHA均为
+`2e20b6b403cbbfaac3a23dd801736b0123318ab2a91568ae3dcb241e7de6f755`，原生read_file取中段、完整导出及全部checks通过。被跳过的旧链不冒充本版本重验收。
+
+E-184：offline已有缓存安装7925ms/退出0，双命令preview.49，425文件匹配Windows
+CI包，旧包保留。包SHA
+`ebc7ec6c26cf52c25ca8d132d5a933725cec120c225fc6e945f64252255bf0f1`，入口SHA
+`04ae983d2b3058d75f50ac592909c10e2868220fca4b91fe128a527a4d704a9e`。macOS工件下载曾一次EOF，仅重试下载成功，没有重跑CI或业务。未重复本机长链/启动基准/付费任务。
+
+最终证据：github-preview49-run.json、github-preview49-artifacts-result.json、github-run-43026662717/、global-preview49-install-result.json、global-install-github-preview49-full-result.json。WI-081交付，源码、工程正式报告和Obsidian交接一致。新长报告使用49及更新版本恢复/导出；旧客户端不识别新增归档引用，不能据此声称可无损回退处理新记录。
 
 goal
 active，只推送codex分支，不合并master/正式Release。真实Teamwork长任务、更多模型与更复杂逆向、长会话摘要准确性仍待验收；旧截断内容、100份报告窗口与Swarm存储上限不因本轮修复而宣称解决。
