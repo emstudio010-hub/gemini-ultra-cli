@@ -1,6 +1,6 @@
 # Gemini Ultra CLI 演练台原生协作看板交接
 
-日期：2026-11-11。WI-094/E-224/F-061，候选preview.62。沿用R26/code-audit自有源码case、lead/cae/doc、scope授权granted。无真实模型调用、外部安全目标或个人配置/数据库/逆向工具改动。
+日期：2026-11-11。WI-094/E-224/F-061，preview.62 已安装。沿用R26/code-audit自有源码case、lead/cae/doc、scope授权granted。无真实模型调用、外部安全目标或个人配置/数据库/逆向工具改动。
 
 ## 问题与实现
 
@@ -27,8 +27,26 @@ cwd后3项通过。
 实际浏览器路径通过：中文目录四模式、坏记录禁选、Swarm成员与共享留言、长结果预览/全文路径/终端命令；HTML形式留言为文本且无img节点。宿主只对fixture的members.json写入blocked/paused和LIVE_SWARM_STATUS_UPDATED后，所选详情自动刷新；不是模型完成证明。分页第二页仅2项且无下一页，返回第一页；Teamwork未知用量及英文Boost7/30、里程碑和未完成结果可见。浏览器结束后29文件仅有该次明确宿主写入的members.json变化，其他文件保持，源服务已停止。首按钮样式问题和改为紧凑选择器前的观察保留。
 
 相关严格type已通过；首script
-lint缺少Node全局导入，补显式URL/timers和globalThis.fetch后单独复核脚本；没有全量/冒烟/旧协作或付费任务重跑。工程证据：cockpit-native-tasks-types.log、cockpit-native-tasks-final-types.log、cockpit-native-tasks-final-lint.log、cockpit-native-tasks-tests.log及setup-failure/final/unknown-limit
+lint缺少Node全局导入，补显式URL/timers和globalThis.fetch后单独复核脚本通过；没有全量/冒烟/旧协作或付费任务重跑。工程证据：cockpit-native-tasks-types.log、cockpit-native-tasks-final-types.log、cockpit-native-tasks-final-lint.log、cockpit-native-tasks-tests.log及setup-failure/final/unknown-limit
 JUnit、cockpit-native-tasks-api.json/-log、cockpit-native-tasks-browser.json、cockpit-native-tasks-en.jpg、cockpit-native-tasks-live-mutation.json、cockpit-native-tasks-retention.json。
 
-候选62三平台cockpit-tasks范围包与安装待接续。goal
-active，已有真实协作/原生静态逆向基线保留；更多模型长任务、语义准确性、复杂跨机逆向和进一步任务控制便利性继续。不合并master或创建正式Release。
+## 分发与全局安装
+
+E-225：产品源 `6884b423e472a6a462d85abc8e64c682524304e0`，
+[run 43078701151](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/43078701151)
+三平台cockpit-tasks范围completed/success。独立下载核对版本62、源chunk、包SHA、六rg身份/权限及安装4基础工具，包内实际含agent-tasks
+API、native-task-choice与readAgentTaskDetails调用。每平台源服务3组HTTP覆盖四模式、22项20+2分页无重复、Boost已知7/30及旧用量未知、认证拒绝及损坏主记录通用诊断；29文件SHA逐一保持。旧无关链skipped，47至61基线保留。这里是三平台源服务HTTP和包安装验证，实际浏览器仅本机隔离源服务，不冒充三平台浏览器或新的模型协作。
+
+E-226：Windows
+CI包offline已有缓存安装14300ms/退出0，双命令preview.62，425文件逐一匹配CI包，旧包保留。包SHA256
+`f9ad5a2c650a5ba599dcf86d5411edd5a7b36bf83a951b34f50241e55f885513`，入口SHA256
+`d6bf08430699d90fae66423287c192cb952adc4d7a37f94e3259e153518263c9`。没有追加本机业务、启动基准或付费任务。
+
+最终证据：github-preview62-run.json、github-preview62-artifacts-result.json、github-preview62-artifacts-verification.log、github-run-43078701151/、global-preview62-install-result.json、global-install-github-preview62-full-result.json、cockpit-native-tasks-personal-config.json。个人locale
+SHA
+`4fcce506592e55074156cab2f5fea35cce0d48ea5f8c919b69cd71ffc735f2c8`、providers
+SHA `e0bff750cd1f18458cffc175ad3683d1851bbc58958fb4182dd15d9e128e4332`
+保持，ultra-tools.json仍未创建。源码、工程正式报告和Obsidian全文同步。
+
+goal
+active。已有真实协作/原生静态逆向基线保留；更多模型长任务、语义准确性、复杂跨机逆向和进一步任务控制便利性继续。不合并master或创建正式Release。
