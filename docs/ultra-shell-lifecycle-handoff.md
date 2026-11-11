@@ -1,6 +1,6 @@
 # Gemini Ultra CLI 终端取消时序与原生 PTY 交接
 
-日期：2026-11-11。WI-097/E-232/F-063，候选preview.64。沿用R26/code-audit自有源码case、lead/cae/doc、scope授权granted。本轮没有模型调用、外部目标或个人配置/数据库/逆向工具改动。
+日期：2026-11-11。WI-097/E-232/F-063，preview.64 已安装。沿用R26/code-audit自有源码case、lead/cae/doc、scope授权granted。本轮没有模型调用、外部目标或个人配置/数据库/逆向工具改动。
 
 ## 缺陷与修复
 
@@ -28,5 +28,24 @@ UI交互或长时间FD泄漏验收。
 
 工程证据：shell-start-cancel-before-junit.xml/-log、shell-start-cancel-junit.xml/-log、shell-start-cancel-types.log、shell-start-cancel-lint.log、shell-lifecycle-source.json/-log、shell-lifecycle-script-lint.log、shell-lifecycle-final-script-lint.log。没有全量、冒烟、未变更模型协作链或付费请求。
 
-候选64待shell-lifecycle范围三平台包与全局安装，63最低Node及其他旧基线保留。goal
-active，更多模型长任务、语义质量、完整终端UI和复杂跨机逆向继续。不合并master或创建正式Release。
+## 分发与全局安装
+
+E-233：产品源 `0e1aad6f070a5dd4492c8696429e56f8bb2f01e8`，
+[run 43086702857](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/43086702857)
+三平台shell-lifecycle范围completed/success，minimum-node及旧无关链skipped。独立下载核对版本64、源chunk、包SHA、六rg身份/权限及安装4基础工具，包内实际含cancelledBeforeStart。每平台调用实际分发包导出服务通过7场景、0模型：4入口/准备取消无pid、none及正确cleanup；交互原生lydell-node-pty的stdin/stdout
+tty均true，输入fixture-input捕获输出后退出0；运行中父子进程取消后终止且服务不活跃；管道输出/退出0。Windows/Linux/macOS取消观测分别113/33/61ms，非性能保证。47至63未受影响基线保留，不冒称完整CLI
+UI、用户按键/resize或长时FD验收。
+
+E-234：Windows
+CI包offline已有缓存安装7870ms/退出0，双命令preview.64，425文件逐一匹配CI包，旧包保留。包SHA256
+`56141764c2f92ce914308bf18a1cbba159eb37dd8d70bd40402fb9a29ff684fa`，入口SHA256
+`2ad475a659935fde02beea2d95582759d4e6ae3f6a8c6a7d661bc90bf6720f8f`。没有追加本机业务、启动基准或付费任务。
+
+最终证据：github-preview64-run.json、github-preview64-artifacts-result.json、github-preview64-artifacts-verification.log、github-run-43086702857/、global-preview64-install-result.json、global-install-github-preview64-full-result.json、shell-lifecycle-personal-config.json。个人locale
+SHA
+`4fcce506592e55074156cab2f5fea35cce0d48ea5f8c919b69cd71ffc735f2c8`、providers
+SHA `e0bff750cd1f18458cffc175ad3683d1851bbc58958fb4182dd15d9e128e4332`
+保持，ultra-tools.json仍未创建。源码、工程正式报告与Obsidian全文同步。
+
+goal
+active。63最低Node及其他旧基线保留，不扩张为64新最低运行时验收。更多模型长任务、语义质量、完整终端UI和复杂跨机逆向继续。不合并master或创建正式Release。
