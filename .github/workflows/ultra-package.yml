@@ -25,6 +25,7 @@ on:
             swarm-full-results,
             tool-paths,
             cockpit-tasks,
+            search-fallback,
           ]
         default: full
 
@@ -64,7 +65,7 @@ jobs:
           node scripts/verify-ultra-install.mjs $entry artifacts/ultra-release/install-verification.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Verify native swarm coordination
-        if: inputs.verification_scope != 'provider' && inputs.verification_scope != 'workflow-reports' && inputs.verification_scope != 'agent-localization' && inputs.verification_scope != 'workflow-resume' && inputs.verification_scope != 'swarm-resume' && inputs.verification_scope != 'workflow-exclusion' && inputs.verification_scope != 'task-claims' && inputs.verification_scope != 'task-lock-locale' && inputs.verification_scope != 'swarm-full-results' && inputs.verification_scope != 'tool-paths' && inputs.verification_scope != 'cockpit-tasks' && inputs.verification_scope != 'agent-catalog' && inputs.verification_scope != 'compression-snapshot' && inputs.verification_scope != 'ghidra-runtime'
+        if: inputs.verification_scope != 'provider' && inputs.verification_scope != 'workflow-reports' && inputs.verification_scope != 'agent-localization' && inputs.verification_scope != 'workflow-resume' && inputs.verification_scope != 'swarm-resume' && inputs.verification_scope != 'workflow-exclusion' && inputs.verification_scope != 'task-claims' && inputs.verification_scope != 'task-lock-locale' && inputs.verification_scope != 'swarm-full-results' && inputs.verification_scope != 'tool-paths' && inputs.verification_scope != 'cockpit-tasks' && inputs.verification_scope != 'search-fallback' && inputs.verification_scope != 'agent-catalog' && inputs.verification_scope != 'compression-snapshot' && inputs.verification_scope != 'ghidra-runtime'
         shell: pwsh
         run: |
           $entry = Join-Path $env:RUNNER_TEMP 'ultra-install/node_modules/gemini-ultra-cli/bundle/gemini.js'
@@ -81,14 +82,14 @@ jobs:
           node scripts/verify-ultra-swarm.mjs $entry artifacts/ultra-release/swarm-recovery-verification.json recovery
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Verify bounded remote agent discovery
-        if: inputs.verification_scope != 'provider' && inputs.verification_scope != 'workflow-reports' && inputs.verification_scope != 'agent-localization' && inputs.verification_scope != 'workflow-resume' && inputs.verification_scope != 'swarm-resume' && inputs.verification_scope != 'workflow-exclusion' && inputs.verification_scope != 'task-claims' && inputs.verification_scope != 'task-lock-locale' && inputs.verification_scope != 'swarm-full-results' && inputs.verification_scope != 'tool-paths' && inputs.verification_scope != 'cockpit-tasks' && inputs.verification_scope != 'agent-catalog' && inputs.verification_scope != 'compression-snapshot' && inputs.verification_scope != 'ghidra-runtime'
+        if: inputs.verification_scope != 'provider' && inputs.verification_scope != 'workflow-reports' && inputs.verification_scope != 'agent-localization' && inputs.verification_scope != 'workflow-resume' && inputs.verification_scope != 'swarm-resume' && inputs.verification_scope != 'workflow-exclusion' && inputs.verification_scope != 'task-claims' && inputs.verification_scope != 'task-lock-locale' && inputs.verification_scope != 'swarm-full-results' && inputs.verification_scope != 'tool-paths' && inputs.verification_scope != 'cockpit-tasks' && inputs.verification_scope != 'search-fallback' && inputs.verification_scope != 'agent-catalog' && inputs.verification_scope != 'compression-snapshot' && inputs.verification_scope != 'ghidra-runtime'
         shell: pwsh
         run: |
           $entry = Join-Path $env:RUNNER_TEMP 'ultra-install/node_modules/gemini-ultra-cli/bundle/gemini.js'
           node scripts/verify-ultra-agent-discovery.mjs $entry artifacts/ultra-release/agent-discovery-verification.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Verify native workflow budgets
-        if: inputs.verification_scope != 'provider' && inputs.verification_scope != 'workflow-reports' && inputs.verification_scope != 'agent-localization' && inputs.verification_scope != 'workflow-resume' && inputs.verification_scope != 'swarm-resume' && inputs.verification_scope != 'workflow-exclusion' && inputs.verification_scope != 'task-claims' && inputs.verification_scope != 'task-lock-locale' && inputs.verification_scope != 'swarm-full-results' && inputs.verification_scope != 'tool-paths' && inputs.verification_scope != 'cockpit-tasks' && inputs.verification_scope != 'agent-catalog' && inputs.verification_scope != 'compression-snapshot' && inputs.verification_scope != 'ghidra-runtime'
+        if: inputs.verification_scope != 'provider' && inputs.verification_scope != 'workflow-reports' && inputs.verification_scope != 'agent-localization' && inputs.verification_scope != 'workflow-resume' && inputs.verification_scope != 'swarm-resume' && inputs.verification_scope != 'workflow-exclusion' && inputs.verification_scope != 'task-claims' && inputs.verification_scope != 'task-lock-locale' && inputs.verification_scope != 'swarm-full-results' && inputs.verification_scope != 'tool-paths' && inputs.verification_scope != 'cockpit-tasks' && inputs.verification_scope != 'search-fallback' && inputs.verification_scope != 'agent-catalog' && inputs.verification_scope != 'compression-snapshot' && inputs.verification_scope != 'ghidra-runtime'
         shell: pwsh
         run: |
           $entry = Join-Path $env:RUNNER_TEMP 'ultra-install/node_modules/gemini-ultra-cli/bundle/gemini.js'
@@ -105,14 +106,14 @@ jobs:
           node scripts/verify-ultra-workflow.mjs $entry artifacts/ultra-release/workflow-record-recovery-verification.json record-recovery
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Verify native Teamwork draft and milestone delivery
-        if: inputs.verification_scope != 'provider' && inputs.verification_scope != 'workflow-reports' && inputs.verification_scope != 'agent-localization' && inputs.verification_scope != 'workflow-resume' && inputs.verification_scope != 'swarm-resume' && inputs.verification_scope != 'workflow-exclusion' && inputs.verification_scope != 'task-claims' && inputs.verification_scope != 'task-lock-locale' && inputs.verification_scope != 'swarm-full-results' && inputs.verification_scope != 'tool-paths' && inputs.verification_scope != 'cockpit-tasks' && inputs.verification_scope != 'agent-catalog' && inputs.verification_scope != 'compression-snapshot' && inputs.verification_scope != 'ghidra-runtime'
+        if: inputs.verification_scope != 'provider' && inputs.verification_scope != 'workflow-reports' && inputs.verification_scope != 'agent-localization' && inputs.verification_scope != 'workflow-resume' && inputs.verification_scope != 'swarm-resume' && inputs.verification_scope != 'workflow-exclusion' && inputs.verification_scope != 'task-claims' && inputs.verification_scope != 'task-lock-locale' && inputs.verification_scope != 'swarm-full-results' && inputs.verification_scope != 'tool-paths' && inputs.verification_scope != 'cockpit-tasks' && inputs.verification_scope != 'search-fallback' && inputs.verification_scope != 'agent-catalog' && inputs.verification_scope != 'compression-snapshot' && inputs.verification_scope != 'ghidra-runtime'
         shell: pwsh
         run: |
           $entry = Join-Path $env:RUNNER_TEMP 'ultra-install/node_modules/gemini-ultra-cli/bundle/gemini.js'
           node scripts/verify-ultra-teamwork.mjs $entry artifacts/ultra-release/teamwork-verification.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Verify native provider commands
-        if: inputs.verification_scope != 'workflow-reports' && inputs.verification_scope != 'agent-localization' && inputs.verification_scope != 'workflow-resume' && inputs.verification_scope != 'swarm-resume' && inputs.verification_scope != 'workflow-exclusion' && inputs.verification_scope != 'task-claims' && inputs.verification_scope != 'task-lock-locale' && inputs.verification_scope != 'swarm-full-results' && inputs.verification_scope != 'tool-paths' && inputs.verification_scope != 'cockpit-tasks' && inputs.verification_scope != 'agent-catalog' && inputs.verification_scope != 'compression-snapshot' && inputs.verification_scope != 'ghidra-runtime'
+        if: inputs.verification_scope != 'workflow-reports' && inputs.verification_scope != 'agent-localization' && inputs.verification_scope != 'workflow-resume' && inputs.verification_scope != 'swarm-resume' && inputs.verification_scope != 'workflow-exclusion' && inputs.verification_scope != 'task-claims' && inputs.verification_scope != 'task-lock-locale' && inputs.verification_scope != 'swarm-full-results' && inputs.verification_scope != 'tool-paths' && inputs.verification_scope != 'cockpit-tasks' && inputs.verification_scope != 'search-fallback' && inputs.verification_scope != 'agent-catalog' && inputs.verification_scope != 'compression-snapshot' && inputs.verification_scope != 'ghidra-runtime'
         shell: pwsh
         run: |
           $entry = Join-Path $env:RUNNER_TEMP 'ultra-install/node_modules/gemini-ultra-cli/bundle/gemini.js'
@@ -190,6 +191,13 @@ jobs:
           $entry = Join-Path $env:RUNNER_TEMP 'ultra-install/node_modules/gemini-ultra-cli/bundle/gemini.js'
           node scripts/verify-ultra-swarm.mjs $entry artifacts/ultra-release/swarm-full-results-verification.json full-results
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Verify native web search fallback results
+        if: inputs.verification_scope == 'search-fallback' || inputs.verification_scope == 'full' || inputs.verification_scope == ''
+        shell: pwsh
+        run: |
+          $entry = Join-Path $env:RUNNER_TEMP 'ultra-install/node_modules/gemini-ultra-cli/bundle/gemini.js'
+          node scripts/verify-ultra-search-fallback.mjs $entry artifacts/ultra-release/search-fallback-verification.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Verify native Agent task Cockpit API
         if: inputs.verification_scope == 'cockpit-tasks' || inputs.verification_scope == 'full' || inputs.verification_scope == ''
         shell: pwsh
@@ -204,12 +212,12 @@ jobs:
           node scripts/verify-ultra-tool-paths.mjs $entry artifacts/ultra-release/tool-paths-verification.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/setup-java@v4
-        if: inputs.verification_scope != 'provider' && inputs.verification_scope != 'workflow-reports' && inputs.verification_scope != 'agent-localization' && inputs.verification_scope != 'workflow-resume' && inputs.verification_scope != 'swarm-resume' && inputs.verification_scope != 'workflow-exclusion' && inputs.verification_scope != 'task-claims' && inputs.verification_scope != 'task-lock-locale' && inputs.verification_scope != 'swarm-full-results' && inputs.verification_scope != 'tool-paths' && inputs.verification_scope != 'cockpit-tasks' && inputs.verification_scope != 'agent-catalog' && inputs.verification_scope != 'compression-snapshot'
+        if: inputs.verification_scope != 'provider' && inputs.verification_scope != 'workflow-reports' && inputs.verification_scope != 'agent-localization' && inputs.verification_scope != 'workflow-resume' && inputs.verification_scope != 'swarm-resume' && inputs.verification_scope != 'workflow-exclusion' && inputs.verification_scope != 'task-claims' && inputs.verification_scope != 'task-lock-locale' && inputs.verification_scope != 'swarm-full-results' && inputs.verification_scope != 'tool-paths' && inputs.verification_scope != 'cockpit-tasks' && inputs.verification_scope != 'search-fallback' && inputs.verification_scope != 'agent-catalog' && inputs.verification_scope != 'compression-snapshot'
         with:
           distribution: temurin
           java-version: 21
       - name: Verify installed native Ghidra decompilation
-        if: inputs.verification_scope != 'provider' && inputs.verification_scope != 'workflow-reports' && inputs.verification_scope != 'agent-localization' && inputs.verification_scope != 'workflow-resume' && inputs.verification_scope != 'swarm-resume' && inputs.verification_scope != 'workflow-exclusion' && inputs.verification_scope != 'task-claims' && inputs.verification_scope != 'task-lock-locale' && inputs.verification_scope != 'swarm-full-results' && inputs.verification_scope != 'tool-paths' && inputs.verification_scope != 'cockpit-tasks' && inputs.verification_scope != 'agent-catalog' && inputs.verification_scope != 'compression-snapshot'
+        if: inputs.verification_scope != 'provider' && inputs.verification_scope != 'workflow-reports' && inputs.verification_scope != 'agent-localization' && inputs.verification_scope != 'workflow-resume' && inputs.verification_scope != 'swarm-resume' && inputs.verification_scope != 'workflow-exclusion' && inputs.verification_scope != 'task-claims' && inputs.verification_scope != 'task-lock-locale' && inputs.verification_scope != 'swarm-full-results' && inputs.verification_scope != 'tool-paths' && inputs.verification_scope != 'cockpit-tasks' && inputs.verification_scope != 'search-fallback' && inputs.verification_scope != 'agent-catalog' && inputs.verification_scope != 'compression-snapshot'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -296,6 +304,8 @@ jobs:
             artifacts/ultra-release/task-lock-locale-verification-output.txt
             artifacts/ultra-release/swarm-full-results-verification.json
             artifacts/ultra-release/swarm-full-results-verification-output.txt
+            artifacts/ultra-release/search-fallback-verification.json
+            artifacts/ultra-release/search-fallback-verification-output.txt
             artifacts/ultra-release/cockpit-tasks-verification.json
             artifacts/ultra-release/tool-paths-verification.json
             artifacts/ultra-release/tool-paths-verification-output.txt

@@ -21,7 +21,7 @@ import {
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.chdir(root);
-const version = process.env.GEMINI_ULTRA_RELEASE_VERSION || '1.0.0-preview.62';
+const version = process.env.GEMINI_ULTRA_RELEASE_VERSION || '1.0.0-preview.63';
 if (!/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/.test(version))
   throw new Error('Invalid release version');
 const runNode = (args, env = {}, cwd = root) =>

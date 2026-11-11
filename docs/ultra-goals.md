@@ -1020,3 +1020,12 @@ active，个人配置DB工具未改。
 - E-226：offline已有缓存安装14300ms/退出0，双命令preview.62，425文件匹配Windows
   CI包，旧包保留。个人locale/provider
   SHA保持61末值，ultra-tools.json仍未创建。WI-094原生协作看板及F-061隐藏按钮修复分发交付；无本机业务/启动基准/付费重跑。目标active，长结果面板只展示预览及未验证全文路径，完整校验仍reports；原有真实协作/原生逆向证据保留，更多模型长任务、语义质量和跨机复杂逆向继续，不合并master/正式Release。docs/ultra-cockpit-native-tasks-handoff.md。
+
+## 2026-11-11 搜索兜底可靠性
+
+WI-095/E-227/F-062：旧直连搜索无全程期限/体积上限，503/异常和已取消上游都伪装Live成功，2项旧定向实际失败。改10秒含响应体、2MiB累计上限、取消reader/清监听与定时器；HTTP/异常/挑战页明确WEB_SEARCH_FAILED，明确空结果页可返回无结果；取消早退不新发请求。原生SDK类型替换any，普通与UTF8来源插入保持。9不同项通过（7新+2原主路径），取消stream夹具提前pull改HWM0后仅复核该项，首类型spy及旧arrow
+lint修正，strict
+type/lint通过。实际源CLI两进程退出0、6本地模型协议/2搜索loopback，请求DSML触发fallback，503以结构化error回主会话，成功来源/摘要保留。preload只映射固定DuckDuckGo、其他外网fetch拒绝并允许本地data
+URI；无公网/付费验收。BOM、data
+URI、规范tool名和错误字符串断言等夹具失败保留，非产品故障，不重跑真实模型。候选63待search-fallback范围三平台/安装，个人配置DB工具未改，goal
+active。

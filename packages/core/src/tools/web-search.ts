@@ -6,7 +6,7 @@
 
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { WEB_SEARCH_TOOL_NAME, WEB_SEARCH_DISPLAY_NAME } from './tool-names.js';
-import type { GroundingMetadata } from '@google/genai';
+import type { GenerateContentResponse, GroundingMetadata } from '@google/genai';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
@@ -36,24 +36,75 @@ interface GroundingChunkItem {
   // Other properties might exist if needed in the future
 }
 
+const DIRECT_SEARCH_TIMEOUT_MS = 10000;
+const DIRECT_SEARCH_MAX_BYTES = 2 * 1024 * 1024;
+
+async function readDirectSearchBody(
+  response: Response,
+  signal: AbortSignal,
+): Promise<string> {
+  const declared = Number(response.headers.get('content-length'));
+  if (Number.isFinite(declared) && declared > DIRECT_SEARCH_MAX_BYTES) {
+    void response.body?.cancel().catch(() => {});
+    throw new Error('Direct search response exceeds the 2 MiB size limit.');
+  }
+  if (!response.body) return '';
+  const reader = response.body.getReader();
+  const cancel = () => {
+    void reader.cancel().catch(() => {});
+  };
+  signal.addEventListener('abort', cancel, { once: true });
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    while (true) {
+      signal.throwIfAborted();
+      const { done, value } = await reader.read();
+      signal.throwIfAborted();
+      if (done) break;
+      size += value.byteLength;
+      if (size > DIRECT_SEARCH_MAX_BYTES)
+        throw new Error('Direct search response exceeds the 2 MiB size limit.');
+      chunks.push(value);
+    }
+    return Buffer.concat(chunks).toString('utf8');
+  } catch (error) {
+    cancel();
+    throw error;
+  } finally {
+    signal.removeEventListener('abort', cancel);
+    reader.releaseLock();
+  }
+}
+
 async function fetchDuckDuckGoSearchResults(
   query: string,
   signal?: AbortSignal,
 ): Promise<{ text: string; sources: GroundingChunkItem[] }> {
+  signal?.throwIfAborted();
+  const controller = new AbortController();
+  const abort = () => controller.abort(signal?.reason);
+  signal?.addEventListener('abort', abort, { once: true });
+  const timer = setTimeout(
+    () => controller.abort(new Error('Direct search timed out after 10000ms.')),
+    DIRECT_SEARCH_TIMEOUT_MS,
+  );
   try {
     const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
     const res = await fetch(url, {
-      signal,
+      signal: controller.signal,
       headers: {
         'User-Agent':
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         Accept: 'text/html',
       },
     });
+    controller.signal.throwIfAborted();
     if (!res.ok) {
-      return { text: `Search request failed with HTTP ${res.status}`, sources: [] };
+      void res.body?.cancel().catch(() => {});
+      throw new Error(`Direct search request failed with HTTP ${res.status}.`);
     }
-    const html = await res.text();
+    const html = await readDirectSearchBody(res, controller.signal);
     const resultBlocks = html.split('<div class="result results_links');
     const items: Array<{ title: string; snippet: string; url: string }> = [];
 
@@ -92,24 +143,36 @@ async function fetchDuckDuckGoSearchResults(
     }
 
     if (items.length === 0) {
-      return { text: `No direct search results found for: "${query}"`, sources: [] };
+      if (!/no-results|result--no-result|No results found/i.test(html))
+        throw new Error(
+          'Direct search returned no readable results; the response may be empty, blocked or changed.',
+        );
+      return {
+        text: `No direct search results found for: "${query}"`,
+        sources: [],
+      };
     }
 
     const sources: GroundingChunkItem[] = items.map((it) => ({
       web: { title: it.title, uri: it.url },
     }));
 
-    const textLines = items.map((it, idx) => {
-      return `[${idx + 1}] ${it.title}\n    URL: ${it.url}\n    Snippet: ${it.snippet}`;
-    });
+    const textLines = items.map(
+      (it, idx) =>
+        `[${idx + 1}] ${it.title}\n    URL: ${it.url}\n    Snippet: ${it.snippet}`,
+    );
 
     return {
-      text: `Live Web Search Results for "${query}":\n\n` + textLines.join('\n\n'),
+      text:
+        `Live Web Search Results for "${query}":\n\n` + textLines.join('\n\n'),
       sources,
     };
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return { text: `Search error: ${msg}`, sources: [] };
+  } catch (error) {
+    if (controller.signal.aborted) throw controller.signal.reason;
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', abort);
   }
 }
 
@@ -169,9 +232,10 @@ class WebSearchToolInvocation extends BaseToolInvocation<
     const geminiClient = this.context.geminiClient;
 
     try {
+      signal.throwIfAborted();
       let isDsmlGarbage = false;
       let rawText = '';
-      let response: any = null;
+      let response: GenerateContentResponse | undefined;
       try {
         response = await geminiClient.generateContent(
           { model: 'web-search' },
@@ -188,9 +252,11 @@ class WebSearchToolInvocation extends BaseToolInvocation<
         ) {
           isDsmlGarbage = true;
         }
-      } catch {
+      } catch (error) {
+        if (signal.aborted || isAbortError(error)) throw error;
         isDsmlGarbage = true;
       }
+      signal.throwIfAborted();
 
       // If upstream model emitted DSML tool tokens or failed, fallback to direct search engine
       if (isDsmlGarbage || !rawText.trim()) {
@@ -297,7 +363,7 @@ class WebSearchToolInvocation extends BaseToolInvocation<
         sources,
       };
     } catch (error: unknown) {
-      if (isAbortError(error)) {
+      if (signal.aborted || isAbortError(error)) {
         return {
           llmContent: 'Web search was cancelled.',
           returnDisplay: 'Search cancelled.',

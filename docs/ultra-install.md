@@ -15,7 +15,7 @@ v24.22.2；校验场景使用本地模型fixture，真实逆向工具需另行�
 Release 下载），执行：
 
 ```sh
-npm install -g ./gemini-ultra-cli-1.0.0-preview.62.tgz
+npm install -g ./gemini-ultra-cli-1.0.0-preview.63.tgz
 gemini-ultra --version
 gemini-ultra
 ```
