@@ -1,6 +1,6 @@
 # Gemini Ultra CLI 供应商配置并发保存交接
 
-日期：2026-11-11。WI-102/E-247/F-069，候选preview.69。R26/code-audit自有源码case、lead/cae/doc、scope
+日期：2026-11-11。WI-102/E-247/F-069，preview.69已安装。R26/code-audit自有源码case、lead/cae/doc、scope
 granted继续；仅独立假供应商文件，不改个人配置、数据库或本机逆向工具，0模型。
 
 ## 缺陷与实现
@@ -34,5 +34,24 @@ verify-ultra-provider-save-conflict.mjs在source或实际分发包中导出真�
 67/run43094935659现已completed/failure，原watch
 session73541退出0（shell重定向结束不等同CI成功）。github-preview67-terminal-run.json和github-preview67-terminal-failed.log显示三平台CreateArtifact收到HTML、JSON解析失败，各重试5次后失败；安装/功能检查均success，归档仍未取得，不补造三平台工件证据。旧报告in_progress是当时快照，保留不覆盖。
 
-本轮69采用provider-save-conflict范围验证新的并发保存，跳过无关链；68配置记录隐藏仍是本地原生证据，不借69扩大为全部新验收。候选69待三平台包与全局安装，goal
+本轮69采用provider-save-conflict范围验证新的并发保存，跳过无关链；68配置记录隐藏仍是本地原生证据，不借69扩大为全部新验收。69三平台包与全局安装已完成，goal
 active；原始启动/语言/模型配置/演练台/协作/跨机逆向目标保持，不合并master或正式Release。
+
+## 三平台分发与安装
+
+E-248：产品源c9caec4e990362bf8379ab428a7cb67cb8946d31/run43101008860三平台provider-save-conflict范围completed/success；minimum-node和旧无关链skipped。独立核对版本69、源chunk、包/入口SHA、六rg身份权限及安装4基础工具。每平台分发包中实际ProviderManager由两个Node进程加载相同snapshot后同时保存，一胜一ProviderConfigConflictError，两进程退出0；Seed/胜者及原备份保持，无残留lock/tmp；重读后重试失败方，三供应商齐全，0模型。67上传故障后本轮工件上传恢复，不补造缺失67归档；68配置记录隐藏及67准备取消/回滚仍按原本地边界保留，不称本轮重新验收。
+
+E-249：offline已有缓存安装7205ms/退出0，双命令preview.69，425文件匹配Windows
+CI包，旧包保留。包SHA256
+aca69518abe3db01befb00f5cbb62e46f7f8405ba92395d2c06fe77ad84e835b，入口SHA256
+618c53d81a4bf7dd740b34ea3df9b457b33f88424a0e36429191eaef87016b64。个人locale/provider
+SHA保持68末值，ultra-tools.json仍未创建，无额外本机业务/启动基准/全量/冒烟/付费模型重跑。WI-102/F-069供应商并发保存冲突及显式重开修复分发交付；支持合作新版进程的本地文件系统，非网络盘/硬崩溃或外部任意并发写证明。goal
+active，原始启动/语言/配置/演练台/协作/跨机逆向目标保持，不合并master或正式Release。
+
+最终证据：github-preview69-run.json、github-preview69-artifacts-result.json、github-preview69-artifacts-verification.log、github-run-43101008860/、global-preview69-install-result.json、global-install-github-preview69-full-result.json、provider-save-conflict-personal-config.json。个人locale
+SHA 4fcce506592e55074156cab2f5fea35cce0d48ea5f8c919b69cd71ffc735f2c8；providers
+SHA
+e0bff750cd1f18458cffc175ad3683d1851bbc58958fb4182dd15d9e128e4332。源码、工程报告与Obsidian全文同步。
+
+独立核对器首轮只搜索小写provider
+configuration，Windows实际返回首字母大写的完整旧快照诊断而拒绝。已保留github-preview69-artifacts-verification-first.log，并改精确接受忙碌/旧快照两种完整合法诊断，重新读取同一批工件通过；没有重跑CI、修改产品文案或放宽冲突类型/胜者数/备份等断言。
