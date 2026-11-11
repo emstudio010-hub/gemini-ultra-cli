@@ -415,7 +415,7 @@ preview.40 新增原生工具
 `GEMINI_ULTRA_TOOL_JAVA`（原生Java可执行文件）。也可通过 PATH 或
 `GEMINI_ULTRA_TOOL_ANALYZEHEADLESS` 找到标准发行版的support目录。`/drill setup`
 显示依赖是否被发现，实际JDK兼容性在调用时检查。巡检与反编译统一按
-`GEMINI_ULTRA_TOOL_JAVA` → `JAVA_HOME/bin/java` →
+`GEMINI_ULTRA_TOOL_JAVA` → `JAVA_HOME/bin/java` → `/drill tools` 已保存路径 →
 PATH 选择 Java。高优先级配置不存在、不可执行或指向批处理包装时会明确报错，不会由 PATH 中的另一个 Java 掩盖；修正或清除对应环境变量后再运行巡检。路径可以包含空格。无需IDA或开发机路径，Ghidra/JDK不随CLI包分发。
 
 工具参数为本地 `filePath`、可选十六进制虚拟 `address` 和
