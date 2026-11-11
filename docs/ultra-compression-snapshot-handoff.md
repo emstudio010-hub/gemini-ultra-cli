@@ -1,6 +1,6 @@
 # Gemini Ultra CLI 压缩快照保护交接
 
-日期：2026-11-11。WI-084/E-192/F-052，候选 preview.52。沿用 R26/code-audit 自有源码 scope 与 lead/cae/doc。没有付费模型、外部安全目标、个人配置/数据库或逆向工具安装改动。
+日期：2026-11-11。WI-084/E-192/F-052，preview.52 已安装。沿用 R26/code-audit 自有源码 scope 与 lead/cae/doc。没有付费模型、外部安全目标、个人配置/数据库或逆向工具安装改动。
 
 ## 发现与修复
 
@@ -41,7 +41,18 @@ flowchart LR
 
 ## 分发与边界
 
-候选52使用 compression-snapshot 范围，只做三平台新鲜包/安装和上述两条原生流程。未受影响协作、供应商、报告、提交恢复和 Ghidra 分别沿用47/48/49/50/51基线，不重复未受影响链。
+52使用 compression-snapshot 范围，只做三平台新鲜包/安装和上述两条原生流程。未受影响协作、供应商、报告、提交恢复和 Ghidra 分别沿用47/48/49/50/51基线，不重复未受影响链。
 
-最终源码、CI、包哈希与安装结果待本阶段追加。真实模型长会话的语义完整性、真实 Teamwork 长任务、更多模型和复杂逆向继续，goal
-active。不自动重复付费任务，不合并 master 或创建正式 Release。
+E-193：产品源 `6323a5683666f7f4308b5fe9d53cb1f6a6b62683`，
+[run 43038706202](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/43038706202)
+三平台 completed/success。版本/源码身份/包 SHA、六份 rg 哈希及执行权限、安装和4个基础工具核对通过；每平台两条原生流程各3+2及4+2请求，合计11个 loopback 请求，均退出0/全部 checks 为真。独立读取归档的最终上下文，核对约束/路径/待办与原历史保留、工具配对及无 ACK/思考段污染，没有只依赖 passed 字段。未受影响旧链 skipped。
+
+E-194：Windows
+CI 包 offline 已有缓存安装7878ms/退出0，双命令 preview.52，425文件匹配，旧包保留。包 SHA256 为
+`d0910c329cdcd5352dfef7830afcae2d64c823d096c316f89a8d435858959b66`，入口 SHA256 为
+`899ee20a0fb51613971bfc0fd6c0b8e8f7fd6f8de22d9b89b501535455f0df2c`。没有重复本机业务链、启动微基准或付费任务。旧失败及夹具修正记录保留，不把旧失败覆盖成成功。
+
+最终证据：`github-preview52-run.json`、`github-preview52-artifacts-result.json`、`github-run-43038706202/`、`global-preview52-install-result.json`、`global-install-github-preview52-full-result.json`。WI-084修复与分发交付，源码、工程正式报告和 Obsidian 交接同步。
+
+真实模型长会话的语义完整性、真实 Teamwork 长任务、更多模型和复杂逆向继续，goal
+active。结构检查没有独立证明模型事实正确，也没有恢复旧摘要已经遗漏的信息。不自动重复付费任务，不合并 master 或创建正式 Release。
