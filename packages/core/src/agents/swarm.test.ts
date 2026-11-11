@@ -6,6 +6,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import { execFileSync } from 'node:child_process';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import {
   createSwarm,
@@ -18,7 +19,10 @@ import {
   setSwarmBudget,
   consumeSwarmRequest,
   SwarmEngine,
+  cancelSavedSwarm,
+  latestSwarm,
 } from './swarm.js';
+import { createAgentWorkflow } from './agentWorkflows.js';
 
 let root: string;
 beforeEach(() => {
@@ -28,6 +32,93 @@ afterEach(() => {
   fs.rmSync(root, { recursive: true, force: true });
 });
 const signal = () => new AbortController().signal;
+
+function savedFiles() {
+  return Object.fromEntries(
+    fs.readdirSync(root, { recursive: true }).flatMap((entry) => {
+      const file = path.join(root, String(entry));
+      return fs.statSync(file).isFile()
+        ? [[String(entry), fs.readFileSync(file)]]
+        : [];
+    }),
+  );
+}
+
+it('rebinds an explicitly resumed historical swarm while preserving its cumulative usage and the newer terminal task', async () => {
+  const older = createSwarm(root, 'Resume this historical swarm');
+  consumeSwarmRequest(root);
+  cancelSavedSwarm(root, older.id);
+  const newer = createSwarm(root, 'Leave this newer cancelled swarm intact');
+  cancelSavedSwarm(root, newer.id);
+  const newerFiles = Object.fromEntries(
+    Object.entries(savedFiles()).filter(([file]) => file.includes(newer.id)),
+  );
+  await resumeSwarm(root, older.id);
+  expect(latestSwarm(root)).toMatchObject({
+    id: older.id,
+    phase: 'active',
+    budget: { requests: 1 },
+  });
+  for (const [file, bytes] of Object.entries(newerFiles))
+    expect(fs.readFileSync(path.join(root, file))).toEqual(bytes);
+});
+
+it.each(['active', 'blocked'] as const)(
+  'refuses historical resume while a different swarm is %s without mutating either task',
+  async (phase) => {
+    const older = createSwarm(root, 'Historical swarm');
+    cancelSavedSwarm(root, older.id);
+    const newer = createSwarm(root, 'Pending current swarm');
+    const file = path.join(root, 'swarms', newer.id, 'members.json');
+    fs.writeFileSync(file, JSON.stringify({ ...newer, phase }));
+    const before = savedFiles();
+    await expect(resumeSwarm(root, older.id)).rejects.toThrow('pending swarm');
+    expect(savedFiles()).toEqual(before);
+  },
+);
+
+it('refuses swarm resume while a workflow budget is open and preserves both records', async () => {
+  const older = createSwarm(root, 'Historical swarm');
+  cancelSavedSwarm(root, older.id);
+  createAgentWorkflow(root, 'teamwork', 'Pending workflow', 'default');
+  const before = savedFiles();
+  await expect(resumeSwarm(root, older.id)).rejects.toThrow('pending workflow');
+  expect(savedFiles()).toEqual(before);
+});
+
+it('does not change ownership, records or bindings when a dead-owner swarm still has exhausted budget', async () => {
+  const older = createSwarm(root, 'Depleted historical swarm');
+  cancelSavedSwarm(root, older.id);
+  const file = path.join(root, 'swarms', older.id, 'members.json');
+  fs.writeFileSync(
+    file,
+    JSON.stringify({
+      ...readSwarm(root, older.id),
+      ownerPid: Number(
+        execFileSync(
+          process.execPath,
+          ['-e', 'process.stdout.write(String(process.pid))'],
+          { encoding: 'utf8', windowsHide: true },
+        ),
+      ),
+      budget: { ...older.budget, requests: older.budget.maxRequests },
+    }),
+  );
+  const before = savedFiles();
+  await expect(resumeSwarm(root, older.id)).rejects.toThrow('still exhausted');
+  expect(savedFiles()).toEqual(before);
+});
+
+it('keeps a completed historical swarm local even with another open workflow and a damaged binding', async () => {
+  const older = createSwarm(root, 'Completed historical swarm');
+  const file = path.join(root, 'swarms', older.id, 'members.json');
+  fs.writeFileSync(file, JSON.stringify({ ...older, phase: 'completed' }));
+  createAgentWorkflow(root, 'teamwork', 'Pending workflow', 'default');
+  fs.writeFileSync(path.join(root, 'swarms/latest.json'), '{damaged binding');
+  const before = savedFiles();
+  await resumeSwarm(root, older.id);
+  expect(savedFiles()).toEqual(before);
+});
 
 it('blocks after two failed turns across renamed members and retains spent limits across cancel/resume', async () => {
   const swarm = createSwarm(root, 'Bound the failing task');

@@ -908,3 +908,9 @@
 - E-201：offline已有缓存安装11070ms/退出0，双命令preview.54，425文件逐一匹配Windows
   CI包，旧包保留；包SHAa2065fe4…/入口SHAd0b3eaa9…完整值见交接。未重复本机业务链/启动微基准/付费任务；E-198实际Teamwork预算blocked及原报告保持，自动错误文件0凭据匹配，读取统计可能父/成员重复，不能直接推断成本或根因。WI-086修复与分发交付，goal
   active；读取冗余/长会话语义/真实完整Teamwork和Swarm历史执行选择继续，不合并master/正式Release。docs/ultra-workflow-resume-handoff.md。
+
+## 2026-11-11 Swarm历史恢复
+
+- WI-087/E-202：离线核对E-198，start_line/end_line有效，42唯一调用/33读取/2错误分别是预算停止和越隔离读取。coder先写11字符placeholder后恢复完整源；原任务脚本未开放已有replace，不把此归为产品工具缺失，不自动付费重试。
+- E-203/F-055：Swarm
+  resume忽略ID、历史core未重绑协调指针/未拒绝另一pending任务、耗尽预算前接管owner。修复CLI直接ID、completed含ID本地返回、Plan拒绝，core先做pending/owner/budget检查再接管/重绑，保留累计用量/成员/留言/模型。core13项、命令11项共24不同检查与严格type/lint通过；命令初两失败来自旧dist，重编译仅重验该两项。首轮语言夹具漏临时路径，本机locale写成en，无事前快照不声称还原，后已隔离。源码原生和55三平台swarm-resume范围分发待补，当前仍安装54。详docs/ultra-swarm-resume-handoff.md。

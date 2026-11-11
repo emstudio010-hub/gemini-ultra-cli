@@ -1046,25 +1046,32 @@ export async function resumeSwarm(root: string, id: string): Promise<void> {
   const engine = engines.get(engineKey(root, id));
   if (engine) await engine.wait(new AbortController().signal);
   const swarm = readSwarm(root, id);
-  if (swarm.accountingUnknown) throw new Error(unavailable);
   if (swarm.phase === 'completed') return;
-  if (swarm.ownerPid !== process.pid) {
-    try {
-      process.kill(swarm.ownerPid, 0);
-      throw new Error('Resume this swarm from its owning CLI session.');
-    } catch (error) {
-      if (!isProcessMissing(error)) throw error;
-    }
-    swarm.ownerPid = process.pid;
-    for (const member of swarm.members)
-      if (['working', 'queued'].includes(member.state)) member.state = 'paused';
-    saveSwarm(root, swarm);
-  }
+  if (swarm.accountingUnknown) throw new Error(unavailable);
+  if (hasOpenWorkflowBudget(root))
+    throw new Error(
+      'Resolve the pending workflow with resume or cancel before resuming a swarm.',
+    );
+  const current = latestSwarm(root);
+  if (
+    current &&
+    current.id !== id &&
+    (['active', 'blocked'].includes(current.phase) ||
+      isSwarmRunning(root, current.id))
+  )
+    throw new Error(
+      'Resolve the other pending swarm with finish or cancel before resuming this task.',
+    );
+  owns(swarm.ownerPid);
   const limit = exhaustedBudget(swarm);
   if (limit)
     throw new Error(
       `Swarm ${limit} budget is still exhausted; /swarm budget must increase the limit before resume.`,
     );
+  // Do not transfer ownership or rewrite evidence before all refusal checks pass.
+  if (swarm.ownerPid !== process.pid)
+    for (const member of swarm.members)
+      if (['working', 'queued'].includes(member.state)) member.state = 'paused';
   swarm.phase = 'active';
   swarm.stopReason = '';
   swarm.ownerPid = process.pid;
@@ -1075,4 +1082,9 @@ export async function resumeSwarm(root: string, id: string): Promise<void> {
     'coordinator',
     'Explicitly resumed. Mention paused members to continue; killed names remain retired.',
   );
+  // Main dispatch accounting and coordinator tools resolve this binding.
+  writeJson(path.join(root, 'swarms/latest.json'), {
+    id: swarm.id,
+    ownerPid: process.pid,
+  });
 }

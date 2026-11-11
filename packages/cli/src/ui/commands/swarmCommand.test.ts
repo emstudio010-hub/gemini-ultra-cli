@@ -15,6 +15,7 @@ import {
   ApprovalMode,
   latestSwarm,
   cancelSavedSwarm,
+  I18nManager,
 } from '@google/gemini-cli-core';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { swarmCommand } from './swarmCommand.js';
@@ -22,9 +23,117 @@ import { swarmCommand } from './swarmCommand.js';
 let root: string;
 beforeEach(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'ultra-swarm-command-'));
+  vi.stubEnv('GEMINI_ULTRA_LOCALE_FILE', path.join(root, 'locale.json'));
+  I18nManager.getInstance().setLocale('en');
 });
 afterEach(() => {
   fs.rmSync(root, { recursive: true, force: true });
+  vi.unstubAllEnvs();
+});
+
+function resumeContext(approval = ApprovalMode.DEFAULT) {
+  const config = {
+    storage: { getProjectTempDir: () => root },
+    getApprovalMode: () => approval,
+    setApprovalMode: vi.fn(),
+  } as unknown as Config;
+  return {
+    config,
+    context: createMockCommandContext({
+      services: { agentContext: { config } },
+    }),
+    resume: swarmCommand.subCommands!.find(
+      (command) => command.name === 'resume',
+    )!,
+  };
+}
+
+function savedFiles() {
+  return Object.fromEntries(
+    fs.readdirSync(root, { recursive: true }).flatMap((entry) => {
+      const file = path.join(root, String(entry));
+      return fs.statSync(file).isFile()
+        ? [[String(entry), fs.readFileSync(file)]]
+        : [];
+    }),
+  );
+}
+
+it('resumes the specified historical swarm rather than the newer terminal task, preserving spent requests', async () => {
+  const older = createSwarm(root, 'Historical selected swarm');
+  consumeSwarmRequest(root);
+  cancelSavedSwarm(root, older.id);
+  const newer = createSwarm(root, 'Newer cancelled swarm');
+  cancelSavedSwarm(root, newer.id);
+  const { config, context, resume } = resumeContext();
+  expect(await resume.action!(context, older.id)).toMatchObject({
+    type: 'submit_prompt',
+    content: expect.stringContaining(older.id),
+  });
+  expect(latestSwarm(root)).toMatchObject({
+    id: older.id,
+    budget: { requests: 1 },
+  });
+  expect(readSwarm(root, newer.id).phase).toBe('cancelled');
+  expect(config.setApprovalMode).not.toHaveBeenCalled();
+  expect(resume.autoExecute).toBe(false);
+});
+
+it.each(['en', 'zh'] as const)(
+  'returns a completed historical swarm locally in %s even when its binding is damaged',
+  async (locale) => {
+    I18nManager.getInstance().setLocale(locale);
+    const older = createSwarm(root, 'Historical completed swarm');
+    const file = path.join(root, 'swarms', older.id, 'members.json');
+    fs.writeFileSync(file, JSON.stringify({ ...older, phase: 'completed' }));
+    fs.writeFileSync(path.join(root, 'swarms/latest.json'), '{damaged binding');
+    const { config, context, resume } = resumeContext(ApprovalMode.PLAN);
+    const before = savedFiles();
+    expect(await resume.action!(context, older.id)).toBeUndefined();
+    expect(context.ui.addItem).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(vi.mocked(context.ui.addItem).mock.calls)).toContain(
+      older.id,
+    );
+    expect(JSON.stringify(vi.mocked(context.ui.addItem).mock.calls)).toContain(
+      locale === 'zh' ? '不会重复执行' : 'No work will be repeated',
+    );
+    expect(config.setApprovalMode).not.toHaveBeenCalled();
+    expect(savedFiles()).toEqual(before);
+  },
+);
+
+it('keeps no-ID resume on the current swarm and refuses execution in Plan Mode without mutation', async () => {
+  const swarm = createSwarm(root, 'Current swarm');
+  const { context, resume } = resumeContext();
+  expect(await resume.action!(context, '')).toMatchObject({
+    type: 'submit_prompt',
+    content: expect.stringContaining(swarm.id),
+  });
+  const planned = resumeContext(ApprovalMode.PLAN);
+  const before = savedFiles();
+  expect(
+    await planned.resume.action!(planned.context, swarm.id),
+  ).toBeUndefined();
+  expect(savedFiles()).toEqual(before);
+  expect(planned.config.setApprovalMode).not.toHaveBeenCalled();
+});
+
+it('rejects bad or missing IDs and another pending swarm without falling back or submitting a prompt', async () => {
+  const older = createSwarm(root, 'Historical swarm');
+  cancelSavedSwarm(root, older.id);
+  createSwarm(root, 'Pending newer swarm');
+  const { context, resume, config } = resumeContext();
+  const before = savedFiles();
+  for (const id of [
+    'invalid-id',
+    '0a1351a7-6140-4b23-bf68-5e88b480fa07',
+    older.id,
+  ]) {
+    expect(await resume.action!(context, id)).toBeUndefined();
+    expect(savedFiles()).toEqual(before);
+  }
+  expect(config.setApprovalMode).not.toHaveBeenCalled();
+  expect(context.ui.addItem).toHaveBeenCalledTimes(3);
 });
 
 it('inspects a historical swarm by ID even when the latest binding is damaged, without modifying it', async () => {

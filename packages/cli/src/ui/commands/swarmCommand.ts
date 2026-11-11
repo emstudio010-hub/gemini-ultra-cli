@@ -112,7 +112,7 @@ async function action(
       return;
     }
     let swarm =
-      operation === 'status' && args.trim()
+      (operation === 'status' || operation === 'resume') && args.trim()
         ? readSwarm(root, args.trim())
         : latestSwarm(root);
     if (operation) {
@@ -242,12 +242,19 @@ async function action(
           context.ui.addItem({
             type: MessageType.INFO,
             text: i18n.t(
-              '该蜂群已完成，留言板保留。',
-              'This swarm is complete; its board is retained.',
+              `蜂群 ${swarm.id} 已完成，留言与成员结果保留；不会重复执行。`,
+              `Swarm ${swarm.id} is already complete; its board and member results are retained. No work will be repeated.`,
             ),
           });
           return;
         }
+        if (config.getApprovalMode() === ApprovalMode.PLAN)
+          throw new Error(
+            i18n.t(
+              '请先退出计划模式，再恢复 Swarm 执行。',
+              'Leave Plan Mode before resuming Swarm execution.',
+            ),
+          );
         await resumeSwarm(root, swarm.id);
       }
     } else {
@@ -255,8 +262,8 @@ async function action(
         context.ui.addItem({
           type: MessageType.INFO,
           text: i18n.t(
-            '用法：/swarm <任务>；/swarm list|board|status|reports|model|budget|message|resume|cancel',
-            'Usage: /swarm <task>; /swarm list|board|status|reports|model|budget|message|resume|cancel',
+            '用法：/swarm <任务>；/swarm list|board|status|reports|model|budget|message|cancel；/swarm resume [任务ID]',
+            'Usage: /swarm <task>; /swarm list|board|status|reports|model|budget|message|cancel; /swarm resume [task-ID]',
           ),
         });
         return;
@@ -316,7 +323,11 @@ const operations: Array<[string, string, string]> = [
     '公开留言并提及成员',
     'Post a public message and mention members',
   ],
-  ['resume', '恢复已保存的蜂群', 'Resume the saved swarm'],
+  [
+    'resume',
+    '恢复蜂群，可指定任务ID；已完成任务本地返回',
+    'Resume a swarm by optional task ID; completed tasks return locally',
+  ],
   [
     'cancel',
     '停止并保留状态，可指定蜂群 ID',
@@ -353,6 +364,7 @@ export const swarmCommand: SlashCommand = {
       'reports',
       'list',
       'status',
+      'resume',
     ].includes(name),
     action: (context, args) => action(context, args, name),
   })),
