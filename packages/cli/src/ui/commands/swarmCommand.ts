@@ -9,6 +9,7 @@ import {
   I18nManager,
   createSwarm,
   latestSwarm,
+  readSwarm,
   swarmSnapshot,
   postSwarmMessage,
   cancelSavedSwarm,
@@ -31,6 +32,7 @@ import {
 } from './types.js';
 import { MessageType } from '../types.js';
 import { SwarmBoard } from '../components/SwarmBoard.js';
+import { agentTaskCatalogText } from './agentTaskCatalog.js';
 
 async function action(
   context: CommandContext,
@@ -45,6 +47,13 @@ async function action(
         i18n.t('当前配置尚未就绪。', 'Configuration is not ready.'),
       );
     const root = config.storage.getProjectTempDir();
+    if (operation === 'list') {
+      context.ui.addItem({
+        type: MessageType.INFO,
+        text: agentTaskCatalogText(root, args, 'swarm'),
+      });
+      return;
+    }
     if (operation === 'prepare') {
       if (!args.trim())
         throw new Error(
@@ -102,7 +111,10 @@ async function action(
       });
       return;
     }
-    let swarm = latestSwarm(root);
+    let swarm =
+      operation === 'status' && args.trim()
+        ? readSwarm(root, args.trim())
+        : latestSwarm(root);
     if (operation) {
       if (!swarm)
         throw new Error(
@@ -135,7 +147,7 @@ async function action(
         const snapshot = swarmSnapshot(root, swarm.id);
         context.ui.addItem({
           type: MessageType.INFO,
-          text: `Swarm ${snapshot.phase}\n${snapshot.objective}\n${i18n.t('角色模型', 'Role models')}: ${JSON.stringify(snapshot.roleModels)}\n${i18n.t('累计预算', 'Cumulative budget')}: ${JSON.stringify(snapshot.budget)}\n${snapshot.stopReason}\n${snapshot.members.map((member) => `@${member.name}: ${member.state} · ${member.model ?? snapshot.roleModels[member.agent] ?? 'inherit'} · ${member.modelsUsed.join(', ')}`).join('\n')}\n${snapshot.boardPath}`,
+          text: `Swarm ${snapshot.phase}\n${snapshot.objective}\n${i18n.t('角色模型', 'Role models')}: ${JSON.stringify(snapshot.roleModels)}\n${i18n.t('累计预算', 'Cumulative budget')}: ${JSON.stringify(snapshot.budget)}\n${snapshot.stopReason}\n${snapshot.members.map((member) => `@${member.name}: ${member.state} · ${member.model ?? snapshot.roleModels[member.agent] ?? 'inherit'} · ${member.modelsUsed.join(', ')}`).join('\n')}\n${snapshot.boardPath}\nID: ${snapshot.id}`,
         });
         return;
       }
@@ -243,8 +255,8 @@ async function action(
         context.ui.addItem({
           type: MessageType.INFO,
           text: i18n.t(
-            '用法：/swarm <任务>；/swarm board|status|reports|model|budget|message|resume|cancel',
-            'Usage: /swarm <task>; /swarm board|status|reports|model|budget|message|resume|cancel',
+            '用法：/swarm <任务>；/swarm list|board|status|reports|model|budget|message|resume|cancel',
+            'Usage: /swarm <task>; /swarm list|board|status|reports|model|budget|message|resume|cancel',
           ),
         });
         return;
@@ -271,8 +283,17 @@ async function action(
   }
 }
 const operations: Array<[string, string, string]> = [
+  [
+    'list',
+    '查看当前项目所有 Agent 历史任务，可指定页码',
+    'List saved Agent tasks in this project; optional page number',
+  ],
   ['board', '打开实时留言与成员看板', 'Open the live board and roster'],
-  ['status', '查看蜂群状态', 'Show swarm status'],
+  [
+    'status',
+    '查看蜂群状态，可指定任务ID',
+    'Show swarm status; optional task ID',
+  ],
   [
     'reports',
     '导出成员结果与留言索引，可指定任务ID',
@@ -305,7 +326,12 @@ const operations: Array<[string, string, string]> = [
 export const swarmCommand: SlashCommand = {
   name: 'swarm',
   altNames: ['蜂群'],
-  description: 'Coordinate named workers on a shared message board',
+  get description() {
+    return I18nManager.getInstance().t(
+      '通过共享留言板协调具名成员',
+      'Coordinate named workers on a shared message board',
+    );
+  },
   kind: CommandKind.BUILT_IN,
   action: (context, args) => action(context, args),
   subCommands: operations.map(([name, zh, en]) => ({
@@ -314,7 +340,9 @@ export const swarmCommand: SlashCommand = {
       return I18nManager.getInstance().t(zh, en);
     },
     kind: CommandKind.BUILT_IN,
-    isSafeConcurrent: ['board', 'status', 'message', 'cancel'].includes(name),
+    isSafeConcurrent: ['list', 'board', 'status', 'message', 'cancel'].includes(
+      name,
+    ),
     autoExecute: ![
       'message',
       'budget',
@@ -323,6 +351,8 @@ export const swarmCommand: SlashCommand = {
       'prepare',
       'workspace',
       'reports',
+      'list',
+      'status',
     ].includes(name),
     action: (context, args) => action(context, args, name),
   })),

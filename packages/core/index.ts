@@ -58,6 +58,10 @@ export { ExperimentFlags } from './src/code_assist/experiments/flagNames.js';
 export { getErrorStatus, ModelNotFoundError } from './src/utils/httpErrors.js';
 export { getEffortOptions, parseEffort } from './src/i18n/effortOptions.js';
 export {
+  listAgentTasks,
+  type AgentTaskCatalogEntry,
+} from './src/agents/agentTaskCatalog.js';
+export {
   readUltraRuntime,
   saveUltraRuntime,
   listCollaborationTasks,

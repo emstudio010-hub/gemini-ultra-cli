@@ -6,7 +6,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import {
   createSwarm,
   readSwarm,
@@ -14,6 +14,7 @@ import {
   type Config,
   ApprovalMode,
   latestSwarm,
+  cancelSavedSwarm,
 } from '@google/gemini-cli-core';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { swarmCommand } from './swarmCommand.js';
@@ -24,6 +25,34 @@ beforeEach(() => {
 });
 afterEach(() => {
   fs.rmSync(root, { recursive: true, force: true });
+});
+
+it('inspects a historical swarm by ID even when the latest binding is damaged, without modifying it', async () => {
+  const older = createSwarm(root, 'Older historical swarm');
+  cancelSavedSwarm(root, older.id);
+  createSwarm(root, 'Newer current swarm');
+  const binding = path.join(root, 'swarms/latest.json');
+  fs.writeFileSync(binding, '{unrelated damaged binding');
+  const memberFile = path.join(root, 'swarms', older.id, 'members.json');
+  const before = fs.readFileSync(memberFile);
+  const config = {
+    storage: { getProjectTempDir: () => root },
+  } as unknown as Config;
+  const context = createMockCommandContext({
+    services: { agentContext: { config } },
+  });
+  const status = swarmCommand.subCommands!.find(
+    (item) => item.name === 'status',
+  )!;
+  expect(await status.action!(context, older.id)).toBeUndefined();
+  expect(JSON.stringify(vi.mocked(context.ui.addItem).mock.calls)).toContain(
+    'Older historical swarm',
+  );
+  expect(
+    JSON.stringify(vi.mocked(context.ui.addItem).mock.calls),
+  ).not.toContain('Newer current swarm');
+  expect(fs.readFileSync(memberFile)).toEqual(before);
+  expect(fs.readFileSync(binding, 'utf8')).toBe('{unrelated damaged binding');
 });
 
 it('exports a saved Swarm by ID without relying on its latest binding or submitting a prompt', async () => {

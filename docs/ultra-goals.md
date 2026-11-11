@@ -856,3 +856,8 @@
 - 首次源码夹具模拟600k超过128k窗口，正常保护中止；改70k后最终通过，原失败保留，非产品故障。候选52待三平台compression-snapshot范围包/安装和原生两场景；未受影响47至51基线保留，goal active，不合并master/正式Release。docs/ultra-compression-snapshot-handoff.md。
 - E-193：产品源6323a5683666f7f4308b5fe9d53cb1f6a6b62683/run43038706202三平台compression-snapshot范围completed/success。版本/源/包SHA/六rg身份权限及安装通过；每平台fallback 3+2、invalid 4+2，共11 loopback请求/均退出0/全部checks真。独立读归档最终上下文核对约束/证据路径/待办或原历史、近期结果/工具配对、无ACK和思考段污染，不只依赖passed。未受影响旧链skipped，47至51基线保留。
 - E-194：offline缓存安装7878ms/退出0，双命令preview.52，425文件匹配Windows CI包，旧包保留；包SHAd0910c32…/入口SHA899ee20a…完整值见交接。不重复本机业务链/启动基准/付费任务，旧失败与夹具修正记录保留。WI-084交付，goal active；语义完整性/真实Teamwork长任务/更多模型/复杂逆向继续，不合并master/正式Release。docs/ultra-compression-snapshot-handoff.md。
+## 2026-11-11 历史 Agent 任务目录
+
+- WI-085/E-195/F-053 in_progress：已安装52实际status旧ID返回最新任务和错误ID并初始化其旧账本，两本地命令/0模型处失败；Swarm旧状态依赖损坏latest而忽略指定ID。新四种list入口共享项目目录，20项/页/正文16MiB预算；status ID直接读对应模式记录，历史预算只读，缺失未知不创建。标签/阶段中文化、原目标保留、完整下页/查看命令；活动绑定/审批/执行规则保留。
+- 5 core+15命令共20不同检查通过；命令初14通过/1夹具顺序失败，修正只复核该1项，旧工作流单测夹具失败不冒充产品证据，安装版原始输出确认真实ID缺陷。严格相关lint/type通过。最终源码16原生命令/12退出0/4预期42/0模型，25保存记录/29文件SHA前后保持、缺失旧账本不初始化。夹具种入记录，不是实际Agent交付验收。
+- 候选53待三平台agent-catalog范围新鲜包/安装和本地链；47至52未受影响基线保留。历史恢复仍用已有resume，本轮不新增执行选择器或付费任务。goal active，不合并master/正式Release。docs/ultra-agent-task-catalog-handoff.md。

@@ -15,7 +15,7 @@ v24.22.2；校验场景使用本地模型fixture，真实逆向工具需另行�
 Release 下载），执行：
 
 ```sh
-npm install -g ./gemini-ultra-cli-1.0.0-preview.52.tgz
+npm install -g ./gemini-ultra-cli-1.0.0-preview.53.tgz
 gemini-ultra --version
 gemini-ultra
 ```
@@ -415,6 +415,15 @@ GettingStarted.md安装C/C++工具链后，到Ghidra安装目录的support/gradl
 :Decompiler:buildNatives，成功后Ghidra会优先使用build/os下的组件。CLI不会擅自编译或改动本机工具安装。
 
 ## 保存和读取工作流报告
+
+用 `/teamwork list`、`/boost list`、`/grill-me list` 或 `/swarm list`
+查看当前项目的同一份 Agent 任务目录；四种任务一起列出，按保存时间排序，每页20项。`/swarm list 2`
+查看第二页，目录中的完整命令可直接用于查看对应任务。
+`/teamwork status <ID>`、`/boost status <ID>`、`/grill-me status <ID>` 和
+`/swarm status <ID>`
+查看指定任务；工作流的模式必须匹配。列表和按 ID 查看状态均为本地只读操作，保留活动任务选择、记录、累计用量与批准状态；恢复继续使用现有 resume 流程。
+
+目录每页读取正文最多16MiB，坏记录或未加载详情会单独标注；原文件保留，可用相应任务 ID 进一步查看或导出。目录不创建缺失的历史预算，也不把未知用量显示为零。界面标签随语言切换，任务原文保留。
 
 Boost、Teamwork 和需求访谈的长阶段结果完整保存在项目临时目录
 `agent-workflows/<ID>.reports/`。超过16000字符的正文先完整归档，工作流JSON只存短预览、哈希和长度；后续成员需要中段证据时读取完整文件，避免把预览当作全文。归档属于运行记录，请勿编辑或提前删除；缺失、变更或校验不符时，交接和导出会报错，需保留现场并恢复原文。单份归档最多8MiB，超出上限或保存失败会阻塞任务，不会默默丢弃尾部并报成功。旧版本已经截断的内容无法恢复。现有100份阶段记录窗口保留；Swarm成员结果沿用其原有存储边界。

@@ -8,10 +8,12 @@ import {
   I18nManager,
   createAgentWorkflow,
   latestAgentWorkflow,
+  readAgentWorkflow,
   saveAgentWorkflow,
   cancelAgentWorkflow,
   isAgentWorkflowRunning,
   workflowBudgetSummary,
+  savedWorkflowBudgetSummary,
   setWorkflowBudget,
   activateWorkflowBudget,
   closeWorkflowBudget,
@@ -30,6 +32,7 @@ import {
   type SlashCommandActionReturn,
 } from './types.js';
 import { MessageType } from '../types.js';
+import { agentTaskCatalogText } from './agentTaskCatalog.js';
 
 function interviewPrompt(record: AgentWorkflow): string {
   return `Workflow ${record.id} (${record.mode}), phase ${record.phase}.\nObjective: ${record.objective}\nExisting brief: ${record.brief}\nRead relevant workspace sources first; never ask the user what the code already answers. Ask ONE focused question at a time using ask_user, with 2-4 concrete options and the recommended option first, plus the existing free-text facility. Respect answered questions, stated constraints, and the user's language. Do not ask redundant approval questions. Clarify outcome, boundaries, compatibility and objective acceptance. You are in read-only Plan Mode: no implementation, commands that modify files, or worker launch. When aligned, call draft_agent_workflow with workflow_id=${record.id}, an agreed brief and bounded milestones each with explicit acceptance criteria. Present the draft and await ${record.mode === 'grill-me' ? '/grill-me finish' : '/teamwork approve'}. Run only necessary relevant validation when implementation is later approved; no unsolicited full or smoke suites.`;
@@ -56,6 +59,10 @@ function workflowCommand(
           i18n.t('当前配置尚未就绪。', 'Configuration is not ready.'),
         );
       const root = config.storage.getProjectTempDir();
+      if (operation === 'list') {
+        info(agentTaskCatalogText(root, args, mode));
+        return;
+      }
       if (operation === 'prepare') {
         if (!args.trim())
           throw new Error(
@@ -112,8 +119,8 @@ function workflowCommand(
       if (!operation && !text) {
         info(
           i18n.t(
-            `用法：/${mode} <任务>；/${mode} status|reports|budget|resume|cancel${mode === 'teamwork' ? '|approve' : mode === 'grill-me' ? '|finish' : ''}`,
-            `Usage: /${mode} <task>; /${mode} status|reports|budget|resume|cancel${mode === 'teamwork' ? '|approve' : mode === 'grill-me' ? '|finish' : ''}`,
+            `用法：/${mode} <任务>；/${mode} list|status|reports|budget|resume|cancel${mode === 'teamwork' ? '|approve' : mode === 'grill-me' ? '|finish' : ''}`,
+            `Usage: /${mode} <task>; /${mode} list|status|reports|budget|resume|cancel${mode === 'teamwork' ? '|approve' : mode === 'grill-me' ? '|finish' : ''}`,
           ),
         );
         return;
@@ -129,17 +136,27 @@ function workflowCommand(
         return;
       }
       const requestedCancellation = operation === 'cancel' ? args.trim() : '';
-      let record = requestedCancellation
-        ? cancelAgentWorkflow(root, requestedCancellation, mode)
-        : latestAgentWorkflow(root, mode, (id) => {
-            context.ui.addItem({
-              type: MessageType.WARNING,
-              text: i18n.t(
-                `工作流记录损坏：${id}。可用对应模式的 cancel <ID> 保留并取消；原文件未修改。`,
-                `Damaged workflow record: ${id}. Use its mode's cancel <ID> to preserve and cancel; original file unchanged.`,
-              ),
+      const requestedStatus = operation === 'status' ? args.trim() : '';
+      let record = requestedStatus
+        ? readAgentWorkflow(root, requestedStatus)
+        : requestedCancellation
+          ? cancelAgentWorkflow(root, requestedCancellation, mode)
+          : latestAgentWorkflow(root, mode, (id) => {
+              context.ui.addItem({
+                type: MessageType.WARNING,
+                text: i18n.t(
+                  `工作流记录损坏：${id}。可用对应模式的 cancel <ID> 保留并取消；原文件未修改。`,
+                  `Damaged workflow record: ${id}. Use its mode's cancel <ID> to preserve and cancel; original file unchanged.`,
+                ),
+              });
             });
-          });
+      if (requestedStatus && record?.mode !== mode)
+        throw new Error(
+          i18n.t(
+            '任务模式不匹配，请使用记录对应的命令。',
+            'Task mode does not match this command. Use the recorded task mode.',
+          ),
+        );
       const restoreApproval = (entry: AgentWorkflow) => {
         if (config.getApprovalMode() === ApprovalMode.PLAN) {
           const previous = Object.values(ApprovalMode).find(
@@ -166,9 +183,26 @@ function workflowCommand(
         return;
       }
       if (operation === 'status') {
+        let statusBudget;
+        if (record) {
+          try {
+            statusBudget = requestedStatus
+              ? savedWorkflowBudgetSummary(root, record.id)
+              : workflowBudgetSummary(root, record);
+          } catch (error) {
+            if (!requestedStatus) throw error;
+            statusBudget = {
+              available: false,
+              note: i18n.t(
+                '保存的预算不可用；查看状态不会初始化或修复账本。',
+                'Saved budget unavailable; inspection does not initialize or repair a ledger.',
+              ),
+            };
+          }
+        }
         info(
           record
-            ? `${record.mode}: ${record.phase}\n${record.objective}\n${record.stage}\n${i18n.t('角色模型', 'Role models')}: ${JSON.stringify(record.roleModels)}\n${i18n.t('累计预算', 'Cumulative budget')}: ${JSON.stringify(workflowBudgetSummary(root, record))}\n${record.milestones.map((item, index) => `${index + 1}. [${item.completed ? 'x' : ' '}] ${item.title}\n${item.acceptance}`).join('\n')}\nID: ${record.id}`
+            ? `${record.mode}: ${record.phase}\n${record.objective}\n${record.stage}\n${i18n.t('角色模型', 'Role models')}: ${JSON.stringify(record.roleModels)}\n${i18n.t('累计预算', 'Cumulative budget')}: ${JSON.stringify(statusBudget)}\n${record.milestones.map((item, index) => `${index + 1}. [${item.completed ? 'x' : ' '}] ${item.title}\n${item.acceptance}`).join('\n')}\nID: ${record.id}`
             : i18n.t(
                 '当前项目没有该工作流。',
                 'No workflow of this kind in this project.',
@@ -375,6 +409,7 @@ function workflowCommand(
     }
   };
   const operations = [
+    'list',
     'status',
     'reports',
     ...(mode === 'grill-me' ? [] : ['model']),
@@ -393,14 +428,26 @@ function workflowCommand(
     name: mode,
     altNames,
     kind: CommandKind.BUILT_IN,
-    description: `${mode}: scoped agent workflow`,
+    get description() {
+      return I18nManager.getInstance().t(
+        `${mode}：有界 Agent 工作流`,
+        `${mode}: scoped agent workflow`,
+      );
+    },
     autoExecute: false,
     action: (context, args) => action(context, args),
     subCommands: operations.map((name) => ({
       name,
       get description() {
         const labels: Record<string, [string, string]> = {
-          status: ['查看阶段与里程碑', 'Show stages and milestones'],
+          list: [
+            '查看当前项目所有 Agent 历史任务，可指定页码',
+            'List saved Agent tasks in this project; optional page number',
+          ],
+          status: [
+            '查看阶段与里程碑，可指定任务ID',
+            'Show stages and milestones; optional task ID',
+          ],
           reports: [
             '导出完整阶段报告索引，可指定任务ID',
             'Export full report index; optional task ID',
@@ -433,8 +480,10 @@ function workflowCommand(
         'prepare',
         'workspace',
         'reports',
+        'list',
+        'status',
       ].includes(name),
-      isSafeConcurrent: name === 'status' || name === 'cancel',
+      isSafeConcurrent: ['list', 'status', 'cancel'].includes(name),
       action: (context, args) => action(context, args, name),
     })),
   };

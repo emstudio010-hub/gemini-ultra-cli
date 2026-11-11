@@ -241,7 +241,12 @@ export function workflowBudget(
   return budget;
 }
 export function workflowBudgetSummary(root: string, record: AgentWorkflow) {
-  const budget = workflowBudget(root, record);
+  return formatBudgetSummary(workflowBudget(root, record));
+}
+export function savedWorkflowBudgetSummary(root: string, id: string) {
+  return formatBudgetSummary(readWorkflowBudgetById(root, id));
+}
+function formatBudgetSummary(budget: WorkflowBudget) {
   return budget.accountingUnknown
     ? {
         ...budget,

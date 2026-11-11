@@ -13,6 +13,7 @@ import {
   saveAgentWorkflow,
   workflowBudget,
   consumeWorkflowRequest,
+  closeWorkflowBudget,
   type Config,
 } from '@google/gemini-cli-core';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
@@ -43,6 +44,45 @@ function commandContext() {
   });
   return { config, context };
 }
+
+it('inspects the requested historical workflow without changing the current task or creating its missing ledger', async () => {
+  const { context } = commandContext();
+  const prepare = teamworkCommand.subCommands!.find(
+    (item) => item.name === 'prepare',
+  )!;
+  await prepare.action!(context, 'Older historical objective');
+  const older = latestAgentWorkflow(root, 'teamwork')!;
+  older.phase = 'cancelled';
+  saveAgentWorkflow(root, older);
+  closeWorkflowBudget(root, older);
+  older.updatedAt = '2000-01-01T00:00:00.000Z';
+  const directory = path.join(root, 'agent-workflows');
+  fs.writeFileSync(
+    path.join(directory, older.id + '.json'),
+    JSON.stringify(older),
+  );
+  await prepare.action!(context, 'Newer current objective');
+  const newer = latestAgentWorkflow(root, 'teamwork')!;
+  expect(newer.id).not.toBe(older.id);
+  fs.rmSync(path.join(directory, older.id + '.budget.json'));
+  const before = Object.fromEntries(
+    fs
+      .readdirSync(directory)
+      .map((file) => [file, fs.readFileSync(path.join(directory, file))]),
+  );
+  vi.mocked(context.ui.addItem).mockClear();
+  const status = teamworkCommand.subCommands!.find(
+    (item) => item.name === 'status',
+  )!;
+  expect(await status.action!(context, older.id)).toBeUndefined();
+  const output = JSON.stringify(vi.mocked(context.ui.addItem).mock.calls);
+  expect(output).toContain('Older historical objective');
+  expect(output).toContain(older.id);
+  expect(output).not.toContain('Newer current objective');
+  expect(fs.readdirSync(directory).sort()).toEqual(Object.keys(before).sort());
+  for (const [file, bytes] of Object.entries(before))
+    expect(fs.readFileSync(path.join(directory, file))).toEqual(bytes);
+});
 
 it('keeps teamwork scoping read-only and only submits native execution after approving a draft', async () => {
   const { config, context } = commandContext();
