@@ -73,6 +73,7 @@ export async function decompileBinary(
   if (!info.isFile() || info.size > 64 * 1024 * 1024)
     throw new Error('Select a regular local sample up to 64 MiB.');
   const bytes = await fs.readFile(samplePath);
+  signal.throwIfAborted();
   if (bytes.length > 64 * 1024 * 1024)
     throw new Error('Sample grew beyond the 64 MiB limit.');
   let installation = process.env['GEMINI_ULTRA_GHIDRA_HOME'];
@@ -130,6 +131,7 @@ export async function decompileBinary(
   let artifactsCreated = false;
   let diagnostics = '';
   try {
+    signal.throwIfAborted();
     await fs.mkdir(artifactDirectory, { recursive: true });
     artifactsCreated = true;
     const snapshot = path.join(scratch, 'sample.bin');
@@ -141,6 +143,7 @@ export async function decompileBinary(
     const project = path.join(scratch, 'project');
     await fs.mkdir(project);
     const output = path.join(scratch, 'result.json');
+    signal.throwIfAborted();
     await new Promise<void>((resolve, reject) => {
       execFile(
         java,

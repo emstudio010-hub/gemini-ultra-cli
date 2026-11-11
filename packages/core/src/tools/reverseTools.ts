@@ -335,7 +335,7 @@ export function verifiedPatchTransaction(params: {
   ].join('\n');
   fs.writeFileSync(verificationFile, report, 'utf8');
 
-  const rollbackContent = `import { copyFileSync } from 'node:fs';\ncopyFileSync(new URL(${JSON.stringify('./' + path.basename(backupFile))}, import.meta.url), new URL(${JSON.stringify('./' + path.basename(resolved))}, import.meta.url));\nconsole.log('Rollback completed.');\n`;
+  const rollbackContent = `import { copyFileSync } from 'node:fs';\nimport { fileURLToPath } from 'node:url';\nimport { dirname, join } from 'node:path';\nconst directory = dirname(fileURLToPath(import.meta.url));\ncopyFileSync(join(directory, ${JSON.stringify(path.basename(backupFile))}), join(directory, ${JSON.stringify(path.basename(resolved))}));\nconsole.log('Rollback completed.');\n`;
   fs.writeFileSync(rollbackScript, rollbackContent, 'utf8');
 
   try {

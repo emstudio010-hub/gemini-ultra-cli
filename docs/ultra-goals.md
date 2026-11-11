@@ -1104,3 +1104,12 @@ active。
   5603bac4c9dc4631cb547b6eb4cb9de2889485d2ad9b1542675dc52485dce6aa。个人locale/provider
   SHA保持65末值，ultra-tools.json仍未创建；无额外本机业务/启动基准/付费或全量/冒烟重跑。WI-099/F-065补丁工具写入规则、路径预校验与预取消修复分发交付，goal
   active；更多模型长任务、语义质量、完整终端UI及复杂跨机逆向继续，不合并master或创建正式Release。
+
+## 2026-11-11 Ghidra准备期取消与字面文件名回滚
+
+WI-100/E-241/F-066/F-067：旧3项定向实际失败：最终project目录准备期间取消仍调用Java启动；#与%20文件名被rollback脚本的new
+URL当fragment/转义，实际Node回滚ENOENT。新增样本读取后、artifact准备前和exec前signal复核；回滚以fileURLToPath(import.meta.url)定位脚本目录，再用path.join拼接字面basename，保留目录可迁移。core公共出口补齐binaryDecompile，与inspect/analyze一致。4项不同定向（3回归+正常JVM参数/全文产物）及strict
+type/lint通过，core构建通过。
+
+source实际工具类/Config独立Storage：观察并在最后真实mkdir完成后取消，execFile启动计数0、scratch删除、仅analysis.log、原样本SHA保持；人工安装目录与Node仅用于发现，不运行Java/Ghidra。2个#/%20文本文件实际生成Node回滚成功、备份保持，另迁移含#/%20/中文路径的工件回滚成功，2事实记录/0模型。不是新真实Ghidra分析或运行中进程树验收。66未受影响路径检查基线保留；候选67待native-preparation范围三平台包/全局安装，个人配置DB/本机工具未改，无全量/冒烟，goal
+active。

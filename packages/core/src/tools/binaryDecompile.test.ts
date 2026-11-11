@@ -9,7 +9,21 @@ import path from 'node:path';
 import os from 'node:os';
 import type { ExecFileOptions } from 'node:child_process';
 import { decompileBinary } from './binaryDecompile.js';
-const { execute } = vi.hoisted(() => ({ execute: vi.fn() }));
+const { execute, prepared } = vi.hoisted(() => ({
+  execute: vi.fn(),
+  prepared: vi.fn(),
+}));
+vi.mock('node:fs/promises', async (original) => {
+  const actual = await original<typeof import('node:fs/promises')>();
+  return {
+    ...actual,
+    mkdir: async (...args: Parameters<typeof actual.mkdir>) => {
+      const result = await actual.mkdir(...args);
+      prepared(args[0]);
+      return result;
+    },
+  };
+});
 vi.mock('node:child_process', () => ({ execFile: execute }));
 vi.mock('./drillTools.js', () => ({
   checkBinary: () => ({ available: false }),
@@ -106,6 +120,25 @@ function launch(result: unknown, failure: Error | null = null) {
     },
   );
 }
+it('does not launch Java when cancellation arrives during the final analysis preparation', async () => {
+  const controller = new AbortController();
+  launch(report);
+  prepared.mockImplementation((directory: string) => {
+    if (
+      path.basename(directory) === 'project' &&
+      path.basename(path.dirname(directory)).startsWith('ultra-decompile-')
+    ) {
+      scratch = path.dirname(directory);
+      controller.abort(new Error('Stopped during analysis preparation'));
+    }
+  });
+  await expect(
+    decompileBinary({ filePath: sample }, root, root, controller.signal),
+  ).rejects.toThrow('Stopped during analysis preparation');
+  expect(execute).not.toHaveBeenCalled();
+  expect(await fs.readFile(sample, 'utf8')).toBe('immutable sample');
+  await expect(fs.stat(scratch)).rejects.toThrow();
+});
 it('passes literal JVM arguments, keeps immutable input and full hashed artifacts while truncating only preview', async () => {
   launch(report);
   const result = await decompileBinary(
