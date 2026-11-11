@@ -13,6 +13,7 @@ import {
   afterEach,
   type Mock,
 } from 'vitest';
+import { ToolErrorType } from '../tools/tool-error.js';
 
 const {
   mockSendMessageStream,
@@ -2671,6 +2672,126 @@ describe('LocalAgentExecutor', () => {
   });
 
   describe('run (Recovery Turns)', () => {
+    const invalidCompletion = (id: string) => {
+      mockModelResponse([
+        {
+          name: COMPLETE_TASK_TOOL_NAME,
+          args: {
+            finalResult: { response: 'findings', wait_for_previous: false },
+          },
+          id,
+        },
+      ]);
+      mockScheduleAgentTools.mockResolvedValueOnce([
+        {
+          status: 'error',
+          request: {
+            callId: id,
+            name: COMPLETE_TASK_TOOL_NAME,
+            args: {},
+            prompt_id: 'test-prompt',
+          },
+          response: {
+            resultDisplay:
+              'params/finalResult must NOT have additional properties',
+            responseParts: [
+              {
+                functionResponse: {
+                  name: COMPLETE_TASK_TOOL_NAME,
+                  id,
+                  response: {
+                    error:
+                      'params/finalResult must NOT have additional properties',
+                  },
+                },
+              },
+            ],
+            error: new Error(
+              'params/finalResult must NOT have additional properties',
+            ),
+            errorType: ToolErrorType.INVALID_TOOL_PARAMS,
+          },
+        },
+      ]);
+    };
+
+    it('repairs one rejected completion submission in the same grace period', async () => {
+      const executor = await LocalAgentExecutor.create(
+        createTestDefinition(),
+        mockConfig,
+        onActivity,
+      );
+      mockModelResponse([], 'Research is ready.');
+      invalidCompletion('invalid');
+      mockModelResponse([
+        {
+          name: COMPLETE_TASK_TOOL_NAME,
+          args: { finalResult: 'Repaired findings' },
+          id: 'repaired',
+        },
+      ]);
+      mockCompletionResult('repaired', 'Repaired findings');
+      const output = await executor.run(
+        { goal: 'Preserve research findings' },
+        signal,
+      );
+      expect(output.terminate_reason).toBe(AgentTerminateMode.GOAL);
+      expect(output.result).toBe('Repaired findings');
+      expect(mockSendMessageStream).toHaveBeenCalledTimes(3);
+      expect(JSON.stringify(getMockMessageParams(2).message)).toContain(
+        'must NOT have additional properties',
+      );
+    });
+
+    it('does not keep retrying after the one completion repair fails', async () => {
+      const executor = await LocalAgentExecutor.create(
+        createTestDefinition(),
+        mockConfig,
+        onActivity,
+      );
+      mockModelResponse([], 'Research is ready.');
+      invalidCompletion('invalid');
+      invalidCompletion('invalid-again');
+      mockModelResponse([
+        {
+          name: COMPLETE_TASK_TOOL_NAME,
+          args: { finalResult: 'Too late' },
+          id: 'too-late',
+        },
+      ]);
+      const output = await executor.run(
+        { goal: 'Bounded result repair' },
+        signal,
+      );
+      expect(output.terminate_reason).toBe(
+        AgentTerminateMode.ERROR_NO_COMPLETE_TASK_CALL,
+      );
+      expect(mockSendMessageStream).toHaveBeenCalledTimes(3);
+      expect(mockScheduleAgentTools).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not execute work tools in the completion repair turn', async () => {
+      const executor = await LocalAgentExecutor.create(
+        createTestDefinition(),
+        mockConfig,
+        onActivity,
+      );
+      mockModelResponse([], 'Research is ready.');
+      invalidCompletion('invalid');
+      mockModelResponse([
+        { name: LS_TOOL_NAME, args: { path: '.' }, id: 'late-work' },
+      ]);
+      const output = await executor.run(
+        { goal: 'Completion repair only' },
+        signal,
+      );
+      expect(output.terminate_reason).toBe(
+        AgentTerminateMode.ERROR_NO_COMPLETE_TASK_CALL,
+      );
+      expect(mockSendMessageStream).toHaveBeenCalledTimes(3);
+      expect(mockScheduleAgentTools).toHaveBeenCalledTimes(1);
+    });
+
     const mockWorkResponse = (id: string) => {
       mockModelResponse([{ name: LS_TOOL_NAME, args: { path: '.' }, id }]);
       mockScheduleAgentTools.mockResolvedValueOnce([

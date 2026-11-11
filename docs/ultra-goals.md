@@ -832,3 +832,10 @@
 - E-184：offline7925ms/退出0，双命令49，425文件匹配Windows
   CI包，旧包保留。包SHAebc7ec6c…/入口SHA04ae983d…完整值见交接。macOS下载一次EOF仅重试下载，未重跑CI/业务。WI-081交付，goal
   active，不合并master/正式Release；旧丢失文本、100份窗口、Swarm存储边界和真实长任务验收仍在范围中。docs/ultra-workflow-full-report-handoff.md。
+
+## 2026-11-11 原生命令语言与完成参数修正
+
+- WI-082/E-185：真实Teamwork本地化任务blocked，131737ms/15请求（main9、researcher6、coder0），两个里程碑草案先保存后批准；最终complete_task嵌套额外wait_for_previous遭严格校验拒绝后无修正机会。隔离源码字节未变，无交付补丁；凭据已移除。响应报告165907 token非账单，不重复付费任务，宿主后续文案实现不归功于Teamwork。
+- E-186/F-050：只为普通文本协议停止后遭拒绝的最终完成提交提供一次修正，共用原60秒期限和原预算、completion-only，严格schema保持。MAX_TURNS/TIMEOUT不增加修正，不将执行上限改成成功。team/redteam描述和drill说明/反馈随locale，事实/路径/哈希保持，授权/并发逻辑保持。
+- 旧恢复成功用例先失败，修后15项；旧文案3失败，修后4项，共19定向项及相关严格lint/type通过。源码本地12命令/10退出0/2预期42/0模型；completion-repair原生16 loopback请求/14调度/五阶段completed/退出0。无全量/冒烟/外部扫描。
+- 候选50待agent-localization范围三平台包/安装和上述两链；未受影响基线47完整、48供应商、49长报告保留。WI-082修复本地完成，真实Teamwork长任务质量未验收，goal active，不合并master/正式Release。docs/ultra-native-command-recovery-handoff.md。

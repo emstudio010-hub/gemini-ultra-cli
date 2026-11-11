@@ -22,6 +22,7 @@ const budgetMode = process.argv[4] === 'budget';
 const modelMode = ['models', 'models-session'].includes(process.argv[4]);
 const sessionMode = process.argv[4] === 'models-session';
 const contextMode = process.argv[4] === 'context';
+const completionRepairMode = process.argv[4] === 'completion-repair';
 const contextObjective =
   'Create deliverable.txt containing answer=42, preserving seed.txt.';
 const longHandoff =
@@ -257,15 +258,35 @@ const server = createServer(async (req, res) => {
         message = call('run_agent_workflow', { workflow_id: id });
       }
     } else if (role === 'researcher') {
-      message = results.length
-        ? call('complete_task', {
-            result: {
-              response: contextMode
-                ? longHandoff
-                : 'Read seed.txt. The requested answer is 42; write answer=42 followed by a newline.',
-            },
-          })
-        : call('read_file', { file_path: source });
+      const grace = payload.messages.some(
+        (message) =>
+          message.role === 'user' &&
+          JSON.stringify(message.content).includes(
+            'You have one final grace turn',
+          ),
+      );
+      const rejected = results.some((result) =>
+        /additional properties/i.test(result.content),
+      );
+      message =
+        completionRepairMode && results.length && !grace
+          ? { content: 'Investigation is ready; no file changes were made.' }
+          : completionRepairMode && grace && !rejected
+            ? call('complete_task', {
+                result: {
+                  response: 'Read seed.txt; answer=42.',
+                  wait_for_previous: false,
+                },
+              })
+            : results.length
+              ? call('complete_task', {
+                  result: {
+                    response: contextMode
+                      ? longHandoff
+                      : 'Read seed.txt. The requested answer is 42; write answer=42 followed by a newline.',
+                  },
+                })
+              : call('read_file', { file_path: source });
     } else if (role === 'coder') {
       if (contextMode && results.length === 0) {
         const recent = JSON.parse(
@@ -665,10 +686,13 @@ try {
             fs.readFileSync(source, 'utf8') ===
             'Required deliverable: answer=42\n',
           finalText: stdout.includes('NATIVE_WORKFLOW_DELIVERED'),
-          expectedRequestCount: requests.length === (contextMode ? 13 : 12),
+          expectedRequestCount:
+            requests.length ===
+            (contextMode ? 13 : completionRepairMode ? 16 : 12),
           cumulativeBudget:
             budget?.state === 'closed' &&
-            budget.requests === (contextMode ? 11 : 10) &&
+            budget.requests ===
+              (contextMode ? 11 : completionRepairMode ? 14 : 10) &&
             budget.implementationRounds[0] === 1,
           ...(contextMode
             ? {
@@ -723,17 +747,19 @@ try {
   const report = {
     mode: contextMode
       ? 'context'
-      : modelMode
-        ? sessionMode
-          ? 'models-session'
-          : 'models'
-        : recordRecoveryMode
-          ? 'record-recovery'
-          : recoveryMode
-            ? 'recovery'
-            : budgetMode
-              ? 'budget'
-              : 'delivery',
+      : completionRepairMode
+        ? 'completion-repair'
+        : modelMode
+          ? sessionMode
+            ? 'models-session'
+            : 'models'
+          : recordRecoveryMode
+            ? 'record-recovery'
+            : recoveryMode
+              ? 'recovery'
+              : budgetMode
+                ? 'budget'
+                : 'delivery',
     passed: Object.values(checks).every(Boolean),
     ...(contextMode
       ? { contextInputs, localReportIndex, localReportRuns: recoveryRuns }

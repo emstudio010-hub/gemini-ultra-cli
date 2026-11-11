@@ -15,7 +15,12 @@ import { MessageType } from '../types.js';
 export const redteamCommand: SlashCommand = {
   name: 'redteam',
   altNames: ['红队', '红队模式'],
-  description: 'Configure authorized red-team workflow: /redteam on|off|status',
+  get description() {
+    return I18nManager.getInstance().t(
+      '配置已授权的红队工作流：/redteam on|off|status',
+      'Configure authorized red-team workflow: /redteam on|off|status',
+    );
+  },
   kind: CommandKind.BUILT_IN,
   action: async (context, args) => {
     const i18n = I18nManager.getInstance();

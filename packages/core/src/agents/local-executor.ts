@@ -98,6 +98,7 @@ import {
   runWithScopedWorkspaceContext,
 } from '../config/scoped-config.js';
 import { CompleteTaskTool } from '../tools/complete-task.js';
+import { ToolErrorType } from '../tools/tool-error.js';
 import {
   COMPLETE_TASK_TOOL_NAME,
   ACTIVATE_SKILL_TOOL_NAME,
@@ -114,6 +115,7 @@ type AgentTurnResult =
   | {
       status: 'continue';
       nextMessage: Content;
+      completionValidationFailed?: boolean;
     }
   | {
       status: 'stop';
@@ -404,15 +406,20 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
       };
     }
 
-    const { nextMessage, submittedOutput, taskCompleted, aborted } =
-      await this.processFunctionCalls(
-        chat,
-        modelToUse,
-        functionCalls,
-        combinedSignal,
-        promptId,
-        onWaitingForConfirmation,
-      );
+    const {
+      nextMessage,
+      submittedOutput,
+      taskCompleted,
+      aborted,
+      completionValidationFailed,
+    } = await this.processFunctionCalls(
+      chat,
+      modelToUse,
+      functionCalls,
+      combinedSignal,
+      promptId,
+      onWaitingForConfirmation,
+    );
 
     if (aborted) {
       return {
@@ -435,6 +442,7 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
     return {
       status: 'continue',
       nextMessage,
+      completionValidationFailed,
     };
   }
 
@@ -465,8 +473,8 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
   }
 
   /**
-   * Attempts a single, final recovery turn if the agent stops for a recoverable reason.
-   * Gives the agent a grace period to call `complete_task`.
+   * Attempts final submission within one grace period. A rejected submission
+   * may be repaired once after a protocol stop, without executing more work.
    *
    * @returns The final result string if recovery was successful, or `null` if it failed.
    */
@@ -509,7 +517,7 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
       ).any([externalSignal, graceTimeoutController.signal]);
       /* eslint-enable @typescript-eslint/no-unsafe-type-assertion */
 
-      const turnResult = await this.executeTurn(
+      let turnResult = await this.executeTurn(
         chat,
         recoveryMessage,
         turnCounter, // This will be the "last" turn number
@@ -518,6 +526,26 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
         onWaitingForConfirmation,
         true,
       );
+
+      if (
+        reason === AgentTerminateMode.ERROR_NO_COMPLETE_TASK_CALL &&
+        turnResult.status === 'continue' &&
+        turnResult.completionValidationFailed &&
+        !combinedSignal.aborted
+      ) {
+        this.emitActivity('THOUGHT_CHUNK', {
+          text: 'Completion arguments were rejected. Repairing only the final submission within the remaining grace period.',
+        });
+        turnResult = await this.executeTurn(
+          chat,
+          turnResult.nextMessage,
+          turnCounter + 1,
+          combinedSignal,
+          graceTimeoutController.signal,
+          onWaitingForConfirmation,
+          true,
+        );
+      }
 
       if (
         turnResult.status === 'stop' &&
@@ -1182,12 +1210,14 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
     submittedOutput: string | null;
     taskCompleted: boolean;
     aborted: boolean;
+    completionValidationFailed?: boolean;
   }> {
     const allowedToolNames = new Set(this.toolRegistry.getAllToolNames());
 
     let submittedOutput: string | null = null;
     let taskCompleted = false;
     let aborted = false;
+    let completionValidationFailed = false;
 
     const toolRequests: ToolCallRequestInfo[] = [];
     // Map to keep track of tool name by callId for activity emission
@@ -1200,6 +1230,8 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
       const { args, error: parseError } = this.parseToolArguments(functionCall);
 
       if (parseError) {
+        if (functionCall.name === COMPLETE_TASK_TOOL_NAME)
+          completionValidationFailed = true;
         debugLogger.warn(`[LocalAgentExecutor] ${parseError}`);
 
         syncResults.set(callId, [
@@ -1355,6 +1387,11 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
             }
           }
         } else if (call.status === 'error') {
+          if (
+            call.request.name === COMPLETE_TASK_TOOL_NAME &&
+            call.response.errorType === ToolErrorType.INVALID_TOOL_PARAMS
+          )
+            completionValidationFailed = true;
           this.emitActivity('ERROR', {
             context: 'tool_call',
             name: toolName,
@@ -1440,6 +1477,7 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
       submittedOutput,
       taskCompleted,
       aborted,
+      completionValidationFailed,
     };
   }
 

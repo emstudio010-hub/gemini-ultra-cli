@@ -23,18 +23,26 @@ import {
   stopDrillCockpit,
 } from '../../services/drillCockpit.js';
 
+const t = (zh: string, en: string) => I18nManager.getInstance().t(zh, en);
+
 async function openCockpit(context: CommandContext): Promise<void> {
   const url = await startDrillCockpit();
   context.ui.addItem({
     type: MessageType.INFO,
-    text: `演练台已启动：${url}\n任务执行与审批请查看当前终端。使用 /drill stop 关闭控制台。`,
+    text: t(
+      `演练台已启动：${url}\n任务执行与审批请查看当前终端。使用 /drill stop 关闭控制台。`,
+      `Drill Cockpit started: ${url}\nFollow task execution and approvals in this terminal. Use /drill stop to close the cockpit.`,
+    ),
   });
   try {
     await open(url);
   } catch {
     context.ui.addItem({
       type: MessageType.WARNING,
-      text: '无法自动打开浏览器，请打开上方地址。',
+      text: t(
+        '无法自动打开浏览器，请打开上方地址。',
+        'Could not open the browser automatically. Open the URL above.',
+      ),
     });
   }
 }
@@ -42,15 +50,24 @@ async function openCockpit(context: CommandContext): Promise<void> {
 export const drillCommand: SlashCommand = {
   name: 'drill',
   altNames: ['演练台', 'd'],
-  description:
-    '打开演练台控制中心。用法: /drill [ui | status | preflight | grant | facts | stop]',
+  get description() {
+    return t(
+      '打开演练台控制中心。用法: /drill [setup | ui | status | preflight | grant | facts | stop]',
+      'Open the Drill Cockpit. Usage: /drill [setup | ui | status | preflight | grant | facts | stop]',
+    );
+  },
   kind: CommandKind.BUILT_IN,
   autoExecute: false,
   subCommands: [
     {
       name: 'setup',
       altNames: ['安装', '环境'],
-      description: '检查本机逆向环境并显示安装与路径配置说明',
+      get description() {
+        return t(
+          '检查本机逆向环境并显示安装与路径配置说明',
+          'Check the local reverse engineering environment and configuration instructions',
+        );
+      },
       kind: CommandKind.BUILT_IN,
       action: async (context) => {
         const i18n = I18nManager.getInstance();
@@ -77,40 +94,63 @@ export const drillCommand: SlashCommand = {
     {
       name: 'ui',
       altNames: ['web', '界面'],
-      description: '打开当前 CLI 会话的浏览器控制中心',
+      get description() {
+        return t(
+          '打开当前 CLI 会话的浏览器控制中心',
+          'Open the browser cockpit for this CLI session',
+        );
+      },
       kind: CommandKind.BUILT_IN,
       action: openCockpit,
     },
     {
       name: 'stop',
       altNames: ['关闭'],
-      description: '关闭演练台 Web 控制中心',
+      get description() {
+        return t(
+          '关闭演练台 Web 控制中心',
+          'Close the Drill Cockpit web service',
+        );
+      },
       kind: CommandKind.BUILT_IN,
       action: async (context) => {
         stopDrillCockpit();
         context.ui.addItem({
           type: MessageType.INFO,
-          text: '演练台 Web 控制中心已关闭。',
+          text: t(
+            '演练台 Web 控制中心已关闭。',
+            'Drill Cockpit web service stopped.',
+          ),
         });
       },
     },
     {
       name: 'status',
       altNames: ['状态'],
-      description: '查看当前演练台授权状态与网段范围',
+      get description() {
+        return t(
+          '查看当前演练台授权状态与网段范围',
+          'Show drill authorization and network scope',
+        );
+      },
       kind: CommandKind.BUILT_IN,
       action: async (context: CommandContext) => {
         const grant = readDrillGrant();
         const store = DrillStore.getInstance();
         const facts = store.queryFacts();
 
-        let text = '=== 红队与逆向演练台状态 (Drill Workbench) ===\n';
-        text += `• 授权状态: ${grant.granted ? '🟢 已授权 (GRANTED)' : '⚪ 未授权 (UNGRANTED)'}\n`;
-        text += `• 授权记录: ${grant.at || '无'}\n`;
-        text += `• 白名单网段: ${grant.allowedNetScope?.join(', ') || '127.0.0.1/32'}\n`;
-        text += `• 事实库条数: 累计 ${facts.length} 项工件/漏洞\n`;
-        text +=
-          '\n可用操作:\n• /drill preflight - 本机工具链巡检\n• /drill grant - 开启演练授权\n• /drill facts - 查看最新事实条目';
+        let text = t(
+          '=== 红队与逆向演练台状态 ===\n',
+          '=== Drill Workbench Status ===\n',
+        );
+        text += `• ${t('授权状态', 'Authorization')}: ${grant.granted ? t('🟢 已授权', '🟢 Granted') : t('⚪ 未授权', '⚪ Not granted')}\n`;
+        text += `• ${t('授权记录', 'Grant record')}: ${grant.at || t('无', 'none')}\n`;
+        text += `• ${t('白名单网段', 'Allowed network scope')}: ${grant.allowedNetScope?.join(', ') || '127.0.0.1/32'}\n`;
+        text += `• ${t('当前查询事实数', 'Facts in current query')}: ${facts.length}\n`;
+        text += t(
+          '\n可用操作:\n• /drill preflight - 本机工具链巡检\n• /drill grant - 开启演练授权\n• /drill facts - 查看最新事实条目',
+          '\nCommands:\n• /drill preflight - Check local tools\n• /drill grant - Record drill authorization\n• /drill facts - Show recent facts',
+        );
 
         context.ui.addItem({
           type: MessageType.INFO,
@@ -121,19 +161,31 @@ export const drillCommand: SlashCommand = {
     {
       name: 'preflight',
       altNames: ['巡检', '预检'],
-      description:
-        '巡检本机红队与逆向工具链就绪情况 (IDA/Ghidra/Radare2/JADX/Nuclei等)',
+      get description() {
+        return t(
+          '巡检本机红队与逆向工具链就绪情况 (IDA/Ghidra/Radare2/JADX/Nuclei等)',
+          'Check local reverse engineering tools (IDA/Ghidra/Radare2/JADX/Nuclei)',
+        );
+      },
       kind: CommandKind.BUILT_IN,
       action: async (context: CommandContext) => {
         context.ui.addItem({
           type: MessageType.INFO,
-          text: '正在巡检本机逆向与红队工具链，请稍候...',
+          text: t(
+            '正在巡检本机逆向与红队工具链，请稍候...',
+            'Checking local reverse engineering tools, please wait...',
+          ),
         });
 
         const pre = await runDrillPreflight();
-        let text = '=== 本机工具链巡检结果 (Preflight Checklist) ===\n';
+        let text = t(
+          '=== 本机工具链巡检结果 ===\n',
+          '=== Local Tool Checklist ===\n',
+        );
         for (const [tool, status] of Object.entries(pre.tools)) {
-          const icon = status.available ? '🟢 [就绪]' : '🔴 [缺失]';
+          const icon = status.available
+            ? t('🟢 [就绪]', '🟢 [ready]')
+            : t('🔴 [缺失]', '🔴 [missing]');
           text += `• ${tool.padEnd(14)}: ${icon} ${status.pathOrStatus}\n`;
         }
 
@@ -146,36 +198,52 @@ export const drillCommand: SlashCommand = {
     {
       name: 'grant',
       altNames: ['授权'],
-      description: '确认并写入演练台靶标测试授权',
+      get description() {
+        return t(
+          '确认并写入演练台靶标测试授权',
+          'Confirm and record drill authorization',
+        );
+      },
       kind: CommandKind.BUILT_IN,
       action: async (context: CommandContext) => {
         const res = writeDrillGrant(true);
         context.ui.addItem({
           type: MessageType.INFO,
-          text: `✓ 演练台授权已生效！\n已记录至: ${res.path}\n时间: ${res.at}`,
+          text: t(
+            `✓ 演练台授权已生效！\n已记录至: ${res.path}\n时间: ${res.at}`,
+            `✓ Drill authorization recorded.\nFile: ${res.path}\nTime: ${res.at}`,
+          ),
         });
       },
     },
     {
       name: 'facts',
       altNames: ['事实', '工件'],
-      description: '查看当前演练事实与逆向样本库',
+      get description() {
+        return t(
+          '查看当前演练事实与逆向样本库',
+          'Show drill facts and reverse engineering samples',
+        );
+      },
       kind: CommandKind.BUILT_IN,
       action: async (context: CommandContext, args: string) => {
         const store = DrillStore.getInstance();
         const keyword = args.trim();
         const facts = store.queryFacts(undefined, keyword || undefined);
 
-        let text = `=== 演练事实与逆向工件列表 (共 ${facts.length} 条) ===\n`;
+        let text = t(
+          `=== 演练事实与逆向工件列表 (返回 ${facts.length} 条) ===\n`,
+          `=== Drill Facts and Reverse Artifacts (${facts.length} returned) ===\n`,
+        );
         for (const f of facts.slice(0, 15)) {
           if (f['factType'] === 'note') {
-            text += `\n[笔记 #${f['id'] ?? '-'}] ${f['title']}\n  ${[f['evidence'], f['content']].filter(Boolean).join('\n  ')}\n`;
+            text += `\n[${t('笔记', 'Note')} #${f['id'] ?? '-'}] ${f['title']}\n  ${[f['evidence'], f['content']].filter(Boolean).join('\n  ')}\n`;
           } else if (f['sample_path']) {
-            text += `\n[逆向样本 #${f['id']}] ${f['sample_path']}\n  SHA256: ${f['sha256']}\n  文件类型: ${f['file_type']} | 熵值: ${f['entropy']} | 加壳: ${f['is_packed'] ? '是' : '否'}\n`;
+            text += `\n[${t('逆向样本', 'Binary sample')} #${f['id']}] ${f['sample_path']}\n  SHA256: ${f['sha256']}\n  ${t('文件类型', 'File type')}: ${f['file_type']} | ${t('熵值', 'Entropy')}: ${f['entropy']} | ${t('加壳', 'Packed')}: ${f['is_packed'] ? t('是', 'yes') : t('否', 'no')}\n`;
           } else if (f['factType'] === 'binary') {
-            text += `\n[逆向样本] ${f['title']}\n  ${f['content']}\n`;
+            text += `\n[${t('逆向样本', 'Binary sample')}] ${f['title']}\n  ${f['content']}\n`;
           } else if (f['title']) {
-            text += `\n[漏洞 #${f['id'] ?? '-'}] [${String(f['severity'] || 'info').toUpperCase()}] ${f['title']}\n  CVE: ${f['cve'] || 'N/A'} | 状态: ${f['status'] || 'N/A'}\n`;
+            text += `\n[${t('漏洞', 'Finding')} #${f['id'] ?? '-'}] [${String(f['severity'] || 'info').toUpperCase()}] ${f['title']}\n  CVE: ${f['cve'] || 'N/A'} | ${t('状态', 'Status')}: ${f['status'] || 'N/A'}\n`;
           }
         }
         context.ui.addItem({
@@ -207,7 +275,10 @@ export const drillCommand: SlashCommand = {
 
     context.ui.addItem({
       type: MessageType.ERROR,
-      text: '未知操作。用法: /drill [ui | status | preflight | grant | facts | stop]',
+      text: t(
+        '未知操作。用法: /drill [setup | ui | status | preflight | grant | facts | stop]',
+        'Unknown operation. Usage: /drill [setup | ui | status | preflight | grant | facts | stop]',
+      ),
     });
   },
 };

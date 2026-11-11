@@ -15,7 +15,7 @@ v24.22.2；校验场景使用本地模型fixture，真实逆向工具需另行�
 Release 下载），执行：
 
 ```sh
-npm install -g ./gemini-ultra-cli-1.0.0-preview.49.tgz
+npm install -g ./gemini-ultra-cli-1.0.0-preview.50.tgz
 gemini-ultra --version
 gemini-ultra
 ```
@@ -40,6 +40,9 @@ gemini-ultra
    的静态初筛不依赖 IDA 或 Ghidra。深入反编译需要用户安装至少一种对应工具。
 5. `/drill` 或 `/演练台`
    打开本地控制中心，管理提示词、规则、模型与协作状态。`/drill stop` 关闭。
+
+`/team`、`/redteam` 与 `/drill` 的命令说明和反馈随当前语言切换， `/演练台 状态`
+等中文别名仍可使用。事实正文、工具路径、哈希和时间等原始数据保持原文。
 
 `/provider use <名称或ID>`
 同时切换持久化选择与当前会话模型，后续请求立即使用新供应商。 `/provider use`
@@ -339,6 +342,8 @@ Antigravity 的公开工作流概念，使用本 CLI 的模型、权限、子 Ag
 `workspace on`，整个任务共用一份隔离 Git 工作树，详见下文；成员不各自创建并行分支。独立审查员只能读取工件，采用结构化通过/不通过判定；没有证据的明确验收条件应判不通过。模型判定仍需真实任务验收，不能仅凭结构化字段宣称生产就绪。每次原生执行有20分钟上限，达到上限保留进度并阻塞，可由用户显式恢复。
 
 原始阶段报告按项目保存，主会话只接收有长度上限的近期摘要与原始记录路径，避免大量并行报告撑满上下文。测试范围始终遵循用户要求，只运行必要检查。
+
+成员以普通文本结束而未调用完成工具时，会进入最终提交回合。如果这次提交被参数校验拒绝，允许在同一个60秒期限内修正一次，只能提交完成结果，不能继续执行工作工具。参数仍需通过严格校验；再次失败则阻塞。达到轮数或时间上限不会因此获得额外修正，也不会被改记为完成。
 
 参考：[Teamwork](https://antigravity.google/docs/teamwork/)、[Boost](https://antigravity.google/docs/boost/)、[Grill me](https://antigravity.google/docs/commands/grill-me/)。本项目为独立实现。
 

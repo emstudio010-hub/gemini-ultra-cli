@@ -15,7 +15,12 @@ import { MessageType } from '../types.js';
 export const teamCommand: SlashCommand = {
   name: 'team',
   altNames: ['协作', '多代理'],
-  description: 'Configure collaboration: /team auto|single|team [1-8]',
+  get description() {
+    return I18nManager.getInstance().t(
+      '配置协作模式：/team auto|single|team [1-8]',
+      'Configure collaboration: /team auto|single|team [1-8]',
+    );
+  },
   kind: CommandKind.BUILT_IN,
   action: async (context, args) => {
     const i18n = I18nManager.getInstance();
