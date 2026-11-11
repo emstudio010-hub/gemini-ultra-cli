@@ -1,6 +1,6 @@
 # Gemini Ultra CLI Swarm 历史恢复交接
 
-日期：2026-11-11。WI-087，候选 preview.55。沿用 R26/code-audit 自有源码 case、lead/cae/doc，授权和范围见 work/gemini-ultra-agent-20261110/scope.md。没有新付费任务、外部安全目标、供应商配置/数据库/本机逆向工具改动。
+日期：2026-11-11。WI-087，preview.55 已安装。沿用 R26/code-audit 自有源码 case、lead/cae/doc，授权和范围见 work/gemini-ultra-agent-20261110/scope.md。没有新付费任务、外部安全目标、供应商配置/数据库/本机逆向工具改动。
 
 ## 离线复盘
 
@@ -45,7 +45,23 @@ core13项通过；命令11项首轮9通过/2失败，CLI包入口使用旧dist�
 源码原生最终链16命令，只有正确选中的历史蜂群1次loopback协调请求，预算7→8，成员/模型/原留言保持，恢复追加一条留言，绑定选中旧ID；各拒绝与终态路径文件哈希断言均先完成。随后最终报告读取源码packages/cli/package.json的BOM导致JSON.parse失败，实际进程退出1，不能记作整条脚本成功；其内存中的逐场景before/after映射未输出。离线核对16命令原输出、accepted请求和metadata异常位置，并单独验证去BOM解析后版本可读。保留原失败，不重复本机业务链；三平台包的最终脚本须完整退出0并保存映射。更早源码链的坏绑定错误期望专用binding文案，但JSON解析实际返回通用state
 damaged，已只修夹具预期，不改产品保护。
 
-工程证据位于 C:\Users\Administrator\Documents\ChatGPT\gmncliu：swarm-resume-before*、swarm-resume-core*、swarm-resume-command*、swarm-resume-lint.log、swarm-resume-cli-types.log、swarm-resume-script-lint.log、swarm-resume-installed54-before*、swarm-resume-source\*、review-swarm-resume-source.mjs。源码报告版本来自上游根包。55三平台包/安装结果待追加。
+工程证据位于 C:\Users\Administrator\Documents\ChatGPT\gmncliu：swarm-resume-before*、swarm-resume-core*、swarm-resume-command*、swarm-resume-lint.log、swarm-resume-cli-types.log、swarm-resume-script-lint.log、swarm-resume-installed54-before*、swarm-resume-source\*、review-swarm-resume-source.mjs。源码报告版本来自上游根包。
+
+## 分发与全局安装
+
+E-204：产品源 `0a9a3a1f6ac2c51ae8cf6d2171fc1c9bb11b7309`，
+[run 43052663857](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/43052663857)
+三平台 completed/success，限定 swarm-resume 范围。独立下载核对版本/源提交/包SHA、六份rg哈希/执行权限、安装和4基础工具。源标识位于esbuild拆分chunk，初版独立核对器错误要求它出现在轻入口，修为检查真实chunk声明后通过；保留 entry-only-before 失败，不重跑CI或业务。
+
+每平台最终脚本完整退出0：16命令，7退出0/9预期42，12个终态/拒绝场景逐文件before/after
+SHA一致；只有选中的历史蜂群1次loopback协调请求。最终绑定旧ID，累计预算requests7→8/max30/failed1/turns3保持；paused/killed成员状态和原结果、模型保持，原留言与恢复追加留言均核对。恢复后9个非选中任务文件哈希保持。原始输出三次英文completed提示、中文别名/不会重复执行提示及HISTORICAL_SWARM_RESUMED均独立核对。旧未受影响链skipped，47至54基线保留。
+
+E-205：Windows
+CI包 offline 已有缓存安装7948ms/退出0，双命令preview.55，425文件逐一匹配CI包，旧包保留。包 SHA256 为
+`522f82c4ef270411eb61d2a67e6fa2ed92f4ab4ff91e9c9ef489b975d36f4dc9`，入口 SHA256 为
+`0f75d1509b3c97e8f12ba84bf35b8360bf1385cc4ce2137afa376ec4921d9d32`。没有重复本机业务链、启动基准或付费任务。
+
+最终证据：github-preview55-run.json、github-preview55-artifacts-result.json、github-run-43052663857/、global-preview55-install-result.json、global-install-github-preview55-full-result.json。WI-087修复与分发交付，源码/工程正式报告/Obsidian同步。
 
 goal active。真实Teamwork
-E-198仍预算blocked，未变为成功；Swarm已有真实有界交付基线保留，本轮种入历史状态和loopback协调不算新真实多成员交付。更多模型、长任务、长会话语义准确性及复杂跨机逆向继续，不合并master或创建正式Release。
+E-198仍预算blocked，未变为成功；Swarm已有真实有界交付基线保留，本轮种入历史状态和loopback协调不算新真实多成员交付。静态接续发现activateWorkflowBudget未见反向Swarm冲突检查，下一阶段定向核实，不能据本轮声明双向互斥完整。更多模型、长任务、长会话语义准确性及复杂跨机逆向继续，不合并master或创建正式Release。
