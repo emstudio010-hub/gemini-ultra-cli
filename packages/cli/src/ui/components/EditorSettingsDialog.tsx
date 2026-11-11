@@ -20,9 +20,9 @@ import {
 } from '../../config/settings.js';
 import {
   type EditorType,
-  isEditorAvailable,
   EDITOR_DISPLAY_NAMES,
   coreEvents,
+  I18nManager,
 } from '@google/gemini-cli-core';
 import { useKeypress } from '../hooks/useKeypress.js';
 
@@ -40,6 +40,7 @@ export function EditorSettingsDialog({
   settings,
   onExit,
 }: EditorDialogProps): React.JSX.Element {
+  const i18n = I18nManager.getInstance();
   const [selectedScope, setSelectedScope] = useState<LoadableSettingScope>(
     SettingScope.User,
   );
@@ -61,8 +62,36 @@ export function EditorSettingsDialog({
     { isActive: true, priority: true },
   );
 
-  const editorItems: EditorDisplay[] =
-    editorSettingsManager.getAvailableEditorDisplays();
+  const [editorItems, setEditorItems] = useState<EditorDisplay[]>([]);
+  const [loadingEditors, setLoadingEditors] = useState(true);
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+    editorSettingsManager.getAvailableEditorDisplays(controller.signal).then(
+      (items) => {
+        if (active) {
+          setEditorItems(items);
+          setLoadingEditors(false);
+        }
+      },
+      () => {
+        if (active) {
+          setLoadingEditors(false);
+          coreEvents.emitFeedback(
+            'error',
+            i18n.t(
+              '无法检测编辑器，请稍后重试。',
+              'Could not detect editors. Please try again.',
+            ),
+          );
+        }
+      },
+    );
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [i18n]);
 
   const currentPreference =
     settings.forScope(selectedScope).settings.general?.preferredEditor;
@@ -71,7 +100,8 @@ export function EditorSettingsDialog({
         (item: EditorDisplay) => item.type === currentPreference,
       )
     : 0;
-  const isUnsupportedEditor = editorIndex === -1;
+  const isUnsupportedEditor =
+    !loadingEditors && editorItems.length > 0 && editorIndex === -1;
   if (isUnsupportedEditor) {
     editorIndex = 0;
   }
@@ -134,7 +164,10 @@ export function EditorSettingsDialog({
   let mergedEditorName = 'None';
   if (
     settings.merged.general.preferredEditor &&
-    isEditorAvailable(settings.merged.general.preferredEditor)
+    editorItems.some(
+      (item) =>
+        item.type === settings.merged.general.preferredEditor && !item.disabled,
+    )
   ) {
     mergedEditorName =
       EDITOR_DISPLAY_NAMES[settings.merged.general.preferredEditor];
@@ -153,20 +186,26 @@ export function EditorSettingsDialog({
           {focusedSection === 'editor' ? '> ' : '  '}Select Editor{' '}
           <Text color={theme.text.secondary}>{otherScopeModifiedMessage}</Text>
         </Text>
-        <RadioButtonSelect
-          items={editorItems.map((item) => ({
-            label: item.name,
-            value: item.type,
-            disabled: item.disabled,
-            key: item.type,
-          }))}
-          initialIndex={editorIndex}
-          onSelect={handleEditorSelect}
-          isFocused={focusedSection === 'editor'}
-          priority={true}
-          key={selectedScope}
-          maxItemsToShow={editorItems.length}
-        />
+        {loadingEditors ? (
+          <Text>
+            {i18n.t('正在检测可用编辑器…', 'Checking available editors…')}
+          </Text>
+        ) : (
+          <RadioButtonSelect
+            items={editorItems.map((item) => ({
+              label: item.name,
+              value: item.type,
+              disabled: item.disabled,
+              key: item.type,
+            }))}
+            initialIndex={editorIndex}
+            onSelect={handleEditorSelect}
+            isFocused={focusedSection === 'editor'}
+            priority={true}
+            key={selectedScope}
+            maxItemsToShow={editorItems.length}
+          />
+        )}
 
         <Box marginTop={1} flexDirection="column">
           <Text bold={focusedSection === 'scope'}>

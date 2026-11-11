@@ -48,7 +48,7 @@ vi.mock('@google/gemini-cli-core', async (importOriginal) => {
 
 vi.mock('../editors/editorSettingsManager.js', () => ({
   editorSettingsManager: {
-    getAvailableEditorDisplays: () => [
+    getAvailableEditorDisplays: async () => [
       { name: 'None', type: 'not_set', disabled: false },
       { name: 'VS Code', type: 'vscode', disabled: false },
       { name: 'Vim', type: 'vim', disabled: false },

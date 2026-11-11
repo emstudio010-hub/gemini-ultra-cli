@@ -6,7 +6,6 @@
 
 import { createHash } from 'node:crypto';
 import * as os from 'node:os';
-import si from 'systeminformation';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import type {
   StartSessionEvent,
@@ -266,6 +265,9 @@ let cachedGpuInfo: string | undefined;
 
 async function refreshGpuInfo(): Promise<void> {
   try {
+    // systeminformation performs synchronous platform probing on import.
+    // Load it only when enabled telemetry actually requests GPU information.
+    const { default: si } = await import('systeminformation');
     const graphics = await si.graphics();
     if (graphics.controllers && graphics.controllers.length > 0) {
       cachedGpuInfo = graphics.controllers.map((c) => c.model).join(', ');

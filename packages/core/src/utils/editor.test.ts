@@ -30,11 +30,12 @@ import {
   type EditorType,
 } from './editor.js';
 import { coreEvents, CoreEvent } from './events.js';
-import { exec, execSync, spawn, spawnSync } from 'node:child_process';
+import { exec, execFile, execSync, spawn, spawnSync } from 'node:child_process';
 import { debugLogger } from './debugLogger.js';
 
 vi.mock('child_process', () => ({
   exec: vi.fn(),
+  execFile: vi.fn(),
   execSync: vi.fn(),
   spawn: vi.fn(),
   spawnSync: vi.fn(() => ({ error: null, status: 0 })),
@@ -895,9 +896,22 @@ describe('editor utils', () => {
 
   // Helper to create a mock exec that simulates async behavior
   const mockExecAsync = (implementation: (cmd: string) => boolean): void => {
+    (execFile as unknown as Mock).mockImplementation(
+      (
+        file: string,
+        args: string[],
+        _options: unknown,
+        callback: (error: Error | null, stdout: string, stderr: string) => void,
+      ) => {
+        if (implementation(`${file} ${args.join(' ')}`))
+          callback(null, 'C:\\Editor\\editor.exe', '');
+        else callback(new Error('Command not found'), '', '');
+      },
+    );
     (exec as unknown as Mock).mockImplementation(
       (
         cmd: string,
+        _options: unknown,
         callback: (error: Error | null, stdout: string, stderr: string) => void,
       ) => {
         if (implementation(cmd)) {
@@ -910,10 +924,34 @@ describe('editor utils', () => {
   };
 
   describe('hasValidEditorCommandAsync', () => {
+    it('owns a bounded cancellable Windows lookup process without a shell wrapper', async () => {
+      Object.defineProperty(process, 'platform', { value: 'win32' });
+      const controller = new AbortController();
+      mockExecAsync(() => true);
+      expect(
+        await hasValidEditorCommandAsync('vscode', controller.signal),
+      ).toBe(true);
+      expect(execFile).toHaveBeenCalledWith(
+        'where.exe',
+        ['code.cmd'],
+        expect.objectContaining({
+          timeout: 3000,
+          windowsHide: true,
+          signal: controller.signal,
+        }),
+        expect.any(Function),
+      );
+      expect(exec).not.toHaveBeenCalled();
+    });
     it('should return true if vim command exists', async () => {
       Object.defineProperty(process, 'platform', { value: 'linux' });
       mockExecAsync((cmd) => cmd.includes('vim'));
       expect(await hasValidEditorCommandAsync('vim')).toBe(true);
+      expect(exec).toHaveBeenCalledWith(
+        'command -v vim',
+        expect.objectContaining({ timeout: 3000, windowsHide: true }),
+        expect.any(Function),
+      );
     });
 
     it('should return false if vim command does not exist', async () => {

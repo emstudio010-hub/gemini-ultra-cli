@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { exec, execSync, spawn, spawnSync } from 'node:child_process';
+import { exec, execFile, execSync, spawn, spawnSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import { once } from 'node:events';
 import { debugLogger } from './debugLogger.js';
@@ -104,6 +104,7 @@ interface DiffCommand {
 }
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 function getCommandExistsCmd(cmd: string): string {
   return process.platform === 'win32'
@@ -120,9 +121,23 @@ function commandExists(cmd: string): boolean {
   }
 }
 
-async function commandExistsAsync(cmd: string): Promise<boolean> {
+async function commandExistsAsync(
+  cmd: string,
+  signal?: AbortSignal,
+): Promise<boolean> {
   try {
-    await execAsync(getCommandExistsCmd(cmd));
+    const options = {
+      timeout: 3000,
+      windowsHide: true,
+      signal,
+    };
+    if (process.platform === 'win32') {
+      // Run where.exe directly so abort/timeout owns the lookup process rather
+      // than a cmd.exe wrapper that could leave a blocked lookup behind.
+      await execFileAsync('where.exe', [cmd], options);
+    } else {
+      await execAsync(getCommandExistsCmd(cmd), options);
+    }
     return true;
   } catch {
     return false;
@@ -172,10 +187,13 @@ export function hasValidEditorCommand(editor: EditorType): boolean {
 
 export async function hasValidEditorCommandAsync(
   editor: EditorType,
+  signal?: AbortSignal,
 ): Promise<boolean> {
   return Promise.any(
     getEditorCommands(editor).map((cmd) =>
-      commandExistsAsync(cmd).then((exists) => exists || Promise.reject()),
+      commandExistsAsync(cmd, signal).then(
+        (exists) => exists || Promise.reject(),
+      ),
     ),
   ).catch(() => false);
 }

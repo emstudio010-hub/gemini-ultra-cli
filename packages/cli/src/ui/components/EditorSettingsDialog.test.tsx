@@ -11,6 +11,10 @@ import { SettingScope, type LoadedSettings } from '../../config/settings.js';
 import { act } from 'react';
 import { waitFor } from '../../test-utils/async.js';
 import { debugLogger } from '@google/gemini-cli-core';
+import {
+  editorSettingsManager,
+  type EditorDisplay,
+} from '../editors/editorSettingsManager.js';
 
 vi.mock('@google/gemini-cli-core', async (importOriginal) => {
   const actual =
@@ -24,7 +28,7 @@ vi.mock('@google/gemini-cli-core', async (importOriginal) => {
 // Mock editorSettingsManager
 vi.mock('../editors/editorSettingsManager.js', () => ({
   editorSettingsManager: {
-    getAvailableEditorDisplays: () => [
+    getAvailableEditorDisplays: async () => [
       { name: 'VS Code', type: 'vscode', disabled: false },
       { name: 'Vim', type: 'vim', disabled: false },
     ],
@@ -51,8 +55,51 @@ describe('EditorSettingsDialog', () => {
     vi.clearAllMocks();
   });
 
-  const renderWithProvider = async (ui: React.ReactElement) =>
-    renderWithProviders(ui);
+  const renderWithProvider = async (ui: React.ReactElement) => {
+    const view = await act(async () => renderWithProviders(ui));
+    await waitFor(() =>
+      expect(view.lastFrame()).not.toMatch(
+        /Checking available editors|正在检测/,
+      ),
+    );
+    return view;
+  };
+
+  it('keeps Escape responsive while editor detection is pending and aborts discovery on close', async () => {
+    let capturedSignal: AbortSignal | undefined;
+    let resolve!: (items: EditorDisplay[]) => void;
+    vi.spyOn(
+      editorSettingsManager,
+      'getAvailableEditorDisplays',
+    ).mockImplementationOnce((signal) => {
+      capturedSignal = signal;
+      return new Promise<EditorDisplay[]>((done) => {
+        resolve = done;
+      });
+    });
+    const onExit = vi.fn();
+    const view = await act(async () =>
+      renderWithProviders(
+        <EditorSettingsDialog
+          onSelect={vi.fn()}
+          settings={mockSettings}
+          onExit={onExit}
+        />,
+      ),
+    );
+    expect(view.lastFrame()).toMatch(/Checking available editors|正在检测/);
+    expect(view.lastFrame()).not.toContain('VS Code');
+    await act(async () => {
+      view.stdin.write('\u001B');
+    });
+    await view.waitUntilReady();
+    await waitFor(() => expect(onExit).toHaveBeenCalled());
+    view.unmount();
+    expect(capturedSignal?.aborted).toBe(true);
+    await act(async () => {
+      resolve([]);
+    });
+  });
 
   it('renders correctly', async () => {
     const { lastFrame } = await renderWithProvider(

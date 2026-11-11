@@ -751,3 +751,10 @@
 - E-166：offline已有缓存安装7041ms/退出0，双命令preview.43，424文件匹配Windows
   CI包，旧包保留。WI-075交付，无付费重跑或本机重复fixture，不改个人配置/DB/本机逆向工具；离线字符-28.3055%不推断总Token/费用/延迟。goal
   active，下一步回到最新版本启动/加载定位，旧preview.11启动时间不是当前事实，不合并master/正式Release。
+
+## 2026-11-11 启动导入阻塞修复
+
+- E-167/WI-076：preview.43新鲜隔离ConPTY观察4025ms输入框/5047ms本地命令、CLI退出0/0模型。阶段观察与独立CPU采样定位导入时16编辑器同步where检查，约2094ms同步等待；另systeminformation初始化getCodepage约57ms。不是凭旧preview.11或静态代码猜测根因，原日志/CPU记录留存；诊断宿主因探针保活，在确认CLI退出后结束对应宿主，不伪造辅助退出0。
+- 编辑器设置改按打开时异步分批发现、3秒单次超时/AbortSignal/关闭取消，Win直接where.exe无cmd包装，保留排序/禁用/偏好，不在render同步重查。GPU库延迟至真实遥测读取，不改用户设置。2管理器+7对话框+2审批焦点+11异步查找+4GPU场景通过，严格相关lint/type；不跑全量/冒烟/付费。
+- 源码新观察2012ms输入框/2809ms本地命令，CLI退出0/0模型；单次观察/源码与包及缓存差异，不宣称稳定加速百分比。候选preview.44待三平台工件/安装与最终包一次启动及/editor观察；内置命令仍约0.5至0.7秒，真实外部编辑器启动未验收。交接docs/ultra-startup-lazy-handoff.md，goal
+  active，不合并master/正式Release。
