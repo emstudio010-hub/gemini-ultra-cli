@@ -24,7 +24,29 @@ let root: string;
 beforeEach(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'ultra-swarm-command-'));
   vi.stubEnv('GEMINI_ULTRA_LOCALE_FILE', path.join(root, 'locale.json'));
+  vi.stubEnv('GEMINI_ULTRA_PROVIDERS_FILE', path.join(root, 'providers.json'));
   I18nManager.getInstance().setLocale('en');
+});
+
+it('prepares a redteam role model locally and advertises it to the coordinator', async () => {
+  const { context } = resumeContext();
+  const prepare = swarmCommand.subCommands!.find(
+    (command) => command.name === 'prepare',
+  )!;
+  const model = swarmCommand.subCommands!.find(
+    (command) => command.name === 'model',
+  )!;
+  await prepare.action!(context, 'Review supplied local source');
+  await model.action!(context, 'redteam-analyst native:gemini-review');
+  expect(latestSwarm(root)?.roleModels).toMatchObject({
+    'redteam-analyst': 'native:gemini-review',
+  });
+  const result = await resumeContext().resume.action!(context, '');
+  expect(result).toMatchObject({
+    type: 'submit_prompt',
+    content: expect.stringContaining('redteam-analyst'),
+  });
+  expect(latestSwarm(root)?.budget.requests).toBe(0);
 });
 afterEach(() => {
   fs.rmSync(root, { recursive: true, force: true });

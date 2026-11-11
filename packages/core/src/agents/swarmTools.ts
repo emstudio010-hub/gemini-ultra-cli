@@ -20,14 +20,16 @@ import {
   swarmModelSnapshot,
   currentSwarmActor,
   postSwarmMessage,
+  type SwarmMember,
 } from './swarm.js';
+import { swarmRoleSchema } from './agentModelRouting.js';
 import { swarmContextInstructions } from './swarmContext.js';
 
 interface ManageParams {
   swarm_id: string;
   action: 'add' | 'post' | 'wait' | 'status' | 'remove' | 'finish';
   name?: string;
-  agent?: 'researcher' | 'coder' | 'workflow-auditor';
+  agent?: SwarmMember['agent'];
   brief?: string;
   text?: string;
 }
@@ -106,7 +108,7 @@ export class ManageSwarmTool extends BaseDeclarativeTool<
     super(
       ManageSwarmTool.Name,
       'Manage Swarm',
-      'Coordinate a /swarm created by the user: add named local workers with public ownership/acceptance briefs, post @mentions, await active turns, remove members or finish after independent verification. Task-wide model dispatch, failed-turn and wake budgets are cumulative across all names and resumes. A blocked swarm needs the user to change /swarm budget and resume or cancel; do not bypass limits using successor members or another workflow. Returns immediately when adding workers; use wait instead of model polling. Writers and verifiers share a workspace and are serialized; read-only researchers can run concurrently.',
+      'Coordinate a /swarm created by the user: add named local workers with public ownership/acceptance briefs, post @mentions, await active turns, remove members or finish after independent verification. Use redteam-analyst for authorized local source/sample review; drill authorization is required before adding or dispatching this read-only role. Task-wide model dispatch, failed-turn and wake budgets are cumulative across all names and resumes. A blocked swarm needs the user to change /swarm budget and resume or cancel; do not bypass limits using successor members or another workflow. Returns immediately when adding workers; use wait instead of model polling. Writers and verifiers share a workspace and are serialized; read-only researchers and redteam analysts can run concurrently.',
       Kind.Agent,
       {
         type: 'object',
@@ -119,7 +121,7 @@ export class ManageSwarmTool extends BaseDeclarativeTool<
           name: { type: 'string', pattern: '^[a-z][a-z0-9-]{0,31}$' },
           agent: {
             type: 'string',
-            enum: ['researcher', 'coder', 'workflow-auditor'],
+            enum: swarmRoleSchema.options,
           },
           brief: { type: 'string', maxLength: 8000 },
           text: { type: 'string', maxLength: 4000 },

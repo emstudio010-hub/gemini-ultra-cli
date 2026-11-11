@@ -76,8 +76,8 @@ async function action(
         type: MessageType.INFO,
         text:
           i18n.t(
-            '用法：/swarm model <researcher|coder|workflow-auditor|@成员> <供应商ID:模型|native:gemini-模型|inherit>\n已配置模型：',
-            'Usage: /swarm model <researcher|coder|workflow-auditor|@member> <provider:model|native:gemini-model|inherit>\nConfigured models:',
+            '用法：/swarm model <researcher|coder|redteam-analyst|workflow-auditor|@成员> <供应商ID:模型|native:gemini-模型|inherit>\n已配置模型：',
+            'Usage: /swarm model <researcher|coder|redteam-analyst|workflow-auditor|@member> <provider:model|native:gemini-model|inherit>\nConfigured models:',
           ) +
           '\n' +
           availableAgentModels().join('\n'),
@@ -279,7 +279,7 @@ async function action(
     }
     return {
       type: 'submit_prompt',
-      content: `You coordinate native swarm ${swarm.id}. Objective: ${swarm.objective}\nUse manage_swarm to add named workers with public briefs including owned paths, forbidden scope and acceptance criteria. Use local researcher/coder roles and at least one independent workflow-auditor verifier. Delegate technical work and keep the user informed. All members communicate publicly via post_swarm_message and @mentions; idle members wait without model calls. Use manage_swarm wait to await active turns, never repeated status polling. Add or mention the verifier AFTER implementation is ready; finish only after a current independent verdict. Shared working tree: writer/verifier turns are serialized; researchers may run concurrently. Honor the user's minimal validation requirements; do not add unrelated full/smoke suites. A paused member or unverified deliverable is not completion. Show /swarm board for live monitoring. Read the saved board and reuse existing evidence on resume.`,
+      content: `You coordinate native swarm ${swarm.id}. Objective: ${swarm.objective}\nUse manage_swarm to add named workers with public briefs including owned paths, forbidden scope and acceptance criteria. Use local researcher/coder roles, redteam-analyst for authorized local source/sample review, and at least one independent workflow-auditor verifier. Redteam analysts require drill authorization and an explicitly scoped brief. Delegate technical work and keep the user informed. All members communicate publicly via post_swarm_message and @mentions; idle members wait without model calls. Use manage_swarm wait to await active turns, never repeated status polling. Add or mention the verifier AFTER implementation is ready; finish only after a current independent verdict. Shared working tree: writer/verifier turns are serialized; read-only researchers and redteam analysts may run concurrently. Honor the user's minimal validation requirements; do not add unrelated full/smoke suites. A paused member or unverified deliverable is not completion. Show /swarm board for live monitoring. Read the saved board and reuse existing evidence on resume.`,
     };
   } catch (error) {
     context.ui.addItem({

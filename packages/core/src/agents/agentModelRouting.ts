@@ -23,6 +23,13 @@ export const agentRoleModelsSchema = z.object({
   coder: agentModelSpecSchema.optional(),
   'workflow-auditor': agentModelSpecSchema.optional(),
 });
+export const swarmRoleSchema = z.enum([
+  ...workflowRoleSchema.options,
+  'redteam-analyst',
+]);
+export const swarmRoleModelsSchema = agentRoleModelsSchema.extend({
+  'redteam-analyst': agentModelSpecSchema.optional(),
+});
 interface ModelScope {
   model?: string;
   used: Set<string>;

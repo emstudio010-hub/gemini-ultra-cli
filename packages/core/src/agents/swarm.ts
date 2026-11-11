@@ -9,8 +9,9 @@ import { randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { lock, lockSync } from 'proper-lockfile';
 import { z } from 'zod';
-import type { WorkflowAgentRunner } from './agentWorkflows.js';
+import type { WorkflowAgentResult } from './agentWorkflows.js';
 import { hasOpenWorkflowBudget } from './workflowBudget.js';
+import { readDrillGrant } from '../drill/drillGrant.js';
 import { withAgentTaskLock } from './agentTaskLock.js';
 import {
   swarmResultArchiveSchema,
@@ -27,15 +28,15 @@ import {
 } from './agentWorktree.js';
 import {
   agentModelSpecSchema,
-  agentRoleModelsSchema,
-  workflowRoleSchema,
+  swarmRoleModelsSchema,
+  swarmRoleSchema,
   normalizeAgentModel,
   withAgentModel,
 } from './agentModelRouting.js';
 
 const memberSchema = z.object({
   name: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/),
-  agent: z.enum(['researcher', 'coder', 'workflow-auditor']),
+  agent: swarmRoleSchema,
   brief: z.string().min(1).max(8000),
   state: z.enum(['queued', 'working', 'waiting', 'paused', 'killed']),
   lastRead: z.number().int().nonnegative().default(0),
@@ -67,7 +68,7 @@ const swarmSchema = z.object({
   budgetVersion: z.literal(1).optional(),
   accountingUnknown: z.boolean().default(false),
   recoveryPath: z.string().optional(),
-  roleModels: agentRoleModelsSchema.default({}),
+  roleModels: swarmRoleModelsSchema.default({}),
   memberModels: z
     .record(z.string().regex(/^[a-z][a-z0-9-]{0,31}$/), agentModelSpecSchema)
     .default({}),
@@ -148,6 +149,11 @@ function readPointer(root: string) {
 }
 export type Swarm = z.infer<typeof swarmSchema>;
 export type SwarmMember = z.infer<typeof memberSchema>;
+export type SwarmAgentRunner = (
+  agent: SwarmMember['agent'],
+  prompt: string,
+  signal: AbortSignal,
+) => Promise<WorkflowAgentResult>;
 export type SwarmBudgetLimits = Pick<
   Swarm['budget'],
   'maxRequests' | 'maxFailedTurns' | 'maxTurns'
@@ -509,7 +515,7 @@ export function setSwarmModel(
     if (model) swarm.memberModels[name] = model;
     else delete swarm.memberModels[name];
   } else {
-    const role = workflowRoleSchema.parse(target);
+    const role = swarmRoleSchema.parse(target);
     if (
       swarm.members.some(
         (member) =>
@@ -539,7 +545,7 @@ export class SwarmEngine {
   constructor(
     private readonly root: string,
     readonly id: string,
-    private readonly runAgent: WorkflowAgentRunner,
+    private readonly runAgent: SwarmAgentRunner,
   ) {
     const swarm = readSwarm(root, id);
     if (swarm.ownerPid !== process.pid) {
@@ -568,6 +574,7 @@ export class SwarmEngine {
   }
   add(name: string, agent: SwarmMember['agent'], brief: string): void {
     const swarm = this.activeState();
+    assertMemberAuthorization(agent);
     const member = memberSchema.parse({
       name,
       agent,
@@ -753,7 +760,7 @@ export class SwarmEngine {
     try {
       let swarm = this.activeState();
       let member = swarm.members.find((entry) => entry.name === name)!;
-      if (member.agent !== 'researcher') {
+      if (!['researcher', 'redteam-analyst'].includes(member.agent)) {
         const previous = writerQueues.get(this.root) || Promise.resolve();
         const queued = new Promise<void>((resolve) => {
           releaseQueue = resolve;
@@ -771,6 +778,7 @@ export class SwarmEngine {
       signal.throwIfAborted();
       swarm = this.activeState();
       member = swarm.members.find((entry) => entry.name === name)!;
+      assertMemberAuthorization(member.agent);
       const board = readSwarmBoard(this.root, this.id);
       member.lastRead = board.at(-1)?.seq || 0;
       member.state = 'working';
@@ -899,10 +907,16 @@ export class SwarmEngine {
     }
   }
 }
+function assertMemberAuthorization(agent: SwarmMember['agent']): void {
+  if (agent === 'redteam-analyst' && !readDrillGrant().granted)
+    throw new Error(
+      '红队成员需要演练授权；请在 /drill 中记录授权后重试。Red-team member requires drill authorization; record it in /drill before retrying.',
+    );
+}
 export function getSwarmEngine(
   root: string,
   id: string,
-  runner: WorkflowAgentRunner,
+  runner: SwarmAgentRunner,
 ): SwarmEngine {
   const key = engineKey(root, id);
   let engine = engines.get(key);
