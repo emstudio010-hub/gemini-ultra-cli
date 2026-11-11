@@ -775,3 +775,11 @@
 - E-172：offline缓存安装7339ms退出0，双命令preview.45，425文件匹配Windows
   CI包；包SHA04b345aa…/入口SHAe3b4d549…，旧包保留。WI-077本地交付，10秒是单卡片上限不是全启动上限；认证、多扩展、真实远程长任务/更多模型/Teamwork长会话/复杂逆向继续，goal
   active，不合并master/正式Release。
+
+## 2026-11-11 IDE 发现与完整参数 Enter
+
+- E-173/WI-078：普通终端无IDE环境线索且无伴侣文件时跳过全进程扫描；有旧/新文件或目录权限异常仍走原发现与校验。保留/ide原行为，惰性代理方案已撤回未提交。原IDE测试误重置instance，已修正instancePromise保证独立初始化；110相关项通过/1旧skip。
+- 更快加载暴露/effort
+  low已完整输入仍Enter补全并追加空格的问题，旧几次ConPTY40秒被watchdog停止、passed=false/0模型，原exit0不代表自然退出。现完整参数文本相同且未主动导航时Enter提交，部分参数/其他建议/Shift+Enter不变；9定向输入项与相关严格lint/type通过。源码实际CLI1931ms输入框/2217ms命令确认/3690ms自然quit，0模型；不是稳定性能百分比。
+- 首轮CI源8bf231c未升版本仍45，身份拒绝，后源24a9f08/run42937838265显式46；两轮均缺最终兼容/输入修复，不作交付安装。最终候选46待新三平台/安装，旧失败保留。交接docs/ultra-ide-startup-handoff.md，goal
+  active，不合并master/正式Release。

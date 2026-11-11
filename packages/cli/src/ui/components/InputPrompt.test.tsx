@@ -1665,6 +1665,48 @@ describe('InputPrompt', () => {
     unmount();
   });
 
+  it.each(['/effort low', '/effort low '])(
+    'submits an already typed argument on Enter without adding more spaces: %s',
+    async (input) => {
+      const command: SlashCommand = {
+        name: 'effort',
+        kind: CommandKind.BUILT_IN,
+        description: 'Choose effort',
+        action: vi.fn(),
+        autoExecute: false,
+        completion: vi.fn(),
+      };
+      mockedUseCommandCompletion.mockReturnValue({
+        ...mockCommandCompletion,
+        showSuggestions: true,
+        suggestions: [{ label: 'low', value: 'low' }],
+        activeSuggestionIndex: 0,
+        getCompletedText: vi.fn().mockReturnValue('/effort low '),
+        slashCompletionRange: {
+          completionStart: 8,
+          completionEnd: input.length,
+          getCommandFromSuggestion: vi.fn(),
+          isArgumentCompletion: true,
+          leafCommand: command,
+        },
+      });
+      props.buffer.setText(input);
+      props.buffer.lines = [input];
+      props.buffer.cursor = [0, input.length];
+      const view = await renderWithProviders(<TestInputPrompt {...props} />, {
+        uiActions,
+      });
+      await act(async () => {
+        view.stdin.write('\r');
+      });
+      await waitFor(() =>
+        expect(props.onSubmit).toHaveBeenCalledWith(input.trim()),
+      );
+      expect(mockCommandCompletion.handleAutocomplete).not.toHaveBeenCalled();
+      view.unmount();
+    },
+  );
+
   it('should auto-execute argument completion when command has autoExecute: true', async () => {
     // Simulates: /mcp auth <server> where user selects a server from completions
     const authCommand: SlashCommand = {

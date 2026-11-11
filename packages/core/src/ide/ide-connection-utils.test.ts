@@ -18,6 +18,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import {
   getConnectionConfigFromFile,
+  hasIdeConnectionFiles,
   validateWorkspacePath,
   getIdeServerHost,
 } from './ide-connection-utils.js';
@@ -80,6 +81,32 @@ describe('ide-connection-utils', () => {
   });
 
   describe('getConnectionConfigFromFile', () => {
+    it('keeps both legacy and current companion filenames as discovery hints', async () => {
+      for (const file of [
+        'gemini-ide-server-123.json',
+        'gemini-ide-server-123-456.json',
+      ]) {
+        vi.mocked(fs.promises.readdir).mockResolvedValue([
+          file,
+        ] as unknown as Awaited<ReturnType<typeof fs.promises.readdir>>);
+        expect(await hasIdeConnectionFiles()).toBe(true);
+      }
+      vi.mocked(fs.promises.readdir).mockResolvedValue([
+        'unrelated.json',
+      ] as unknown as Awaited<ReturnType<typeof fs.promises.readdir>>);
+      expect(await hasIdeConnectionFiles()).toBe(false);
+    });
+
+    it('skips a missing companion directory but preserves discovery after other filesystem errors', async () => {
+      vi.mocked(fs.promises.readdir).mockRejectedValueOnce(
+        Object.assign(new Error('missing'), { code: 'ENOENT' }),
+      );
+      expect(await hasIdeConnectionFiles()).toBe(false);
+      vi.mocked(fs.promises.readdir).mockRejectedValueOnce(
+        Object.assign(new Error('denied'), { code: 'EACCES' }),
+      );
+      expect(await hasIdeConnectionFiles()).toBe(true);
+    });
     it('should return config from the specific pid file if it exists', async () => {
       const config = { port: '1234', workspacePath: '/test/workspace' };
       vi.mocked(fs.promises.readFile).mockResolvedValue(JSON.stringify(config));

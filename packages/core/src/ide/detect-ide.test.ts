@@ -40,6 +40,15 @@ describe('detectIde', () => {
     vi.stubEnv('POSITRON', '');
     vi.stubEnv('__COG_BASHRC_SOURCED', '');
     vi.stubEnv('TERMINAL_EMULATOR', '');
+    for (const key of [
+      'GEMINI_CLI_IDE_PID',
+      'GEMINI_CLI_IDE_WORKSPACE_PATH',
+      'GEMINI_CLI_IDE_SERVER_PORT',
+      'GEMINI_CLI_IDE_SERVER_STDIO_COMMAND',
+      'ZED_SESSION_ID',
+      'XCODE_VERSION_ACTUAL',
+    ])
+      vi.stubEnv(key, '');
   });
 
   afterEach(() => {

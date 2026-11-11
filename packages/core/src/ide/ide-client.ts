@@ -31,6 +31,7 @@ import {
 import { debugLogger } from '../utils/debugLogger.js';
 import {
   getConnectionConfigFromFile,
+  hasIdeConnectionFiles,
   getConnectionFailureAdvice,
   getIdeServerHost,
   getPortFromEnv,
@@ -100,7 +101,7 @@ export class IdeClient {
     if (!IdeClient.instancePromise) {
       IdeClient.instancePromise = (async () => {
         const client = new IdeClient();
-        if (!shouldProbeIdeProcess()) {
+        if (!shouldProbeIdeProcess() && !(await hasIdeConnectionFiles())) {
           client.currentIde = undefined;
           return client;
         }

@@ -128,6 +128,22 @@ export function getStdioConfigFromEnv(): StdioConfig | undefined {
 
 const IDE_SERVER_FILE_REGEX = /^gemini-ide-server-(\d+)-\d+\.json$/;
 
+/** Cheap presence check; ownership, workspace and PID validation stay in the reader. */
+export async function hasIdeConnectionFiles(): Promise<boolean> {
+  try {
+    const files = await fs.promises.readdir(
+      path.join(os.tmpdir(), 'gemini', 'ide'),
+    );
+    return files.some((file) =>
+      /^gemini-ide-server-\d+(?:-\d+)?\.json$/.test(file),
+    );
+  } catch (error) {
+    // A missing directory proves there are no companion files. Other read
+    // failures retain the existing discovery path instead of disabling it.
+    return !(isNodeError(error) && error.code === 'ENOENT');
+  }
+}
+
 async function verifyAndReadFile(
   filePath: string,
 ): Promise<string | undefined> {

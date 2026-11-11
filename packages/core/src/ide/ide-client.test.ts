@@ -28,6 +28,7 @@ import * as os from 'node:os';
 
 import {
   getConnectionConfigFromFile,
+  hasIdeConnectionFiles,
   getStdioConfigFromEnv,
   getPortFromEnv,
   validateWorkspacePath,
@@ -62,8 +63,9 @@ describe('IdeClient', () => {
 
   beforeEach(async () => {
     // Reset singleton instance for test isolation
-    (IdeClient as unknown as { instance: IdeClient | undefined }).instance =
-      undefined;
+    (
+      IdeClient as unknown as { instancePromise: Promise<IdeClient> | null }
+    ).instancePromise = null;
 
     // Mock environment variables
     process.env['GEMINI_CLI_IDE_WORKSPACE_PATH'] = '/test/workspace';
@@ -110,6 +112,36 @@ describe('IdeClient', () => {
   });
 
   describe('connect', () => {
+    it('skips process discovery only when both environment hints and companion files are absent', async () => {
+      (
+        IdeClient as unknown as { instancePromise: Promise<IdeClient> | null }
+      ).instancePromise = null;
+      vi.mocked(getIdeProcessInfo).mockClear();
+      vi.mocked(shouldProbeIdeProcess).mockReturnValue(false);
+      vi.mocked(hasIdeConnectionFiles).mockResolvedValue(false);
+      const client = await IdeClient.getInstance();
+      expect(getIdeProcessInfo).not.toHaveBeenCalled();
+      expect(client.getCurrentIde()).toBeUndefined();
+    });
+
+    it('keeps file-based IDE discovery available without terminal environment hints', async () => {
+      (
+        IdeClient as unknown as { instancePromise: Promise<IdeClient> | null }
+      ).instancePromise = null;
+      vi.mocked(getIdeProcessInfo).mockClear();
+      vi.mocked(shouldProbeIdeProcess).mockReturnValue(false);
+      vi.mocked(hasIdeConnectionFiles).mockResolvedValue(true);
+      vi.mocked(getConnectionConfigFromFile).mockResolvedValue({
+        ideInfo: IDE_DEFINITIONS.antigravity,
+      });
+      const client = await IdeClient.getInstance();
+      expect(getIdeProcessInfo).toHaveBeenCalledOnce();
+      expect(detectIde).toHaveBeenLastCalledWith(
+        { pid: 12345, command: 'test-ide' },
+        IDE_DEFINITIONS.antigravity,
+      );
+      expect(client.getCurrentIde()).toBeDefined();
+    });
     it('should connect using HTTP when port is provided in config file', async () => {
       const config = { port: '8080' };
       vi.mocked(getConnectionConfigFromFile).mockResolvedValue(config);

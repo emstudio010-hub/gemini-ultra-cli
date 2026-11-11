@@ -1121,6 +1121,20 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
 
                 if (
                   isArgumentCompletion &&
+                  leafCommand?.action &&
+                  !hasUserNavigatedSuggestions.current &&
+                  completion.getCompletedText(suggestion)?.trim() ===
+                    buffer.text.trim()
+                ) {
+                  // An already complete argument (e.g. /effort low) must not
+                  // get stuck accepting the same suggestion and adding spaces.
+                  setExpandedSuggestionIndex(-1);
+                  handleSubmit(buffer.text);
+                  return true;
+                }
+
+                if (
+                  isArgumentCompletion &&
                   isAutoExecutableCommand(leafCommand)
                 ) {
                   // isArgumentCompletion guarantees leafCommand exists
