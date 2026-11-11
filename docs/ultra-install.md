@@ -15,7 +15,7 @@ v24.22.2；校验场景使用本地模型fixture，真实逆向工具需另行�
 Release 下载），执行：
 
 ```sh
-npm install -g ./gemini-ultra-cli-1.0.0-preview.60.tgz
+npm install -g ./gemini-ultra-cli-1.0.0-preview.61.tgz
 gemini-ultra --version
 gemini-ultra
 ```
@@ -137,7 +137,7 @@ macOS 使用
 
 ## 自定义逆向工具路径
 
-可直接在CLI保存本机工具路径，下次启动继续使用，无需修改shell配置：
+可直接在CLI保存本机工具路径，下次启动继续使用，无需修改shell配置。演练台的「本机工具链 → 配置工具路径」也可选择工具、粘贴完整路径并保存，或清除/重新读取已保存路径。界面无需给路径加引号；使用与CLI相同的配置、备份和校验。保存后点击「查看就绪状态」重新巡检；每次点击读取当前配置，同时点击只合并正在进行的巡检。CLI忙碌时会拒绝修改。
 
 ```text
 /drill tools

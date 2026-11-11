@@ -28,6 +28,9 @@ import {
   readUltraRuntime,
   saveUltraRuntime,
   listCollaborationTasks,
+  drillToolNames,
+  savedDrillToolPaths,
+  saveDrillToolPath,
   type Config,
 } from '@google/gemini-cli-core';
 import { registerCleanup } from '../utils/cleanup.js';
@@ -162,11 +165,19 @@ async function handleRequest(
     return;
   }
   if (req.method === 'GET' && pathname === '/api/preflight') {
-    preflight ??= runDrillPreflight().catch((error: unknown) => {
-      preflight = undefined;
-      throw error;
-    });
+    // Coalesce concurrent requests, but never reuse a completed discovery.
+    // Paths and installations can change while the cockpit remains open.
+    if (!preflight) {
+      const pending = runDrillPreflight().finally(() => {
+        if (preflight === pending) preflight = undefined;
+      });
+      preflight = pending;
+    }
     reply(res, 200, await preflight);
+    return;
+  }
+  if (req.method === 'GET' && pathname === '/api/tool-paths') {
+    reply(res, 200, { ...savedDrillToolPaths(), tools: drillToolNames });
     return;
   }
   if (req.method === 'GET' && pathname === '/api/skills') {
@@ -197,6 +208,55 @@ async function handleRequest(
       409,
       '会话忙碌或正在等待确认，请回到终端完成当前操作。',
     );
+  if (pathname === '/api/tool-paths') {
+    const input = z
+      .discriminatedUnion('action', [
+        z
+          .object({
+            action: z.literal('save'),
+            name: z.enum(drillToolNames),
+            path: z.string().min(1).max(32768),
+          })
+          .strict(),
+        z
+          .object({ action: z.literal('reset'), name: z.enum(drillToolNames) })
+          .strict(),
+      ])
+      .safeParse(body);
+    if (!input.success)
+      throw new RequestError(
+        400,
+        I18nManager.getInstance().t(
+          '请选择工具并填写完整路径；清除时只需工具名称。',
+          'Choose a tool and enter its full path; resetting only needs the tool name.',
+        ),
+      );
+    try {
+      const saved = saveDrillToolPath(
+        input.data.name,
+        input.data.action === 'save' ? input.data.path : undefined,
+      );
+      preflight = undefined;
+      reply(res, 200, {
+        ...saved,
+        tools: drillToolNames,
+        message: I18nManager.getInstance().t(
+          input.data.action === 'save'
+            ? '路径已保存。点击「查看就绪状态」重新检查。'
+            : '已清除保存路径。点击「查看就绪状态」重新检查。',
+          input.data.action === 'save'
+            ? 'Path saved. Click “Check availability” to check again.'
+            : 'Saved path cleared. Click “Check availability” to check again.',
+        ),
+      });
+    } catch (error) {
+      throw new RequestError(
+        400,
+        error instanceof Error ? error.message : 'Could not save tool paths.',
+      );
+    }
+    return;
+  }
   if (pathname === '/api/prompt') {
     const prompt = z.string().trim().min(1).safeParse(body['prompt']);
     if (!prompt.success) throw new RequestError(400, '请先输入任务。');

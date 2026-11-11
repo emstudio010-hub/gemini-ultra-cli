@@ -994,3 +994,11 @@ ID导出原全文及SHA一致，两本地命令0新增请求，members/owner/boa
   CI包，旧包保留。个人locale/provider
   SHA保持59末值，工具配置仍未创建，无业务/基准/付费重跑。WI-092修复及分发交付，goal
   active；换电脑仍需当地工具路径和兼容版本。更多模型/长任务/语义准确性/复杂跨机逆向继续，不合并master/正式Release。docs/ultra-drill-tool-paths-handoff.md。
+
+## 2026-11-11 演练台工具路径与巡检刷新
+
+WI-093/E-221/F-060：同一源服务preflight先A、CLI共享存储已改B后仍返回A，旧完成Promise永久缓存复现。改仅在途请求合并、完成释放、保存失效与Promise身份保护，UI迟到结果不覆盖保存后提示；新增本机工具链details编辑入口和GET/POST
+tool-paths，共用60存储的15工具/严格输入/备份/损坏保留，沿用token/Host/Origin/忙碌拒绝。按需读取，不加启动扫描或后台巡检。4组实际HTTP定向通过（认证/输入、无效及忙碌保持、并发合并与CLI外部更新刷新、备份/坏文件SHA保持）；2次受控IDA
+loopback状态，0模型/任务。实际浏览器中文保存巡检A/坏候选重读/改B巡检/清除，英文标签及保存反馈通过，source服务/隔离会话夹具，不冒充已安装交互终端或真实逆向。Node副本仅发现路径未作为工具运行。相关strict
+type/lint通过；首中文翻译key漏引号语法错误修复，原日志保留。候选61待tool-paths范围三平台包与全局安装，60基线保留，个人配置DB工具未改。goal
+active。
