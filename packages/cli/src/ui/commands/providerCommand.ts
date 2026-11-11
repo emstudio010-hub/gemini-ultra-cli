@@ -8,6 +8,7 @@ import {
   ProviderManager,
   PROVIDER_PRESET_TEMPLATES,
   I18nManager,
+  ProviderConfigConflictError,
 } from '@google/gemini-cli-core';
 import {
   type CommandContext,
@@ -32,10 +33,12 @@ function reportError(context: CommandContext, error: unknown): void {
   context.ui.addItem({
     type: MessageType.ERROR,
     text:
-      t(
-        '供应商设置失败，请检查输入参数和配置文件写入权限。',
-        'Provider change failed. Check the inputs and configuration file permissions.',
-      ) + (error instanceof Error ? ` (${error.name})` : ''),
+      error instanceof ProviderConfigConflictError
+        ? error.message
+        : t(
+            '供应商设置失败，请检查输入参数和配置文件写入权限。',
+            'Provider change failed. Check the inputs and configuration file permissions.',
+          ) + (error instanceof Error ? ` (${error.name})` : ''),
   });
 }
 
@@ -249,6 +252,12 @@ export const providerCommand: SlashCommand = {
           'Usage: /provider [list|add|use]; no arguments opens configuration.',
         ),
       });
+      return;
+    }
+    try {
+      ProviderManager.getInstance().reloadFromDisk();
+    } catch (error) {
+      reportError(context, error);
       return;
     }
     return {

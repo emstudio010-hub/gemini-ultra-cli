@@ -7,7 +7,9 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
+import { lockSync } from 'proper-lockfile';
+import { I18nManager } from '../i18n/i18nManager.js';
 import { z } from 'zod';
 import { readLocalJsonConfig } from '../utils/localJsonConfig.js';
 import {
@@ -74,6 +76,50 @@ export function normalizeProviderUrl(value: string): string {
 
 const modelId = z.string().trim().min(1);
 const MAX_PROVIDERS_FILE_BYTES = 4 * 1024 * 1024;
+
+export class ProviderConfigConflictError extends Error {
+  constructor(busy = false) {
+    super(
+      I18nManager.getInstance().t(
+        busy
+          ? '另一个 CLI 正在保存供应商配置，请稍后重试。'
+          : '供应商配置已被其他 CLI 或编辑器更改。本次修改未保存，请重新打开 /provider 后重试。',
+        busy
+          ? 'Another CLI is saving provider configuration. Retry shortly.'
+          : 'Provider configuration changed in another CLI or editor. Your change was not saved. Reopen /provider and retry.',
+      ),
+    );
+    this.name = 'ProviderConfigConflictError';
+  }
+}
+
+/** Compare bytes for normal configurations; never read an oversized recovery file. */
+function providerFileRevision(file: string): string {
+  try {
+    const fd = fs.openSync(file, 'r');
+    try {
+      const info = fs.fstatSync(fd);
+      if (!info.isFile() || info.size > MAX_PROVIDERS_FILE_BYTES)
+        return `metadata:${info.dev}:${info.ino}:${info.size}:${info.mtimeMs}:${info.ctimeMs}`;
+      const bytes = Buffer.alloc(info.size + 1);
+      let read = 0;
+      while (read < bytes.length) {
+        const count = fs.readSync(fd, bytes, read, bytes.length - read, read);
+        if (!count) break;
+        read += count;
+      }
+      return createHash('sha256').update(bytes.subarray(0, read)).digest('hex');
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch (error) {
+    if (error instanceof Error && 'code' in error) {
+      if (error.code === 'ENOENT') return 'missing';
+      return `unreadable:${error.code}`;
+    }
+    throw error;
+  }
+}
 const protocolSchema = z.enum([
   'openai-chat',
   'openai-responses',
@@ -173,16 +219,17 @@ export class ProviderManager {
   private static instance: ProviderManager | null = null;
   private filePath: string;
   private data: ProvidersConfigFile;
+  private diskRevision = '';
 
   constructor(filePath: string = getDefaultProvidersFilePath()) {
-    this.filePath = filePath;
-    this.data = this.loadFromDisk();
+    this.filePath = path.resolve(filePath);
+    this.data = this.readSnapshot();
   }
 
   static getInstance(filePath?: string): ProviderManager {
     if (
       !ProviderManager.instance ||
-      (filePath && ProviderManager.instance.filePath !== filePath)
+      (filePath && ProviderManager.instance.filePath !== path.resolve(filePath))
     ) {
       ProviderManager.instance = new ProviderManager(filePath);
     }
@@ -207,6 +254,24 @@ export class ProviderManager {
     );
   }
 
+  private readSnapshot(): ProvidersConfigFile {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const before = providerFileRevision(this.filePath);
+      const data = this.loadFromDisk();
+      const after = providerFileRevision(this.filePath);
+      if (before === after) {
+        this.diskRevision = after;
+        return data;
+      }
+    }
+    throw new ProviderConfigConflictError();
+  }
+
+  /** Explicitly reopen current disk settings; never silently merge a stale edit. */
+  reloadFromDisk(): void {
+    this.data = this.readSnapshot();
+  }
+
   saveToDisk(next: ProvidersConfigFile = this.data): void {
     const validated = validateProvidersConfig(next);
     const content = JSON.stringify(validated, null, 2);
@@ -216,8 +281,21 @@ export class ProviderManager {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
+    let release: () => void;
+    try {
+      release = lockSync(
+        path.join(fs.realpathSync(dir), path.basename(this.filePath)),
+        { realpath: false, retries: 0, stale: 30000 },
+      );
+    } catch (error) {
+      if (error instanceof Error && 'code' in error && error.code === 'ELOCKED')
+        throw new ProviderConfigConflictError(true);
+      throw error;
+    }
     const temp = `${this.filePath}.${randomUUID()}.tmp`;
     try {
+      if (providerFileRevision(this.filePath) !== this.diskRevision)
+        throw new ProviderConfigConflictError();
       fs.writeFileSync(temp, content, {
         encoding: 'utf8',
         mode: 0o600,
@@ -226,8 +304,13 @@ export class ProviderManager {
         fs.copyFileSync(this.filePath, `${this.filePath}.bak`);
       fs.renameSync(temp, this.filePath);
       this.data = validated;
+      this.diskRevision = createHash('sha256').update(content).digest('hex');
     } finally {
-      if (fs.existsSync(temp)) fs.unlinkSync(temp);
+      try {
+        if (fs.existsSync(temp)) fs.unlinkSync(temp);
+      } finally {
+        release();
+      }
     }
   }
 

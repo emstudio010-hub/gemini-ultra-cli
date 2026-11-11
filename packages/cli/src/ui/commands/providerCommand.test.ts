@@ -57,6 +57,34 @@ const run = (
   args: string,
 ) => providerCommand.action!(context, args);
 
+it('reports a stale save locally and reloads current settings when reopening the provider dialog', async () => {
+  const { mgr, context, setModel } = setup();
+  const other = new ProviderManager(file);
+  other.upsertProvider({
+    name: 'Other CLI',
+    baseUrl: 'https://other.invalid/v1',
+    apiKey: 'FAKE_OTHER_KEY',
+    models: ['other-model'],
+    setActive: false,
+  });
+  const disk = fs.readFileSync(file);
+  await run(context, 'use Second');
+  expect(setModel).not.toHaveBeenCalled();
+  expect(fs.readFileSync(file)).toEqual(disk);
+  expect(JSON.stringify(vi.mocked(context.ui.addItem).mock.calls)).toContain(
+    'Reopen /provider',
+  );
+  expect(
+    JSON.stringify(vi.mocked(context.ui.addItem).mock.calls),
+  ).not.toContain('FAKE_OTHER_KEY');
+  const result = await run(context, '');
+  expect(result).toMatchObject({ type: 'custom_dialog' });
+  expect(mgr.getProvider('Other CLI')).toBeDefined();
+  await run(context, 'use Second');
+  expect(setModel).toHaveBeenCalledWith('second:shared-model');
+  expect(new ProviderManager(file).getProvider('Other CLI')).toBeDefined();
+});
+
 it('switches the live qualified session route as well as the persisted active provider', async () => {
   const { mgr, context, sessionModel } = setup();
   await run(context, 'use Second');
