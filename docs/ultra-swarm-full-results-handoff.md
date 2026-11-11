@@ -1,6 +1,6 @@
 # Gemini Ultra CLI Swarm 完整成员结果交接
 
-日期：2026-11-11。WI-091/E-215/F-059，候选preview.59。沿用R26/code-audit自有源码case、lead/cae/doc、scope授权granted。无付费模型、外部安全目标或个人配置/数据库/逆向工具改动。
+日期：2026-11-11。WI-091/E-215/F-059，preview.59 已安装。沿用R26/code-audit自有源码case、lead/cae/doc、scope授权granted。无付费模型、外部安全目标或个人配置/数据库/逆向工具改动。
 
 ## 发现与实现
 
@@ -38,7 +38,23 @@ inline1、等字节长度篡改校验SHA及拒绝覆盖1、已有context3、已�
 status ID显示档案路径，/swarm reports
 ID导出原全文和一致SHA，两本地命令不增加21请求，members/owner/board逐文件SHA保持。初源码业务链完成后status路径断言失败，发现CLI未显示已保存路径，补显示后最终通过；原失败保留。源码报告取上游nightly根版本，不是最终包版本。
 
-三平台包/安装结果待追加，47至58未受影响基线保留。工程C:\Users\Administrator\Documents\ChatGPT\gmncliu：swarm-full-results-before*、swarm-full-results-junit.xml、swarm-full-results-boundaries*、swarm-full-results-digest*、swarm-full-results-legacy-export*、swarm-full-results-types.log、swarm-full-results-final-types.log、swarm-full-results-final-lint.log、swarm-full-results-installed58-before*、swarm-full-results-source*。
+三平台包/安装通过，47至58未受影响基线保留。工程C:\Users\Administrator\Documents\ChatGPT\gmncliu：swarm-full-results-before*、swarm-full-results-junit.xml、swarm-full-results-boundaries*、swarm-full-results-digest*、swarm-full-results-legacy-export*、swarm-full-results-types.log、swarm-full-results-final-types.log、swarm-full-results-final-lint.log、swarm-full-results-installed58-before*、swarm-full-results-source*。
+
+## 分发与全局安装
+
+E-216：产品源 `13692f42420e00c4d17e3c5bc325ca2247ce4a72`，
+[run 43068121004](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/43068121004)
+三平台 completed/success，限定swarm-full-results范围。独立下载核对版本/源chunk/包SHA、六份rg哈希/执行权限、安装和4基础工具。
+
+每平台原生Swarm链21个loopback请求/自然退出0/3成员4唤醒/当前独立verdict，verifier实际read_file读取41490字符完整档案内的12000后证据。档案SHA与导出全文逐字节核对，members记录小于12000字节；status和reports各1本地命令、0新增请求，原members/owner/board三文件SHA保持，状态含原档案路径。独立读原始NATIVE_SWARM_DELIVERED、完整路径和导出正文，无CRITICAL异常；不只依赖passed。47至58未受影响旧链skipped并保留基线。
+
+E-217：Windows
+CI包offline已有缓存安装7842ms/退出0，双命令preview.59，425文件逐一匹配CI包，旧包保留。包SHA256为
+`05021f446817edd8c2c5c4800f393f410422c9f0ca12e8eb21557e916bec79c6`，入口SHA256为
+`fb079ac2694ac9c257fc25e4a9b40214f9e6eb34200fe78585203bbc88208958`。没有重复本机业务链、启动基准或付费任务，个人provider/locale
+SHA保持58末值。
+
+最终证据：github-preview59-run.json、github-preview59-artifacts-result.json、github-run-43068121004/、global-preview59-install-result.json、global-install-github-preview59-full-result.json。WI-091修复与分发交付，源码/工程正式报告/Obsidian全文同步。
 
 goal
 active。58真实Teamwork有界交付基线保留，本轮是loopback原生全文保存/读取验证，不冒充新真实模型长任务。更多模型/长任务、旧报告丢失文本、全回合历史索引、恢复取消交错、长会话语义准确性和跨机复杂逆向继续。不合并master或创建正式Release。
