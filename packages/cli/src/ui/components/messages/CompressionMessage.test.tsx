@@ -219,6 +219,19 @@ describe('<CompressionMessage />', () => {
   });
 
   describe('failure states', () => {
+    it('explains that invalid snapshot output leaves the original history intact', async () => {
+      const props = createCompressionProps({
+        isPending: false,
+        compressionStatus: CompressionStatus.COMPRESSION_FAILED_INVALID_SUMMARY,
+      });
+      const { lastFrame, unmount } = await renderWithProviders(
+        <CompressionMessage {...props} />,
+      );
+      expect(lastFrame()).toMatch(/原会话已保留|Original history retained/);
+      expect(lastFrame()).not.toContain('compressed from');
+      unmount();
+    });
+
     it('renders failure message when model returns an empty summary', async () => {
       const props = createCompressionProps({
         isPending: false,

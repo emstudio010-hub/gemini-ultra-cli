@@ -20,6 +20,16 @@ import type { Config } from '../config/config.js';
 import * as fileUtils from '../utils/fileUtils.js';
 import { getInitialChatHistory } from '../utils/environmentContext.js';
 
+const snapshotFixture = (goal: string) => `<state_snapshot>
+<overall_goal>${goal}</overall_goal>
+<active_constraints>Preserve user scope</active_constraints>
+<key_knowledge>Original evidence remains available</key_knowledge>
+<artifact_trail>No external changes</artifact_trail>
+<file_system_state>Original files preserved</file_system_state>
+<recent_actions>Read the supplied history</recent_actions>
+<task_state>Continue the pending task</task_state>
+</state_snapshot>`;
+
 const { TOOL_OUTPUTS_DIR } = fileUtils;
 import * as tokenCalculation from '../utils/tokenCalculation.js';
 import { tokenLimit } from '../core/tokenLimits.js';
@@ -205,7 +215,7 @@ describe('ChatCompressionService', () => {
         candidates: [
           {
             content: {
-              parts: [{ text: 'Initial Summary' }],
+              parts: [{ text: snapshotFixture('Initial Summary') }],
             },
           },
         ],
@@ -214,7 +224,7 @@ describe('ChatCompressionService', () => {
         candidates: [
           {
             content: {
-              parts: [{ text: 'Verified Summary' }],
+              parts: [{ text: snapshotFixture('Verified Summary') }],
             },
           },
         ],
@@ -371,10 +381,182 @@ describe('ChatCompressionService', () => {
       { verify: false },
     );
     expect(result.info.compressionStatus).toBe(CompressionStatus.COMPRESSED);
-    expect(result.newHistory?.[0].parts?.[0].text).toBe('Initial Summary');
+    expect(result.newHistory?.[0].parts?.[0].text).toBe(
+      snapshotFixture('Initial Summary'),
+    );
     expect(mockConfig.getBaseLlmClient().generateContent).toHaveBeenCalledTimes(
       1,
     );
+  });
+
+  it('keeps the first valid snapshot when verification returns only an acknowledgement', async () => {
+    const snapshot = `<state_snapshot>
+<overall_goal>Continue the audit</overall_goal>
+<active_constraints>Do not modify production</active_constraints>
+<key_knowledge>Evidence: /workspace/report.txt</key_knowledge>
+<artifact_trail>Read the report</artifact_trail>
+<file_system_state>Report unchanged</file_system_state>
+<recent_actions>Read completed</recent_actions>
+<task_state>Review is still pending</task_state>
+</state_snapshot>`;
+    vi.mocked(mockChat.getHistory).mockReturnValue([
+      { role: 'user', parts: [{ text: 'Keep the scope and evidence path.' }] },
+      { role: 'model', parts: [{ text: 'Earlier investigation.' }] },
+    ]);
+    vi.mocked(mockChat.getLastPromptTokenCount).mockReturnValue(600000);
+    const generate = vi.mocked(mockConfig.getBaseLlmClient().generateContent);
+    generate
+      .mockReset()
+      .mockResolvedValueOnce({
+        candidates: [{ content: { parts: [{ text: snapshot }] } }],
+      } as GenerateContentResponse)
+      .mockResolvedValueOnce({
+        candidates: [
+          {
+            content: {
+              parts: [{ text: 'The summary is good. No changes needed.' }],
+            },
+          },
+        ],
+      } as GenerateContentResponse);
+    const result = await service.compress(
+      mockChat,
+      mockPromptId,
+      true,
+      mockModel,
+      mockConfig,
+      false,
+    );
+    expect(result.info.compressionStatus).toBe(CompressionStatus.COMPRESSED);
+    expect(result.newHistory?.[0].parts?.[0].text).toBe(snapshot);
+    expect(generate).toHaveBeenCalledTimes(2);
+  });
+
+  it('preserves original history when both compression replies are nonempty invalid snapshots', async () => {
+    const history: Content[] = [
+      {
+        role: 'user',
+        parts: [{ text: 'Original scope and task remain authoritative.' }],
+      },
+      { role: 'model', parts: [{ text: 'Unfinished investigation.' }] },
+    ];
+    const original = structuredClone(history);
+    vi.mocked(mockChat.getHistory).mockReturnValue(history);
+    vi.mocked(mockChat.getLastPromptTokenCount).mockReturnValue(600000);
+    vi.mocked(mockConfig.getBaseLlmClient().generateContent)
+      .mockReset()
+      .mockResolvedValue({
+        candidates: [
+          { content: { parts: [{ text: 'Acknowledged, all done.' }] } },
+        ],
+      } as GenerateContentResponse);
+    const result = await service.compress(
+      mockChat,
+      mockPromptId,
+      true,
+      mockModel,
+      mockConfig,
+      false,
+    );
+    expect(result.newHistory).toBeNull();
+    expect(result.info.compressionStatus).toBe(
+      CompressionStatus.COMPRESSION_FAILED_INVALID_SUMMARY,
+    );
+    expect(history).toEqual(original);
+  });
+
+  it.each([
+    ['unclosed root', snapshotFixture('Goal').replace('</state_snapshot>', '')],
+    [
+      'missing constraints',
+      snapshotFixture('Goal').replace(
+        /<active_constraints>[\s\S]*?<\/active_constraints>/,
+        '',
+      ),
+    ],
+    ['empty goal', snapshotFixture('<!-- placeholder -->')],
+    ['ambiguous roots', snapshotFixture('First') + snapshotFixture('Second')],
+    [
+      'unfinished scratchpad',
+      '<scratchpad>still reasoning\n' + snapshotFixture('Goal'),
+    ],
+    [
+      'duplicate sections',
+      snapshotFixture('Goal').replace(
+        '<task_state>',
+        '<task_state>duplicate<task_state>',
+      ),
+    ],
+  ])(
+    'retains original history for a single-pass snapshot with %s',
+    async (_name, response) => {
+      const history: Content[] = [
+        { role: 'user', parts: [{ text: 'Keep this constraint unchanged.' }] },
+        {
+          role: 'model',
+          parts: [{ text: 'Investigation remains unfinished.' }],
+        },
+      ];
+      const original = structuredClone(history);
+      vi.mocked(mockChat.getHistory).mockReturnValue(history);
+      const generate = vi.mocked(mockConfig.getBaseLlmClient().generateContent);
+      generate
+        .mockReset()
+        .mockResolvedValue({
+          candidates: [{ content: { parts: [{ text: response }] } }],
+        } as GenerateContentResponse);
+      const result = await service.compress(
+        mockChat,
+        mockPromptId,
+        true,
+        mockModel,
+        mockConfig,
+        false,
+        undefined,
+        { verify: false },
+      );
+      expect(result.newHistory).toBeNull();
+      expect(result.info.compressionStatus).toBe(
+        CompressionStatus.COMPRESSION_FAILED_INVALID_SUMMARY,
+      );
+      expect(history).toEqual(original);
+      expect(generate).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('keeps only the complete snapshot, excluding scratchpad and review commentary', async () => {
+    const snapshot = snapshotFixture(
+      'Preserve literal a < b && c and /work/report.txt',
+    );
+    vi.mocked(mockChat.getHistory).mockReturnValue([
+      { role: 'user', parts: [{ text: 'Original task.' }] },
+      { role: 'model', parts: [{ text: 'Earlier response.' }] },
+    ]);
+    vi.mocked(mockChat.getLastPromptTokenCount).mockReturnValue(600000);
+    vi.mocked(mockConfig.getBaseLlmClient().generateContent)
+      .mockReset()
+      .mockResolvedValue({
+        candidates: [
+          {
+            content: {
+              parts: [
+                {
+                  text: `<scratchpad>PRIVATE_REASONING</scratchpad>\n\x60\x60\x60xml\n${snapshot}\n\x60\x60\x60\nReview commentary`,
+                },
+              ],
+            },
+          },
+        ],
+      } as GenerateContentResponse);
+    const result = await service.compress(
+      mockChat,
+      mockPromptId,
+      true,
+      mockModel,
+      mockConfig,
+      false,
+    );
+    expect(result.newHistory?.[0].parts?.[0].text).toBe(snapshot);
   });
 
   it('does not run verification after cancellation during the first summary', async () => {
@@ -431,7 +613,9 @@ describe('ChatCompressionService', () => {
     expect(result.info.compressionStatus).toBe(CompressionStatus.COMPRESSED);
     expect(result.newHistory).not.toBeNull();
     // It should contain the final verified summary
-    expect(result.newHistory![0].parts![0].text).toBe('Verified Summary');
+    expect(result.newHistory![0].parts![0].text).toBe(
+      snapshotFixture('Verified Summary'),
+    );
     expect(mockConfig.getBaseLlmClient().generateContent).toHaveBeenCalledTimes(
       2,
     );
@@ -505,7 +689,10 @@ describe('ChatCompressionService', () => {
       // A summary can replace complete older cycles even before the user sends
       // another prompt. Keep the latest call/response and valid role order.
       expect(result.newHistory).toEqual([
-        { role: 'user', parts: [{ text: 'Verified Summary' }] },
+        {
+          role: 'user',
+          parts: [{ text: snapshotFixture('Verified Summary') }],
+        },
         recentCall,
         recentResponse,
       ]);
@@ -529,7 +716,13 @@ describe('ChatCompressionService', () => {
       generateContent: vi
         .fn()
         .mockResolvedValueOnce({
-          candidates: [{ content: { parts: [{ text: 'Initial Summary' }] } }],
+          candidates: [
+            {
+              content: {
+                parts: [{ text: snapshotFixture('Initial Summary') }],
+              },
+            },
+          ],
         } as unknown as GenerateContentResponse)
         .mockResolvedValueOnce({
           candidates: [{ content: { parts: [{ text: '   ' }] } }],
@@ -549,7 +742,9 @@ describe('ChatCompressionService', () => {
     );
 
     expect(result.info.compressionStatus).toBe(CompressionStatus.COMPRESSED);
-    expect(result.newHistory![0].parts![0].text).toBe('Initial Summary');
+    expect(result.newHistory![0].parts![0].text).toBe(
+      snapshotFixture('Initial Summary'),
+    );
   });
 
   it('should use anchored instruction when a previous snapshot is present', async () => {
@@ -648,7 +843,8 @@ describe('ChatCompressionService', () => {
       { role: 'model', parts: [{ text: 'msg4' }] },
     ];
     vi.mocked(mockChat.getHistory).mockReturnValue(history);
-    vi.mocked(mockChat.getLastPromptTokenCount).mockReturnValue(100);
+    // Still below the 500k threshold, with room for a real structured snapshot.
+    vi.mocked(mockChat.getLastPromptTokenCount).mockReturnValue(1000);
 
     const result = await service.compress(
       mockChat,
@@ -671,7 +867,7 @@ describe('ChatCompressionService', () => {
     vi.mocked(mockChat.getHistory).mockReturnValue(history);
     vi.mocked(mockChat.getLastPromptTokenCount).mockReturnValue(100);
 
-    const longSummary = 'a'.repeat(1000); // Long summary to inflate token count
+    const longSummary = snapshotFixture('a'.repeat(1000)); // Long summary to inflate token count
     vi.mocked(mockConfig.getBaseLlmClient().generateContent).mockResolvedValue({
       candidates: [
         {

@@ -198,6 +198,9 @@ export enum CompressionStatus {
 
   /** The compression was skipped due to previous failure, but content was truncated to budget */
   CONTENT_TRUNCATED,
+
+  /** No response satisfied the structured snapshot contract; history is retained. */
+  COMPRESSION_FAILED_INVALID_SUMMARY,
 }
 
 export interface ChatCompressionInfo {

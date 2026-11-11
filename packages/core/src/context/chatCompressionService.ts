@@ -37,6 +37,7 @@ import {
   LATEST_GEMINI_FLASH_LITE_MODEL,
 } from '../config/models.js';
 import { PreCompressTrigger } from '../hooks/types.js';
+import { extractCompressionSnapshot } from './compressionSnapshot.js';
 
 /**
  * Default threshold for compression token count as a fraction of the model's
@@ -760,11 +761,12 @@ export class ChatCompressionService {
           });
 
     abortSignal?.throwIfAborted();
-    const finalSummary = (
-      (verificationResponse
-        ? getResponseText(verificationResponse)?.trim()
-        : '') || summary
-    ).trim();
+    const verificationText = verificationResponse
+      ? (getResponseText(verificationResponse) ?? '')
+      : '';
+    const finalSummary =
+      extractCompressionSnapshot(verificationText) ??
+      extractCompressionSnapshot(summary);
 
     if (!finalSummary) {
       logChatCompression(
@@ -779,7 +781,10 @@ export class ChatCompressionService {
         info: {
           originalTokenCount,
           newTokenCount: originalTokenCount,
-          compressionStatus: CompressionStatus.COMPRESSION_FAILED_EMPTY_SUMMARY,
+          compressionStatus:
+            !summary.trim() && !verificationText.trim()
+              ? CompressionStatus.COMPRESSION_FAILED_EMPTY_SUMMARY
+              : CompressionStatus.COMPRESSION_FAILED_INVALID_SUMMARY,
         },
       };
     }

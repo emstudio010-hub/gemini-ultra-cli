@@ -848,3 +848,8 @@
 - 候选51待ghidra-runtime三平台新鲜包/安装、三条本地发现命令和实际Ghidra循环分支静态反编译链。未受影响协作/供应商/全文报告/提交修正保留47/48/49/50基线。goal active，不合并master/正式Release。
 - E-190：产品源bea986f6d187e1651cbef3556b8a5ac2679b9f67/run43034637488三平台ghidra-runtime范围completed/success；版本/包SHA/源/六rg身份权限与安装核对通过。每平台3条原生巡检/退出0/0模型，实际Ghidra/JDK链3个loopback请求/退出0，函数00400090及样本/完整代码哈希核对，全部checks真；macOS native构建成功。未受影响旧链skipped，47/48/49/50基线保留。
 - E-191：offline缓存安装7677ms/退出0，双命令preview.51，425文件匹配Windows CI包，旧包保留；包SHA62f97c9d…/入口SHAe5993b03…完整值见交接。未重跑本机反编译/启动基准或付费任务；原50误报、4项旧失败保留，独立复核只读原输出。WI-083交付，goal active，下一阶段检查长会话摘要完整性；真实Teamwork长任务等边界继续，不合并master/正式Release。docs/ultra-ghidra-java-discovery-handoff.md。
+## 2026-11-11 压缩快照保护
+
+- WI-084/E-192/F-052 in_progress：任意非空复核文本可覆盖有效首轮摘要，两轮非快照也会压缩成功；旧2项定向检查和已安装51实际CLI均复现。现检查既定七章节/唯一完整根和非空目标/任务状态，只取快照正文；复核无效回退首轮有效快照，均无效保留原历史并报告INVALID_SUMMARY。自动空/无效失败沿用失败标志停止重复摘要，手动仍可重试；不声称结构能证明语义准确。
+- 57 core项初56通过/1夹具容量过小，容量仍低于触发阈值下修正并单独通过；CLI提示1项通过，共58不同项及严格lint/type通过，不重跑已通过项。源码原生fallback 3+2/invalid 4+2，共11 loopback请求/退出0，后续上下文、原始约束/证据与近期工具配对/原文件哈希通过。
+- 首次源码夹具模拟600k超过128k窗口，正常保护中止；改70k后最终通过，原失败保留，非产品故障。候选52待三平台compression-snapshot范围包/安装和原生两场景；未受影响47至51基线保留，goal active，不合并master/正式Release。docs/ultra-compression-snapshot-handoff.md。

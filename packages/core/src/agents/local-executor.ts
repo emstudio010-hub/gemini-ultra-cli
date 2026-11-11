@@ -1015,7 +1015,11 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
 
     if (
       info.compressionStatus ===
-      CompressionStatus.COMPRESSION_FAILED_INFLATED_TOKEN_COUNT
+        CompressionStatus.COMPRESSION_FAILED_INFLATED_TOKEN_COUNT ||
+      info.compressionStatus ===
+        CompressionStatus.COMPRESSION_FAILED_EMPTY_SUMMARY ||
+      info.compressionStatus ===
+        CompressionStatus.COMPRESSION_FAILED_INVALID_SUMMARY
     ) {
       this.hasFailedCompressionAttempt = true;
     } else if (info.compressionStatus === CompressionStatus.COMPRESSED) {

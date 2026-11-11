@@ -15,7 +15,7 @@ v24.22.2；校验场景使用本地模型fixture，真实逆向工具需另行�
 Release 下载），执行：
 
 ```sh
-npm install -g ./gemini-ultra-cli-1.0.0-preview.51.tgz
+npm install -g ./gemini-ultra-cli-1.0.0-preview.52.tgz
 gemini-ultra --version
 gemini-ultra
 ```
@@ -65,6 +65,10 @@ gemini-ultra
 
 也支持 `/压缩 快速`、`/压缩 取消`，以及 `/compact`、`/summarize`
 别名。普通消息会等压缩结束再继续处理；取消后可再次提问或重新压缩。压缩期间切换会话时，旧摘要会被丢弃，避免覆盖新上下文。
+
+模型只回复确认语、返回截断或缺字段的快照时，不会直接替换原会话。复核结果无效会保留首轮有效摘要；两轮都无效则保留原历史并提示未应用压缩。自动压缩失败后不反复请求摘要，可显式使用
+`/compress` 或 `/compress fast`
+重试。只保留快照正文，去除快照外的思考与复核文字；格式检查仍不代表摘要的事实和语义已经完整验收。
 
 ## 外接模型上下文容量
 

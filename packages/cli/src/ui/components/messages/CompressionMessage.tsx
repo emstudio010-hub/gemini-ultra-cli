@@ -9,7 +9,7 @@ import type { CompressionProps } from '../../types.js';
 import { CliSpinner } from '../CliSpinner.js';
 import { theme } from '../../semantic-colors.js';
 import { SCREEN_READER_MODEL_PREFIX } from '../../textConstants.js';
-import { CompressionStatus } from '@google/gemini-cli-core';
+import { CompressionStatus, I18nManager } from '@google/gemini-cli-core';
 
 export interface CompressionDisplayProps {
   compression: CompressionProps;
@@ -48,6 +48,11 @@ export function CompressionMessage({
         return 'Could not compress chat history due to a token counting error.';
       case CompressionStatus.COMPRESSION_FAILED_EMPTY_SUMMARY:
         return 'Chat history compression failed: the model returned an empty summary.';
+      case CompressionStatus.COMPRESSION_FAILED_INVALID_SUMMARY:
+        return I18nManager.getInstance().t(
+          '压缩未应用：模型没有返回有效的状态快照，原会话已保留。',
+          'Compression not applied: the model did not return a valid state snapshot. Original history retained.',
+        );
       case CompressionStatus.NOOP:
         return 'Nothing to compress.';
       default:

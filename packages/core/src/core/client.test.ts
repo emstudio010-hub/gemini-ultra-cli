@@ -602,6 +602,28 @@ describe('Gemini Client (client.ts)', () => {
       };
     }
 
+    it.each([
+      CompressionStatus.COMPRESSION_FAILED_EMPTY_SUMMARY,
+      CompressionStatus.COMPRESSION_FAILED_INVALID_SUMMARY,
+    ])(
+      'retains chat and suppresses further automatic summary attempts after failure %s',
+      async (status) => {
+        const { client, mockOriginalChat } = setup({
+          compressionStatus: status,
+        });
+        await client.tryCompressChat('invalid-snapshot', false);
+        expect(client.getChat()).toBe(mockOriginalChat);
+        expect(client['startChat']).not.toHaveBeenCalled();
+        expect(mockOriginalChat.setHistory).not.toHaveBeenCalled();
+        await client.tryCompressChat('after-invalid-snapshot', false);
+        expect(
+          vi
+            .mocked(ChatCompressionService.prototype.compress)
+            .mock.calls.at(-1)?.[5],
+        ).toBe(true);
+      },
+    );
+
     describe('when compression inflates the token count', () => {
       it('allows compression to be forced/manual after a failure', async () => {
         // Call 1 (Fails): Setup with inflated tokens

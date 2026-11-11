@@ -3876,50 +3876,56 @@ describe('LocalAgentExecutor', () => {
       );
     });
 
-    it('should pass hasFailedCompressionAttempt=true to compression after a failure', async () => {
-      const definition = createTestDefinition();
-      const executor = await LocalAgentExecutor.create(
-        definition,
-        mockConfig,
-        onActivity,
-      );
+    it.each([
+      CompressionStatus.COMPRESSION_FAILED_INFLATED_TOKEN_COUNT,
+      CompressionStatus.COMPRESSION_FAILED_EMPTY_SUMMARY,
+      CompressionStatus.COMPRESSION_FAILED_INVALID_SUMMARY,
+    ])(
+      'should pass hasFailedCompressionAttempt=true after compression failure %s',
+      async (status) => {
+        const definition = createTestDefinition();
+        const executor = await LocalAgentExecutor.create(
+          definition,
+          mockConfig,
+          onActivity,
+        );
 
-      // First call fails
-      mockCompress.mockResolvedValueOnce({
-        newHistory: null,
-        info: {
-          compressionStatus:
-            CompressionStatus.COMPRESSION_FAILED_INFLATED_TOKEN_COUNT,
-        },
-      });
-      // Second call is neutral
-      mockCompress.mockResolvedValueOnce({
-        newHistory: null,
-        info: { compressionStatus: CompressionStatus.NOOP },
-      });
-
-      // Turn 1
-      mockWorkResponse('t1');
-      // Turn 2: Complete
-      mockModelResponse(
-        [
-          {
-            name: COMPLETE_TASK_TOOL_NAME,
-            args: { finalResult: 'Done' },
-            id: 't2',
+        // First call fails
+        mockCompress.mockResolvedValueOnce({
+          newHistory: null,
+          info: {
+            compressionStatus: status,
           },
-        ],
-        'T2',
-      );
+        });
+        // Second call is neutral
+        mockCompress.mockResolvedValueOnce({
+          newHistory: null,
+          info: { compressionStatus: CompressionStatus.NOOP },
+        });
 
-      await executor.run({ goal: 'Compress fail' }, signal);
+        // Turn 1
+        mockWorkResponse('t1');
+        // Turn 2: Complete
+        mockModelResponse(
+          [
+            {
+              name: COMPLETE_TASK_TOOL_NAME,
+              args: { finalResult: 'Done' },
+              id: 't2',
+            },
+          ],
+          'T2',
+        );
 
-      expect(mockCompress).toHaveBeenCalledTimes(2);
-      // First call, hasFailedCompressionAttempt is false
-      expect(mockCompress.mock.calls[0][5]).toBe(false);
-      // Second call, hasFailedCompressionAttempt is true
-      expect(mockCompress.mock.calls[1][5]).toBe(true);
-    });
+        await executor.run({ goal: 'Compress fail' }, signal);
+
+        expect(mockCompress).toHaveBeenCalledTimes(2);
+        // First call, hasFailedCompressionAttempt is false
+        expect(mockCompress.mock.calls[0][5]).toBe(false);
+        // Second call, hasFailedCompressionAttempt is true
+        expect(mockCompress.mock.calls[1][5]).toBe(true);
+      },
+    );
 
     it('should reset hasFailedCompressionAttempt flag after a successful compression', async () => {
       const definition = createTestDefinition();
