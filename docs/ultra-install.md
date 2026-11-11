@@ -15,7 +15,7 @@ v24.22.2；校验场景使用本地模型fixture，真实逆向工具需另行�
 Release 下载），执行：
 
 ```sh
-npm install -g ./gemini-ultra-cli-1.0.0-preview.50.tgz
+npm install -g ./gemini-ultra-cli-1.0.0-preview.51.tgz
 gemini-ultra --version
 gemini-ultra
 ```
@@ -394,7 +394,9 @@ preview.40 新增原生工具
 `GEMINI_ULTRA_GHIDRA_HOME`（Ghidra安装根目录），以及 `JAVA_HOME`（JDK目录）或
 `GEMINI_ULTRA_TOOL_JAVA`（原生Java可执行文件）。也可通过 PATH 或
 `GEMINI_ULTRA_TOOL_ANALYZEHEADLESS` 找到标准发行版的support目录。`/drill setup`
-显示依赖是否被发现，实际JDK兼容性在调用时检查。无需IDA或开发机路径，Ghidra/JDK不随CLI包分发。
+显示依赖是否被发现，实际JDK兼容性在调用时检查。巡检与反编译统一按
+`GEMINI_ULTRA_TOOL_JAVA` → `JAVA_HOME/bin/java` →
+PATH 选择 Java。高优先级配置不存在、不可执行或指向批处理包装时会明确报错，不会由 PATH 中的另一个 Java 掩盖；修正或清除对应环境变量后再运行巡检。路径可以包含空格。无需IDA或开发机路径，Ghidra/JDK不随CLI包分发。
 
 工具参数为本地 `filePath`、可选十六进制虚拟 `address` 和
 `maxChars`。先用 binary_inspect/binary_analyze 确认格式和函数；没有address时选入口或首个本地函数。PIE/共享库可能被Ghidra重定位，务必核对返回的imageBase和地址；文件偏移不能直接当虚拟地址。地址找不到时不会静默反编译别的函数。

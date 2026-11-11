@@ -170,6 +170,25 @@ it('does not turn a zero-exit script failure or timed-out analysis into a comple
     expect(files).toEqual(['analysis.log']);
   }
 });
+it('rejects invalid selected Java paths before starting analysis', async () => {
+  for (const source of ['GEMINI_ULTRA_TOOL_JAVA', 'JAVA_HOME']) {
+    vi.stubEnv('GEMINI_ULTRA_TOOL_JAVA', '');
+    vi.stubEnv('JAVA_HOME', '');
+    vi.stubEnv(source, path.join(root, 'missing runtime'));
+    await expect(
+      decompileBinary(
+        { filePath: sample },
+        root,
+        root,
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow(source);
+    expect(execute).not.toHaveBeenCalled();
+  }
+  expect(await fs.readFile(sample, 'utf8')).toBe('immutable sample');
+  await expect(fs.stat(path.join(root, 'decompilations'))).rejects.toThrow();
+});
+
 it('fails before launch on cancellation or missing native JDK and preserves the sample', async () => {
   const cancelled = AbortSignal.abort();
   await expect(

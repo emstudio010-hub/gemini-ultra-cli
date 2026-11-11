@@ -13,7 +13,10 @@ import type { Config } from '../config/config.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { checkBinary } from './drillTools.js';
 import { ghidraDecompileScript } from './ghidraDecompileScript.js';
-import { discoverGhidraDecompiler } from './ghidraRuntime.js';
+import {
+  discoverGhidraDecompiler,
+  discoverGhidraJava,
+} from './ghidraRuntime.js';
 import { ToolErrorType } from './tool-error.js';
 import {
   BaseDeclarativeTool,
@@ -98,22 +101,10 @@ export async function decompileBinary(
   const version = properties.match(/^application.version=(.+)$/m)?.[1]?.trim();
   if (!version)
     throw new Error('Ghidra installation is missing application.version.');
-  const discoveredJava = checkBinary('java');
-  const java =
-    process.env['GEMINI_ULTRA_TOOL_JAVA'] ||
-    (process.env['JAVA_HOME']
-      ? path.join(
-          process.env['JAVA_HOME'],
-          'bin',
-          process.platform === 'win32' ? 'java.exe' : 'java',
-        )
-      : discoveredJava.available
-        ? discoveredJava.pathOrStatus
-        : undefined);
-  if (!java || /\.(cmd|bat)$/i.test(java))
-    throw new Error(
-      'Configure a native Java executable with GEMINI_ULTRA_TOOL_JAVA or JAVA_HOME. Use the JDK version required by this Ghidra installation.',
-    );
+  const discoveredJava = await discoverGhidraJava(() => checkBinary('java'));
+  if (!discoveredJava.available || !discoveredJava.pathOrStatus)
+    throw new Error(discoveredJava.pathOrStatus || 'No native Java found.');
+  const java = discoveredJava.pathOrStatus;
   const launchProperties = await fs.readFile(
     path.join(ghidraHome, 'support/launch.properties'),
     'utf8',

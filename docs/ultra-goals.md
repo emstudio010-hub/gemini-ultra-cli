@@ -841,3 +841,8 @@
 - 候选50待agent-localization范围三平台包/安装和上述两链；未受影响基线47完整、48供应商、49长报告保留。WI-082修复本地完成，真实Teamwork长任务质量未验收，goal active，不合并master/正式Release。docs/ultra-native-command-recovery-handoff.md。
 - E-187：产品源5a5697564c443d97c0430c32826ef4c230691434/run43032286756三平台agent-localization范围completed/success，版本/包SHA/源码/六rg身份权限及安装通过。每平台本地12命令/10退出0/2预期42/0模型；完成参数修正16 loopback请求/14调度/五阶段completed/全部checks真。旧链步骤skipped，基线47/48/49保留，不冒充重验收。
 - E-188：offline已有缓存安装7785ms/退出0，双命令preview.50，425文件匹配Windows CI包，旧包保留；包SHA50e2e08e…/入口SHA6d3655df…，完整值见交接。首个宿主安装脚本在npm执行前因PowerShell默认编码误读中文JSON失败，显式UTF-8后成功，非产品故障；未重跑本机业务链/付费任务。WI-082修复和分发交付，E-185真实失败保留，goal active，不合并master/正式Release。docs/ultra-native-command-recovery-handoff.md。
+## 2026-11-11 Ghidra JVM 路径一致性
+
+- WI-083/E-189/F-051 in_progress：preview.50实际/drill preflight在JAVA_HOME指向不存在目录但PATH有Java时仍把Java/Ghidra标ready，和反编译实际优先JAVA_HOME矛盾；新脚本在第一个本地命令断言失败后停止，未启动JVM/模型，原日志保留。源码旧实现5项场景4失败/1通过。
+- 巡检与执行共享Java选择和文件/执行权限校验：显式GEMINI_ULTRA_TOOL_JAVA > JAVA_HOME > PATH；无效高优先配置不回退、不隐藏错误，拒绝批处理包装，空格路径保持。反编译在建立分析工件/启动JVM前拒绝坏路径。10项相关定向检查、严格相关lint/type通过，未运行全量/冒烟/付费任务。
+- 候选51待ghidra-runtime三平台新鲜包/安装、三条本地发现命令和实际Ghidra循环分支静态反编译链。未受影响协作/供应商/全文报告/提交修正保留47/48/49/50基线。goal active，不合并master/正式Release。

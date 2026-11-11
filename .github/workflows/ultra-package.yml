@@ -6,9 +6,10 @@ on:
   workflow_dispatch:
     inputs:
       verification_scope:
-        description: 'Use provider only for provider command changes; full runs native collaboration and reverse tool chains.'
+        description: 'Select the changed capability; full runs native collaboration and reverse tool chains.'
         type: choice
-        options: [full, provider, workflow-reports, agent-localization]
+        options:
+          [full, provider, workflow-reports, agent-localization, ghidra-runtime]
         default: full
 
 permissions:
@@ -47,7 +48,7 @@ jobs:
           node scripts/verify-ultra-install.mjs $entry artifacts/ultra-release/install-verification.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Verify native swarm coordination
-        if: inputs.verification_scope != 'provider' && inputs.verification_scope != 'workflow-reports' && inputs.verification_scope != 'agent-localization'
+        if: inputs.verification_scope != 'provider' && inputs.verification_scope != 'workflow-reports' && inputs.verification_scope != 'agent-localization' && inputs.verification_scope != 'ghidra-runtime'
         shell: pwsh
         run: |
           $entry = Join-Path $env:RUNNER_TEMP 'ultra-install/node_modules/gemini-ultra-cli/bundle/gemini.js'
@@ -64,14 +65,14 @@ jobs:
           node scripts/verify-ultra-swarm.mjs $entry artifacts/ultra-release/swarm-recovery-verification.json recovery
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Verify bounded remote agent discovery
-        if: inputs.verification_scope != 'provider' && inputs.verification_scope != 'workflow-reports' && inputs.verification_scope != 'agent-localization'
+        if: inputs.verification_scope != 'provider' && inputs.verification_scope != 'workflow-reports' && inputs.verification_scope != 'agent-localization' && inputs.verification_scope != 'ghidra-runtime'
         shell: pwsh
         run: |
           $entry = Join-Path $env:RUNNER_TEMP 'ultra-install/node_modules/gemini-ultra-cli/bundle/gemini.js'
           node scripts/verify-ultra-agent-discovery.mjs $entry artifacts/ultra-release/agent-discovery-verification.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Verify native workflow budgets
-        if: inputs.verification_scope != 'provider' && inputs.verification_scope != 'workflow-reports' && inputs.verification_scope != 'agent-localization'
+        if: inputs.verification_scope != 'provider' && inputs.verification_scope != 'workflow-reports' && inputs.verification_scope != 'agent-localization' && inputs.verification_scope != 'ghidra-runtime'
         shell: pwsh
         run: |
           $entry = Join-Path $env:RUNNER_TEMP 'ultra-install/node_modules/gemini-ultra-cli/bundle/gemini.js'
@@ -88,14 +89,14 @@ jobs:
           node scripts/verify-ultra-workflow.mjs $entry artifacts/ultra-release/workflow-record-recovery-verification.json record-recovery
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Verify native Teamwork draft and milestone delivery
-        if: inputs.verification_scope != 'provider' && inputs.verification_scope != 'workflow-reports' && inputs.verification_scope != 'agent-localization'
+        if: inputs.verification_scope != 'provider' && inputs.verification_scope != 'workflow-reports' && inputs.verification_scope != 'agent-localization' && inputs.verification_scope != 'ghidra-runtime'
         shell: pwsh
         run: |
           $entry = Join-Path $env:RUNNER_TEMP 'ultra-install/node_modules/gemini-ultra-cli/bundle/gemini.js'
           node scripts/verify-ultra-teamwork.mjs $entry artifacts/ultra-release/teamwork-verification.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Verify native provider commands
-        if: inputs.verification_scope != 'workflow-reports' && inputs.verification_scope != 'agent-localization'
+        if: inputs.verification_scope != 'workflow-reports' && inputs.verification_scope != 'agent-localization' && inputs.verification_scope != 'ghidra-runtime'
         shell: pwsh
         run: |
           $entry = Join-Path $env:RUNNER_TEMP 'ultra-install/node_modules/gemini-ultra-cli/bundle/gemini.js'
@@ -147,7 +148,7 @@ jobs:
             if ($nativeBuildCode -ne 0) { exit $nativeBuildCode }
           }
           $entry = Join-Path $env:RUNNER_TEMP 'ultra-install/node_modules/gemini-ultra-cli/bundle/gemini.js'
-          node scripts/verify-ultra-decompile.mjs $entry artifacts/ultra-release/decompile-verification.json (Join-Path $toolDirectory 'ghidra_12.1.4_PUBLIC')
+          node scripts/verify-ultra-decompile.mjs $entry artifacts/ultra-release/decompile-verification.json (Join-Path $toolDirectory 'ghidra_12.1.4_PUBLIC') java-discovery
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v4
         if: always()
@@ -167,6 +168,7 @@ jobs:
             artifacts/ultra-release/worktree-verification-output.txt
             artifacts/ultra-release/decompile-verification.json
             artifacts/ultra-release/decompile-verification-output.txt
+            artifacts/ultra-release/decompile-verification-java-discovery-output.txt
             artifacts/ultra-release/decompile-verification-artifacts/**
             artifacts/ultra-release/decompile-native-build.log
             artifacts/ultra-release/swarm-budget-verification.json

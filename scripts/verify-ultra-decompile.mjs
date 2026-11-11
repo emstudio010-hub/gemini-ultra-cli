@@ -13,6 +13,8 @@ import { spawn } from 'node:child_process';
 const entry = path.resolve(process.argv[2]);
 const reportPath = path.resolve(process.argv[3]);
 const ghidraHome = path.resolve(process.argv[4]);
+const verifyJavaDiscovery = process.argv[5] === 'java-discovery';
+const javaDiscoveryRuns = [];
 const metadata = JSON.parse(
   fs.readFileSync(path.join(path.dirname(entry), '../package.json'), 'utf8'),
 );
@@ -262,6 +264,110 @@ try {
     env.GEMINI_ULTRA_LOCALE_FILE,
     JSON.stringify({ locale: 'en' }),
   );
+  if (verifyJavaDiscovery) {
+    const java =
+      env.GEMINI_ULTRA_TOOL_JAVA ||
+      (env.JAVA_HOME &&
+        path.join(
+          env.JAVA_HOME,
+          'bin',
+          process.platform === 'win32' ? 'java.exe' : 'java',
+        ));
+    assert.ok(
+      java && fs.statSync(java).isFile(),
+      'Provide JAVA_HOME or GEMINI_ULTRA_TOOL_JAVA for native verification.',
+    );
+    const cases = [
+      {
+        name: 'invalid-java-home',
+        overrides: {
+          GEMINI_ULTRA_TOOL_JAVA: '',
+          JAVA_HOME: path.join(scratch, 'missing-jdk'),
+        },
+        expected: '[missing]',
+        source: 'JAVA_HOME',
+      },
+      {
+        name: 'invalid-explicit-override',
+        overrides: {
+          GEMINI_ULTRA_TOOL_JAVA: path.join(scratch, 'missing-java'),
+          JAVA_HOME: path.dirname(path.dirname(java)),
+        },
+        expected: '[missing]',
+        source: 'GEMINI_ULTRA_TOOL_JAVA',
+      },
+      {
+        name: 'valid-explicit-override',
+        overrides: {
+          GEMINI_ULTRA_TOOL_JAVA: java,
+          JAVA_HOME: path.join(scratch, 'missing-jdk'),
+        },
+        expected: '[ready]',
+        source: path.resolve(java),
+      },
+    ];
+    let preflightOutput = '';
+    for (const scenario of cases) {
+      let stdout = '',
+        stderr = '',
+        preflightTimedOut = false;
+      const local = spawn(
+        process.execPath,
+        [entry, '-y', '-m', 'fixture-model', '-p', '/drill preflight'],
+        {
+          cwd: workspace,
+          env: { ...env, ...scenario.overrides },
+          windowsHide: true,
+          stdio: ['ignore', 'pipe', 'pipe'],
+        },
+      );
+      local.stdout.on('data', (chunk) => {
+        stdout += chunk;
+      });
+      local.stderr.on('data', (chunk) => {
+        stderr += chunk;
+      });
+      const timer = setTimeout(() => {
+        preflightTimedOut = true;
+        local.kill();
+      }, 15000);
+      let exitCode;
+      try {
+        exitCode = await new Promise((resolve, reject) => {
+          local.once('error', reject);
+          local.once('close', resolve);
+        });
+      } finally {
+        clearTimeout(timer);
+      }
+      const row = stdout
+        .split(/\r?\n/)
+        .find((line) => /^• java\s*:/.test(line));
+      preflightOutput += `${scenario.name}\n${stdout}\nSTDERR\n${stderr}\n`;
+      fs.writeFileSync(
+        reportPath.replace(/\.json$/, '-java-discovery-output.txt'),
+        preflightOutput,
+      );
+      javaDiscoveryRuns.push({
+        name: scenario.name,
+        exitCode,
+        timedOut: preflightTimedOut,
+        javaRow: row,
+        requests: requests.length,
+      });
+      assert.equal(exitCode, 0, stdout + stderr);
+      assert.equal(preflightTimedOut, false);
+      assert.ok(
+        row?.includes(scenario.expected) && row.includes(scenario.source),
+        stdout + stderr,
+      );
+      assert.equal(
+        requests.length,
+        0,
+        'Local preflight must not call a model.',
+      );
+    }
+  }
   const started = Date.now();
   child = spawn(
     process.execPath,
@@ -316,6 +422,16 @@ try {
     inputUnchanged: hash(fs.readFileSync(sample)) === sampleSha256,
     completeToolReadChain:
       requests.length === 3 && output.includes('NATIVE_DECOMPILE_DELIVERED'),
+    ...(verifyJavaDiscovery
+      ? {
+          javaDiscoveryMatchesExecution:
+            javaDiscoveryRuns.length === 3 &&
+            javaDiscoveryRuns.every(
+              (run) =>
+                run.exitCode === 0 && !run.timedOut && run.requests === 0,
+            ),
+        }
+      : {}),
   };
   const report = {
     passed: Object.values(checks).every(Boolean),
@@ -332,6 +448,7 @@ try {
     sampleSha256,
     result,
     retainedArtifacts,
+    javaDiscoveryRuns,
     scope:
       'Installed CLI calls native Ghidra/JDK on a generated x86-64 loop-and-branch sample, then reads full retained pseudocode. Loopback model only. Target never executed; not full real-provider autonomy or arbitrary-format reverse-engineering acceptance.',
   };

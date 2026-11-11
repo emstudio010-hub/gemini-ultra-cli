@@ -11,7 +11,10 @@ import * as path from 'node:path';
 import { DrillStore } from '../drill/drillStore.js';
 import { readDrillGrant } from '../drill/drillGrant.js';
 import { ToolErrorType } from './tool-error.js';
-import { discoverGhidraDecompiler } from './ghidraRuntime.js';
+import {
+  discoverGhidraDecompiler,
+  discoverGhidraJava,
+} from './ghidraRuntime.js';
 import type { Config } from '../config/config.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import {
@@ -139,7 +142,13 @@ export async function runDrillPreflight(): Promise<DrillPreflightResult> {
     checkIdaMcp(Number(process.env['GEMINI_ULTRA_IDA_MCP_PORT']) || 8745),
     Promise.all(
       toolNames.map(
-        async (name) => [name, await checkBinaryAsync(name)] as const,
+        async (name) =>
+          [
+            name,
+            name === 'java'
+              ? await discoverGhidraJava(() => checkBinaryAsync(name))
+              : await checkBinaryAsync(name),
+          ] as const,
       ),
     ),
   ]);
@@ -152,16 +161,6 @@ export async function runDrillPreflight(): Promise<DrillPreflightResult> {
     (tools['analyzeHeadless'].available
       ? path.dirname(path.dirname(tools['analyzeHeadless'].pathOrStatus || ''))
       : undefined);
-  const javaHome = process.env['JAVA_HOME'];
-  if (!tools['java'].available && javaHome) {
-    const java = path.join(
-      javaHome,
-      'bin',
-      process.platform === 'win32' ? 'java.exe' : 'java',
-    );
-    if (fs.existsSync(java))
-      tools['java'] = { available: true, pathOrStatus: java };
-  }
   const ghidraDetected =
     !!ghidraHome &&
     fs.existsSync(
