@@ -29,9 +29,13 @@ flowchart LR
 
 ## 验证与边界
 
+初次产品源6efedc157642154013216ffd49fff6f55d917d29/run43059337223的Windows/macOS通过、Ubuntu失败，57未安装。Ubuntu已正确形成单任务/单绑定和落败方42，但胜者输出prepared后因projects.json.lock异步心跳ENOENT退出1，不能接受为成功。proper-lockfile心跳stat回调可在release移除锁目录后到达；新增ProjectRegistry的releaseStarted标记，仅在释放开始后忽略迟到回调，持锁期间锁丢失仍按原行为抛出。新增两项定向检查旧实现1失败/1通过，修后2通过，覆盖释放期间/之后迟到回调和持锁期间的拒绝/原文保留。
+
+同处注册锁原配置100次重试/最小100ms却沿用指数因子，与LOCK_TIMEOUT_MS=10000的意图不符；现固定factor1/maxTimeout100ms，定时退避等待预算约10秒，不声称这是包含文件系统调用的绝对墙钟期限。没有放宽竞争断言、忽略持锁期间异常或把退出1视作通过。原CI日志和三个工件保留，产品变化后以新源重新做相关三平台检查。
+
 源码原生三组：Swarm/Swarm、Teamwork/Boost、Swarm/Teamwork。9次CLI进程（3初始化、6竞争），每组一退出0/一预期42，仅胜者到达发布屏障、仅一份任务记录和绑定，预算requests0、0模型、无残留转换锁。屏障仅在真实绑定文件发布前暂停，不替换检查结果或写入数据；上限20秒低于生产锁30秒stale，减少夹具自身造成过期的干扰。源码运行时使用45秒屏障且已通过，后只缩短夹具期限，最终包须用20秒版本完成相同三组。
 
-6项相关core定向检查通过：等价路径嵌套失败后释放、过期锁目录夹具恢复、完整工作流审查修正与最终审查、Swarm累计预算取消/恢复、直接运行拒绝冲突、已取消成员收尾期间拒绝激活/创建工作流或Swarm并在收尾后允许；新增Swarm断言后仅复核该项。未跑全量或冒烟。相关严格type/lint通过；三平台包/安装结果待追加。
+6项相关core定向检查通过：等价路径嵌套失败后释放、过期锁目录夹具恢复、完整工作流审查修正与最终审查、Swarm累计预算取消/恢复、直接运行拒绝冲突、已取消成员收尾期间拒绝激活/创建工作流或Swarm并在收尾后允许；新增Swarm断言后仅复核该项。加上2项注册锁检查，共8项不同检查。未跑全量或冒烟。相关严格type/lint通过；最终新源三平台包/安装结果待追加。
 
 工程C:\Users\Administrator\Documents\ChatGPT\gmncliu：task-claims-installed56-before*、task-claims-source*、task-claims-core\*、task-claims-types.log、task-claims-lint.log。源码报告版本取上游nightly根包；不是最终preview版本。本机locale
 SHA保持56阶段末值。

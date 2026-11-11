@@ -54,6 +54,74 @@ describe('ProjectRegistry', () => {
     expect(shortId).toBe('my-project');
   });
 
+  it('ignores delayed heartbeat errors only after registry release has started', async () => {
+    let compromised: (error: Error) => void = (error) => {
+      throw error;
+    };
+    const lost = Object.assign(new Error('Registry lock no longer exists'), {
+      code: 'ECOMPROMISED',
+    });
+    vi.mocked(lock).mockImplementation(async (_file, options) => {
+      compromised =
+        options?.onCompromised ??
+        ((error) => {
+          throw error;
+        });
+      return async () => {
+        compromised(lost);
+      };
+    });
+    const registry = new ProjectRegistry(registryPath);
+    await registry.initialize();
+    const project = path.join(tempDir, 'delayed-heartbeat');
+    await expect(registry.getShortId(project)).resolves.toBe(
+      'delayed-heartbeat',
+    );
+    const before = fs.readFileSync(registryPath);
+    expect(() => compromised(lost)).not.toThrow();
+    expect(fs.readFileSync(registryPath)).toEqual(before);
+    expect(JSON.parse(before.toString()).projects[normalizePath(project)]).toBe(
+      'delayed-heartbeat',
+    );
+  });
+
+  it('still rejects a heartbeat compromise while registry work is active, without saving over the original', async () => {
+    fs.writeFileSync(registryPath, JSON.stringify({ projects: {} }));
+    const before = fs.readFileSync(registryPath);
+    const registry = new ProjectRegistry(registryPath);
+    await registry.initialize();
+    let compromised: (error: Error) => void = (error) => {
+      throw error;
+    };
+    const release = vi.fn(async () => {});
+    vi.mocked(lock).mockImplementation(async (_file, options) => {
+      compromised =
+        options?.onCompromised ??
+        ((error) => {
+          throw error;
+        });
+      return release;
+    });
+    const lost = Object.assign(new Error('Registry lock replaced while held'), {
+      code: 'ECOMPROMISED',
+    });
+    const read = vi
+      .spyOn(fs.promises, 'readFile')
+      .mockImplementationOnce(async () => {
+        compromised(lost);
+        return '{}';
+      });
+    try {
+      await expect(
+        registry.getShortId(path.join(tempDir, 'rejected')),
+      ).rejects.toBe(lost);
+      expect(fs.readFileSync(registryPath)).toEqual(before);
+      expect(release).toHaveBeenCalledOnce();
+    } finally {
+      read.mockRestore();
+    }
+  });
+
   it('slugifies the project name', async () => {
     const registry = new ProjectRegistry(registryPath);
     await registry.initialize();

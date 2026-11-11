@@ -187,10 +187,22 @@ export class ProjectRegistry {
     }
 
     // Use proper-lockfile to prevent racy updates
+    let releaseStarted = false;
     const release = await lock(this.registryPath, {
       retries: {
         retries: Math.floor(LOCK_TIMEOUT_MS / LOCK_RETRY_DELAY_MS),
         minTimeout: LOCK_RETRY_DELAY_MS,
+        maxTimeout: LOCK_RETRY_DELAY_MS,
+        factor: 1,
+      },
+      onCompromised: (error) => {
+        // A heartbeat stat may finish after release removed its directory.
+        // No registry work remains at this point; real loss while held stays fatal.
+        if (!releaseStarted) throw error;
+        debugLogger.debug(
+          'Ignored a late heartbeat after registry lock release:',
+          error,
+        );
       },
     });
 
@@ -225,6 +237,7 @@ export class ProjectRegistry {
       await this.save(currentData);
       return shortId;
     } finally {
+      releaseStarted = true;
       try {
         await release();
       } catch (e) {
