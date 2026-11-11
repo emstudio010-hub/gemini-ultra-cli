@@ -1,6 +1,6 @@
 # Gemini Ultra CLI 跨进程任务创建交接
 
-日期：2026-11-11。WI-089/E-209/F-057，候选preview.57。沿用R26/code-audit自有源码case、lead/cae/doc，scope授权granted；不重新初始化历史case。没有付费模型、外部安全目标或个人配置/数据库/逆向工具改动。
+日期：2026-11-11。WI-089/E-209/F-057，preview.57 已安装。沿用R26/code-audit自有源码case、lead/cae/doc，scope授权granted；不重新初始化历史case。没有付费模型、外部安全目标或个人配置/数据库/逆向工具改动。
 
 ## 发现与实现
 
@@ -35,10 +35,27 @@ flowchart LR
 
 源码原生三组：Swarm/Swarm、Teamwork/Boost、Swarm/Teamwork。9次CLI进程（3初始化、6竞争），每组一退出0/一预期42，仅胜者到达发布屏障、仅一份任务记录和绑定，预算requests0、0模型、无残留转换锁。屏障仅在真实绑定文件发布前暂停，不替换检查结果或写入数据；上限20秒低于生产锁30秒stale，减少夹具自身造成过期的干扰。源码运行时使用45秒屏障且已通过，后只缩短夹具期限，最终包须用20秒版本完成相同三组。
 
-6项相关core定向检查通过：等价路径嵌套失败后释放、过期锁目录夹具恢复、完整工作流审查修正与最终审查、Swarm累计预算取消/恢复、直接运行拒绝冲突、已取消成员收尾期间拒绝激活/创建工作流或Swarm并在收尾后允许；新增Swarm断言后仅复核该项。加上2项注册锁检查，共8项不同检查。未跑全量或冒烟。相关严格type/lint通过；最终新源三平台包/安装结果待追加。
+6项相关core定向检查通过：等价路径嵌套失败后释放、过期锁目录夹具恢复、完整工作流审查修正与最终审查、Swarm累计预算取消/恢复、直接运行拒绝冲突、已取消成员收尾期间拒绝激活/创建工作流或Swarm并在收尾后允许；新增Swarm断言后仅复核该项。加上2项注册锁检查，共8项不同检查。未跑全量或冒烟。相关严格type/lint通过；最终新源三平台包/安装通过，结果见下节。
 
 工程C:\Users\Administrator\Documents\ChatGPT\gmncliu：task-claims-installed56-before*、task-claims-source*、task-claims-core\*、task-claims-types.log、task-claims-lint.log。源码报告版本取上游nightly根包；不是最终preview版本。本机locale
 SHA保持56阶段末值。
+
+## 分发与全局安装
+
+E-210：最终产品源 `02210c2aa0267024c7737de50154334e0fa61b57`，
+[run 43060873899](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/43060873899)
+三平台 completed/success，限定task-claims范围。独立下载核对版本、拆分chunk源标识、包SHA、六份rg哈希/执行权限、安装与4基础工具。初run43059337223的失败和全部原工件保留，未把它作为最终验收。
+
+每平台9次CLI进程/三组双进程竞争，每组一0一预期42；只有胜者到达绑定发布点、仅一记录/绑定，原始目标和owner
+PID与胜者匹配，无残留转换锁，竞争链0模型请求。核对落败方原始busy诊断、6条竞争命令/3条初始化命令，全部输出无CRITICAL未捕获异常。final脚本使用20秒屏障；两项注册锁回归与真实Ubuntu竞争链结果分开保留。47至56未受影响基线沿用，旧链skipped，不冒充新真实Agent交付或所有交错已验收。
+
+E-211：Windows
+CI包offline已有缓存安装8003ms/退出0，双命令preview.57，425文件逐一匹配CI包，旧包保留。包SHA256为
+`d7fb74d47aebed029ec175ceb90bb10f518818e94c910089d9434e689cc6489f`，入口SHA256为
+`3a2cb0168a23f4057a099848aa81002017400ab121a5d3436e9c68701636e221`。没有重复本机业务链、启动微基准或付费任务；本机locale
+SHA仍与56末一致。
+
+最终证据：github-preview57-run.json、github-preview57-artifacts-result.json、github-run-43060873899/、global-preview57-install-result.json、global-install-github-preview57-full-result.json。初次CI证据为github-preview57-initial-run.json、github-preview57-failed.log、github-run-43059337223/；注册锁回归为task-claims-registry-before\*、task-claims-registry-junit.xml、task-claims-registry.log及registry-final-types/lint日志。WI-089修复与分发交付，源码/工程正式报告/Obsidian全文同步。
 
 goal active。真实Teamwork
 E-198预算blocked保留；这次是任务状态并发验证，不是新真实多成员交付。并发恢复/取消的更多交错、旧新版本混用、更多模型/长任务、长会话语义准确性及复杂跨机逆向继续。不合并master或创建正式Release。
