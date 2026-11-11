@@ -84,6 +84,130 @@ it('inspects the requested historical workflow without changing the current task
     expect(fs.readFileSync(path.join(directory, file))).toEqual(bytes);
 });
 
+it.each([boostCommand, teamworkCommand, grillMeCommand])(
+  'keeps completed $name resume local and does not reactivate its budget',
+  async (command) => {
+    const { config, context } = commandContext();
+    await command.action!(context, 'A completed task');
+    const record = latestAgentWorkflow(
+      root,
+      command.name as 'boost' | 'teamwork' | 'grill-me',
+    )!;
+    record.phase = 'completed';
+    record.approved = true;
+    record.milestones.forEach((item) => {
+      item.completed = true;
+    });
+    saveAgentWorkflow(root, record);
+    closeWorkflowBudget(root, record);
+    const directory = path.join(root, 'agent-workflows');
+    const before = Object.fromEntries(
+      fs
+        .readdirSync(directory)
+        .map((file) => [file, fs.readFileSync(path.join(directory, file))]),
+    );
+    const approval = config.getApprovalMode();
+    const resume = command.subCommands!.find((item) => item.name === 'resume')!;
+    for (const id of ['', record.id]) {
+      vi.mocked(context.ui.addItem).mockClear();
+      expect(await resume.action!(context, id)).toBeUndefined();
+      expect(
+        JSON.stringify(vi.mocked(context.ui.addItem).mock.calls),
+      ).toContain(record.id);
+      expect(config.getApprovalMode()).toBe(approval);
+      expect(fs.readdirSync(directory).sort()).toEqual(
+        Object.keys(before).sort(),
+      );
+      for (const [file, bytes] of Object.entries(before))
+        expect(fs.readFileSync(path.join(directory, file))).toEqual(bytes);
+    }
+  },
+);
+
+it('resumes the selected historical draft without approving it and rejects another mode or invalid ID without fallback', async () => {
+  const { config, context } = commandContext();
+  const prepare = teamworkCommand.subCommands!.find(
+    (item) => item.name === 'prepare',
+  )!;
+  await prepare.action!(context, 'Older draft remains unapproved');
+  const older = latestAgentWorkflow(root, 'teamwork')!;
+  older.phase = 'cancelled';
+  saveAgentWorkflow(root, older);
+  closeWorkflowBudget(root, older);
+  older.updatedAt = '2000-01-01T00:00:00.000Z';
+  fs.writeFileSync(
+    path.join(root, 'agent-workflows', older.id + '.json'),
+    JSON.stringify(older),
+  );
+  await prepare.action!(context, 'Newer completed task');
+  const newer = latestAgentWorkflow(root, 'teamwork')!;
+  newer.phase = 'completed';
+  newer.approved = true;
+  saveAgentWorkflow(root, newer);
+  closeWorkflowBudget(root, newer);
+  const resume = teamworkCommand.subCommands!.find(
+    (item) => item.name === 'resume',
+  )!;
+  const result = await resume.action!(context, older.id);
+  expect(result).toMatchObject({
+    type: 'submit_prompt',
+    content: expect.stringContaining(older.id),
+  });
+  expect(config.getApprovalMode()).toBe(ApprovalMode.PLAN);
+  expect(latestAgentWorkflow(root, 'teamwork')!.approved).toBe(false);
+  const directory = path.join(root, 'agent-workflows');
+  const before = Object.fromEntries(
+    fs
+      .readdirSync(directory)
+      .map((file) => [file, fs.readFileSync(path.join(directory, file))]),
+  );
+  expect(await resume.action!(context, 'invalid-id')).toBeUndefined();
+  expect(
+    await boostCommand.subCommands!.find((item) => item.name === 'resume')!
+      .action!(context, older.id),
+  ).toBeUndefined();
+  for (const [file, bytes] of Object.entries(before))
+    expect(fs.readFileSync(path.join(directory, file))).toEqual(bytes);
+});
+
+it('refuses historical resume while another task has an open budget, keeping both records and approval unchanged', async () => {
+  const { config, context } = commandContext();
+  const prepare = teamworkCommand.subCommands!.find(
+    (item) => item.name === 'prepare',
+  )!;
+  await prepare.action!(context, 'Historical cancelled draft');
+  const older = latestAgentWorkflow(root, 'teamwork')!;
+  older.phase = 'cancelled';
+  saveAgentWorkflow(root, older);
+  closeWorkflowBudget(root, older);
+  older.updatedAt = '2000-01-01T00:00:00.000Z';
+  fs.writeFileSync(
+    path.join(root, 'agent-workflows', older.id + '.json'),
+    JSON.stringify(older),
+  );
+  await prepare.action!(context, 'Current active draft');
+  const current = latestAgentWorkflow(root, 'teamwork')!;
+  expect(current.id).not.toBe(older.id);
+  const directory = path.join(root, 'agent-workflows');
+  const before = Object.fromEntries(
+    fs
+      .readdirSync(directory)
+      .map((file) => [file, fs.readFileSync(path.join(directory, file))]),
+  );
+  const approval = config.getApprovalMode();
+  vi.mocked(context.ui.addItem).mockClear();
+  expect(
+    await teamworkCommand.subCommands!.find((item) => item.name === 'resume')!
+      .action!(context, older.id),
+  ).toBeUndefined();
+  expect(JSON.stringify(vi.mocked(context.ui.addItem).mock.calls)).toContain(
+    'other pending workflow',
+  );
+  expect(config.getApprovalMode()).toBe(approval);
+  for (const [file, bytes] of Object.entries(before))
+    expect(fs.readFileSync(path.join(directory, file))).toEqual(bytes);
+});
+
 it('keeps teamwork scoping read-only and only submits native execution after approving a draft', async () => {
   const { config, context } = commandContext();
   const prompt = await teamworkCommand.action!(

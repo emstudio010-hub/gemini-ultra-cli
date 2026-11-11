@@ -17,6 +17,7 @@ on:
             ghidra-runtime,
             compression-snapshot,
             agent-catalog,
+            workflow-resume,
           ]
         default: full
 
@@ -56,7 +57,7 @@ jobs:
           node scripts/verify-ultra-install.mjs $entry artifacts/ultra-release/install-verification.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Verify native swarm coordination
-        if: inputs.verification_scope != 'provider' && inputs.verification_scope != 'workflow-reports' && inputs.verification_scope != 'agent-localization' && inputs.verification_scope != 'agent-catalog' && inputs.verification_scope != 'compression-snapshot' && inputs.verification_scope != 'ghidra-runtime'
+        if: inputs.verification_scope != 'provider' && inputs.verification_scope != 'workflow-reports' && inputs.verification_scope != 'agent-localization' && inputs.verification_scope != 'workflow-resume' && inputs.verification_scope != 'agent-catalog' && inputs.verification_scope != 'compression-snapshot' && inputs.verification_scope != 'ghidra-runtime'
         shell: pwsh
         run: |
           $entry = Join-Path $env:RUNNER_TEMP 'ultra-install/node_modules/gemini-ultra-cli/bundle/gemini.js'
@@ -73,14 +74,14 @@ jobs:
           node scripts/verify-ultra-swarm.mjs $entry artifacts/ultra-release/swarm-recovery-verification.json recovery
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Verify bounded remote agent discovery
-        if: inputs.verification_scope != 'provider' && inputs.verification_scope != 'workflow-reports' && inputs.verification_scope != 'agent-localization' && inputs.verification_scope != 'agent-catalog' && inputs.verification_scope != 'compression-snapshot' && inputs.verification_scope != 'ghidra-runtime'
+        if: inputs.verification_scope != 'provider' && inputs.verification_scope != 'workflow-reports' && inputs.verification_scope != 'agent-localization' && inputs.verification_scope != 'workflow-resume' && inputs.verification_scope != 'agent-catalog' && inputs.verification_scope != 'compression-snapshot' && inputs.verification_scope != 'ghidra-runtime'
         shell: pwsh
         run: |
           $entry = Join-Path $env:RUNNER_TEMP 'ultra-install/node_modules/gemini-ultra-cli/bundle/gemini.js'
           node scripts/verify-ultra-agent-discovery.mjs $entry artifacts/ultra-release/agent-discovery-verification.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Verify native workflow budgets
-        if: inputs.verification_scope != 'provider' && inputs.verification_scope != 'workflow-reports' && inputs.verification_scope != 'agent-localization' && inputs.verification_scope != 'agent-catalog' && inputs.verification_scope != 'compression-snapshot' && inputs.verification_scope != 'ghidra-runtime'
+        if: inputs.verification_scope != 'provider' && inputs.verification_scope != 'workflow-reports' && inputs.verification_scope != 'agent-localization' && inputs.verification_scope != 'workflow-resume' && inputs.verification_scope != 'agent-catalog' && inputs.verification_scope != 'compression-snapshot' && inputs.verification_scope != 'ghidra-runtime'
         shell: pwsh
         run: |
           $entry = Join-Path $env:RUNNER_TEMP 'ultra-install/node_modules/gemini-ultra-cli/bundle/gemini.js'
@@ -97,14 +98,14 @@ jobs:
           node scripts/verify-ultra-workflow.mjs $entry artifacts/ultra-release/workflow-record-recovery-verification.json record-recovery
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Verify native Teamwork draft and milestone delivery
-        if: inputs.verification_scope != 'provider' && inputs.verification_scope != 'workflow-reports' && inputs.verification_scope != 'agent-localization' && inputs.verification_scope != 'agent-catalog' && inputs.verification_scope != 'compression-snapshot' && inputs.verification_scope != 'ghidra-runtime'
+        if: inputs.verification_scope != 'provider' && inputs.verification_scope != 'workflow-reports' && inputs.verification_scope != 'agent-localization' && inputs.verification_scope != 'workflow-resume' && inputs.verification_scope != 'agent-catalog' && inputs.verification_scope != 'compression-snapshot' && inputs.verification_scope != 'ghidra-runtime'
         shell: pwsh
         run: |
           $entry = Join-Path $env:RUNNER_TEMP 'ultra-install/node_modules/gemini-ultra-cli/bundle/gemini.js'
           node scripts/verify-ultra-teamwork.mjs $entry artifacts/ultra-release/teamwork-verification.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Verify native provider commands
-        if: inputs.verification_scope != 'workflow-reports' && inputs.verification_scope != 'agent-localization' && inputs.verification_scope != 'agent-catalog' && inputs.verification_scope != 'compression-snapshot' && inputs.verification_scope != 'ghidra-runtime'
+        if: inputs.verification_scope != 'workflow-reports' && inputs.verification_scope != 'agent-localization' && inputs.verification_scope != 'workflow-resume' && inputs.verification_scope != 'agent-catalog' && inputs.verification_scope != 'compression-snapshot' && inputs.verification_scope != 'ghidra-runtime'
         shell: pwsh
         run: |
           $entry = Join-Path $env:RUNNER_TEMP 'ultra-install/node_modules/gemini-ultra-cli/bundle/gemini.js'
@@ -140,13 +141,20 @@ jobs:
           $entry = Join-Path $env:RUNNER_TEMP 'ultra-install/node_modules/gemini-ultra-cli/bundle/gemini.js'
           node scripts/verify-ultra-agent-catalog.mjs $entry artifacts/ultra-release/agent-catalog-verification.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Verify workflow ID resume and completed task handling
+        if: inputs.verification_scope == 'workflow-resume' || inputs.verification_scope == 'full' || inputs.verification_scope == ''
+        shell: pwsh
+        run: |
+          $entry = Join-Path $env:RUNNER_TEMP 'ultra-install/node_modules/gemini-ultra-cli/bundle/gemini.js'
+          node scripts/verify-ultra-workflow-resume.mjs $entry artifacts/ultra-release/workflow-resume-verification.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/setup-java@v4
-        if: inputs.verification_scope != 'provider' && inputs.verification_scope != 'workflow-reports' && inputs.verification_scope != 'agent-localization' && inputs.verification_scope != 'agent-catalog' && inputs.verification_scope != 'compression-snapshot'
+        if: inputs.verification_scope != 'provider' && inputs.verification_scope != 'workflow-reports' && inputs.verification_scope != 'agent-localization' && inputs.verification_scope != 'workflow-resume' && inputs.verification_scope != 'agent-catalog' && inputs.verification_scope != 'compression-snapshot'
         with:
           distribution: temurin
           java-version: 21
       - name: Verify installed native Ghidra decompilation
-        if: inputs.verification_scope != 'provider' && inputs.verification_scope != 'workflow-reports' && inputs.verification_scope != 'agent-localization' && inputs.verification_scope != 'agent-catalog' && inputs.verification_scope != 'compression-snapshot'
+        if: inputs.verification_scope != 'provider' && inputs.verification_scope != 'workflow-reports' && inputs.verification_scope != 'agent-localization' && inputs.verification_scope != 'workflow-resume' && inputs.verification_scope != 'agent-catalog' && inputs.verification_scope != 'compression-snapshot'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -221,6 +229,8 @@ jobs:
             artifacts/ultra-release/compression-snapshot-verification*-output.txt
             artifacts/ultra-release/agent-catalog-verification.json
             artifacts/ultra-release/agent-catalog-verification-output.txt
+            artifacts/ultra-release/workflow-resume-verification.json
+            artifacts/ultra-release/workflow-resume-verification-output.txt
             artifacts/ultra-release/native-command-verification.json
             artifacts/ultra-release/native-command-verification-output.txt
             artifacts/ultra-release/workflow-completion-repair-verification.json

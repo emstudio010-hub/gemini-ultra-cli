@@ -15,7 +15,7 @@ v24.22.2；校验场景使用本地模型fixture，真实逆向工具需另行�
 Release 下载），执行：
 
 ```sh
-npm install -g ./gemini-ultra-cli-1.0.0-preview.53.tgz
+npm install -g ./gemini-ultra-cli-1.0.0-preview.54.tgz
 gemini-ultra --version
 gemini-ultra
 ```
@@ -421,7 +421,10 @@ GettingStarted.md安装C/C++工具链后，到Ghidra安装目录的support/gradl
 查看第二页，目录中的完整命令可直接用于查看对应任务。
 `/teamwork status <ID>`、`/boost status <ID>`、`/grill-me status <ID>` 和
 `/swarm status <ID>`
-查看指定任务；工作流的模式必须匹配。列表和按 ID 查看状态均为本地只读操作，保留活动任务选择、记录、累计用量与批准状态；恢复继续使用现有 resume 流程。
+查看指定任务；工作流的模式必须匹配。列表和按 ID 查看状态均为本地只读操作，保留活动任务选择、记录、累计用量与批准状态。
+
+`/teamwork resume <ID>`、`/boost resume <ID>` 和 `/grill-me resume <ID>`
+可恢复指定工作流，模式须匹配；不带ID仍选最近任务。未批准的 Teamwork 草案继续在计划模式中对齐，只有显式 approve 才执行。恢复沿用所有权和累计预算检查，其他待处理工作流未结束时会拒绝切换。已经 completed 的工作流只返回本地提示和任务ID，保留结果、预算与原批准模式，不重新运行或调用模型。Swarm 的 resume 继续使用当前绑定，历史目录不自动选择其执行任务。
 
 目录每页读取正文最多16MiB，坏记录或未加载详情会单独标注；原文件保留，可用相应任务 ID 进一步查看或导出。目录不创建缺失的历史预算，也不把未知用量显示为零。界面标签随语言切换，任务原文保留。
 

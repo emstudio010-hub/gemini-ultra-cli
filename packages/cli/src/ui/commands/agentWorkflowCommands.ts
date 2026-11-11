@@ -119,8 +119,8 @@ function workflowCommand(
       if (!operation && !text) {
         info(
           i18n.t(
-            `用法：/${mode} <任务>；/${mode} list|status|reports|budget|resume|cancel${mode === 'teamwork' ? '|approve' : mode === 'grill-me' ? '|finish' : ''}`,
-            `Usage: /${mode} <task>; /${mode} list|status|reports|budget|resume|cancel${mode === 'teamwork' ? '|approve' : mode === 'grill-me' ? '|finish' : ''}`,
+            `用法：/${mode} <任务>；/${mode} list|status|reports|budget|resume [ID]|cancel${mode === 'teamwork' ? '|approve' : mode === 'grill-me' ? '|finish' : ''}`,
+            `Usage: /${mode} <task>; /${mode} list|status|reports|budget|resume [ID]|cancel${mode === 'teamwork' ? '|approve' : mode === 'grill-me' ? '|finish' : ''}`,
           ),
         );
         return;
@@ -137,20 +137,23 @@ function workflowCommand(
       }
       const requestedCancellation = operation === 'cancel' ? args.trim() : '';
       const requestedStatus = operation === 'status' ? args.trim() : '';
+      const requestedResume = operation === 'resume' ? args.trim() : '';
       let record = requestedStatus
         ? readAgentWorkflow(root, requestedStatus)
         : requestedCancellation
           ? cancelAgentWorkflow(root, requestedCancellation, mode)
-          : latestAgentWorkflow(root, mode, (id) => {
-              context.ui.addItem({
-                type: MessageType.WARNING,
-                text: i18n.t(
-                  `工作流记录损坏：${id}。可用对应模式的 cancel <ID> 保留并取消；原文件未修改。`,
-                  `Damaged workflow record: ${id}. Use its mode's cancel <ID> to preserve and cancel; original file unchanged.`,
-                ),
+          : requestedResume
+            ? readAgentWorkflow(root, requestedResume)
+            : latestAgentWorkflow(root, mode, (id) => {
+                context.ui.addItem({
+                  type: MessageType.WARNING,
+                  text: i18n.t(
+                    `工作流记录损坏：${id}。可用对应模式的 cancel <ID> 保留并取消；原文件未修改。`,
+                    `Damaged workflow record: ${id}. Use its mode's cancel <ID> to preserve and cancel; original file unchanged.`,
+                  ),
+                });
               });
-            });
-      if (requestedStatus && record?.mode !== mode)
+      if ((requestedStatus || requestedResume) && record?.mode !== mode)
         throw new Error(
           i18n.t(
             '任务模式不匹配，请使用记录对应的命令。',
@@ -237,6 +240,15 @@ function workflowCommand(
                 `Original task record unavailable; preserved at: ${record.recordRecoveryPath || 'record missing'}. Cumulative budget retained; create a new task instead of resuming this record.`,
               ),
             );
+          return;
+        }
+        if (operation === 'resume' && record.phase === 'completed') {
+          info(
+            i18n.t(
+              `任务 ${record.id} 已完成，结果与报告已保留；未重新执行。`,
+              `Task ${record.id} is already complete; results and reports are retained. No execution started.`,
+            ),
+          );
           return;
         }
         if (isAgentWorkflowRunning(root))
@@ -462,7 +474,10 @@ function workflowCommand(
             '先创建任务，配置模型后再开始',
             'Prepare a task before choosing models and starting',
           ],
-          resume: ['恢复已保存任务', 'Resume the saved workflow'],
+          resume: [
+            '恢复已保存任务，可指定任务ID',
+            'Resume a saved workflow; optional task ID',
+          ],
           cancel: [
             '取消并保留结果，可指定任务 ID',
             'Cancel and retain results; optional workflow ID',
