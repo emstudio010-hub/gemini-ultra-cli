@@ -110,6 +110,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { useSessionStats } from '../contexts/SessionContext.js';
 import { useKeypress } from './useKeypress.js';
+import { redactProviderCredentialCommand } from '../../utils/providerCredentialCommand.js';
 import { createCancelledToolCall } from './useAgentStream.js';
 import type { LoadedSettings } from '../../config/settings.js';
 
@@ -1851,7 +1852,10 @@ export const useGeminiStream = (
           sessionId: config.getSessionId(),
         },
         async ({ metadata: spanMetadata }) => {
-          spanMetadata.input = query;
+          spanMetadata.input =
+            typeof query === 'string'
+              ? redactProviderCredentialCommand(query)
+              : query;
 
           if (
             (isRespondingRef.current ||

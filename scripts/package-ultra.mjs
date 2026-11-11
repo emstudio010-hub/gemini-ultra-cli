@@ -21,7 +21,7 @@ import {
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.chdir(root);
-const version = process.env.GEMINI_ULTRA_RELEASE_VERSION || '1.0.0-preview.67';
+const version = process.env.GEMINI_ULTRA_RELEASE_VERSION || '1.0.0-preview.68';
 if (!/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/.test(version))
   throw new Error('Invalid release version');
 const runNode = (args, env = {}, cwd = root) =>
@@ -103,9 +103,16 @@ for (const file of await readdir(path.join(root, 'packages/cli/src/utils'))) {
     );
 }
 await cp(path.join(root, 'LICENSE'), path.join(staging, 'LICENSE'));
-await cp(
-  path.join(root, 'docs', 'ultra-install.md'),
-  path.join(staging, 'README.md'),
+const installGuide = (
+  await readFile(path.join(root, 'docs', 'ultra-install.md'), 'utf8')
+).replace(
+  /gemini-ultra-cli-\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?\.tgz/g,
+  `gemini-ultra-cli-${version}.tgz`,
+);
+await writeFile(path.join(staging, 'README.md'), installGuide);
+await writeFile(
+  path.join(bundleDest, 'docs', 'ultra-install.md'),
+  installGuide,
 );
 await cp(
   path.join(root, 'third_party', 'morphicons-2.0.2', 'LICENSE'),

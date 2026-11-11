@@ -19,7 +19,7 @@ v24.22.2；校验场景使用本地模型fixture，真实逆向工具需另行�
 Release 下载），执行：
 
 ```sh
-npm install -g ./gemini-ultra-cli-1.0.0-preview.67.tgz
+npm install -g ./gemini-ultra-cli-1.0.0-preview.68.tgz
 gemini-ultra --version
 gemini-ultra
 ```
@@ -56,6 +56,9 @@ gemini-ultra
 `/provider` 编辑。
 
 网关模式启动时，未另行指定模型会直接采用已配置的活跃供应商与模型，避免先调用 Gemini 自动分类器。CLI 参数、环境变量和设置文件中的显式模型继续优先；Google 原生登录保留自动模型选择。
+
+`/provider add`
+及其别名提交后隐藏全部参数，不加入上箭头输入历史；开发追踪也只保留隐藏后的命令。实际参数仍用于配置保存，配置窗口适合交互录入密钥。输入期间的终端编辑内容、操作系统进程参数和外部终端录制不在此隐藏范围内。旧日志文件不会自动清理；从旧日志加载输入历史时会过滤这类命令。
 
 ## 可选输出上限
 
@@ -131,13 +134,13 @@ Release。每个安装包附带 `.sha256` 文件，便于传输后核对。
 Windows PowerShell 校验安装包：
 
 ```powershell
-Get-FileHash ./gemini-ultra-cli-1.0.0-preview.49.tgz -Algorithm SHA256
-Get-Content ./gemini-ultra-cli-1.0.0-preview.49.tgz.sha256
+Get-FileHash ./gemini-ultra-cli-1.0.0-preview.68.tgz -Algorithm SHA256
+Get-Content ./gemini-ultra-cli-1.0.0-preview.68.tgz.sha256
 ```
 
 macOS 使用
-`shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.49.tgz.sha256`；Linux 使用
-`sha256sum -c gemini-ultra-cli-1.0.0-preview.49.tgz.sha256`。
+`shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.68.tgz.sha256`；Linux 使用
+`sha256sum -c gemini-ultra-cli-1.0.0-preview.68.tgz.sha256`。
 
 ## 自定义逆向工具路径
 

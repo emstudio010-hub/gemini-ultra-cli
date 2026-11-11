@@ -15,6 +15,50 @@ describe('useInputHistoryStore', () => {
     vi.clearAllMocks();
   });
 
+  it('excludes provider credential commands from replay history while retaining ordinary inputs', async () => {
+    const { result } = await renderHook(() => useInputHistoryStore());
+    for (const prefix of [
+      '/provider add',
+      '/p add',
+      '/供应商 添加',
+      '/接口 add',
+    ]) {
+      act(() =>
+        result.current.addInput(
+          `${prefix} Fixture https://fixture.invalid FAKE_PROVIDER_KEY_DO_NOT_USE fixture-model`,
+        ),
+      );
+    }
+    act(() => result.current.addInput('/provider list'));
+    act(() => result.current.addInput('/p use fixture'));
+    act(() => result.current.addInput('ordinary prompt'));
+    expect(result.current.inputHistory).toEqual([
+      '/provider list',
+      '/p use fixture',
+      'ordinary prompt',
+    ]);
+  });
+
+  it('filters legacy provider credential commands from loaded replay history', async () => {
+    const { result } = await renderHook(() => useInputHistoryStore());
+    const logger = {
+      getPreviousUserMessages: vi
+        .fn()
+        .mockResolvedValue([
+          '/provider list',
+          '/provider add Fixture https://fixture.invalid FAKE_PROVIDER_KEY_DO_NOT_USE fixture-model',
+          'ordinary prompt',
+        ]),
+    };
+    await act(async () => {
+      await result.current.initializeFromLogger(logger);
+    });
+    expect(result.current.inputHistory).toEqual([
+      'ordinary prompt',
+      '/provider list',
+    ]);
+  });
+
   it('should initialize with empty input history', async () => {
     const { result } = await renderHook(() => useInputHistoryStore());
 

@@ -57,6 +57,10 @@ import { McpPromptLoader } from '../../services/McpPromptLoader.js';
 import { SkillCommandLoader } from '../../services/SkillCommandLoader.js';
 import { parseSlashCommand } from '../../utils/commands.js';
 import {
+  isProviderCredentialCommand,
+  redactProviderCredentialCommand,
+} from '../../utils/providerCredentialCommand.js';
+import {
   type ExtensionUpdateAction,
   type ExtensionUpdateStatus,
 } from '../state/extensions.js';
@@ -386,6 +390,7 @@ export const useSlashCommandProcessor = (
       }
 
       const trimmed = rawQuery.trim();
+      const safeHistoryQuery = redactProviderCredentialCommand(trimmed);
       if (!trimmed.startsWith('/') && !trimmed.startsWith('?')) {
         return false;
       }
@@ -414,17 +419,36 @@ export const useSlashCommandProcessor = (
       // Otherwise, treat it as regular text input (e.g. file paths like
       // /home/user/file.txt) and let it be sent to the model.
       if (!commandToExecute) {
+        if (isProviderCredentialCommand(trimmed)) {
+          if (addToHistory)
+            addItem(
+              { type: MessageType.USER, text: safeHistoryQuery },
+              Date.now(),
+            );
+          addMessage({
+            type: MessageType.ERROR,
+            content: I18nManager.getInstance().t(
+              '供应商配置命令不可用，请使用 /provider 打开配置。',
+              'Provider configuration command is unavailable. Use /provider to configure providers.',
+            ),
+            timestamp: new Date(),
+          });
+          return { type: 'handled' };
+        }
         const isMcpLoading =
           config?.getMcpClientManager()?.getDiscoveryState() ===
           MCPDiscoveryState.IN_PROGRESS;
         if (isMcpLoading) {
           setIsProcessing(true);
           if (addToHistory) {
-            addItem({ type: MessageType.USER, text: trimmed }, Date.now());
+            addItem(
+              { type: MessageType.USER, text: safeHistoryQuery },
+              Date.now(),
+            );
           }
           addMessage({
             type: MessageType.ERROR,
-            content: `Unknown command: ${trimmed}. Command might have been from an MCP server but MCP servers are not done loading.`,
+            content: `Unknown command: ${safeHistoryQuery}. Command might have been from an MCP server but MCP servers are not done loading.`,
             timestamp: new Date(),
           });
           setIsProcessing(false);
@@ -438,7 +462,7 @@ export const useSlashCommandProcessor = (
       if (addToHistory) {
         const userMessageTimestamp = Date.now();
         addItem(
-          { type: MessageType.USER, text: trimmed },
+          { type: MessageType.USER, text: safeHistoryQuery },
           userMessageTimestamp,
         );
       }

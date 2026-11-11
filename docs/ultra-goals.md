@@ -1121,3 +1121,11 @@ active。
   603df279acc3164118de6fb189bae643141c34abe111e5a598670c8f7bab42c2；包在artifacts/ultra-release/gemini-ultra-cli-1.0.0-preview.67.tgz。个人locale/provider
   SHA保持66末值，工具配置仍未创建，无全量/冒烟/真实模型或旧无关业务重跑。WI-100/F-066/F-067本地修复与安装交付，旧回滚脚本不自动改写；远端工件交付尚未完成，goal
   active，不合并master/正式Release。
+
+## 2026-11-11 供应商配置命令记录
+
+WI-101/E-244/F-068：原/provider
+add全文进入USER界面记录、上箭头历史、开发UserPrompt追踪；无法识别配置命令可回落提示词。7项旧记录回归及2项旧fallback回归实际均失败。修为前缀识别、记录隐藏全部参数、历史新旧入口过滤、原始执行参数保持，未知配置命令交互handled/非交互42，普通路径不变。10定向通过+1解析空白边界，strict
+type通过，首lint仅测试one-var改后单独复核。文档旧49校验示例同步68，打包版本变量写入实际README/安装说明。候选68本地包/实际交互接续；67
+run43094935659仍被job/check-run报告运行，三平台功能成功/上传失败，不重启或取消。仅假凭据、0模型、不改个人配置DB工具，无全量/冒烟，goal
+active。

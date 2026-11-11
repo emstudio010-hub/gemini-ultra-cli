@@ -10,6 +10,7 @@ import {
   FatalInputError,
   Logger,
   uiTelemetryService,
+  I18nManager,
   type Config,
 } from '@google/gemini-cli-core';
 import { CommandService } from './services/CommandService.js';
@@ -20,6 +21,7 @@ import type { CommandContext } from './ui/commands/types.js';
 import { createNonInteractiveUI } from './ui/noninteractive/nonInteractiveUi.js';
 import type { LoadedSettings } from './config/settings.js';
 import type { SessionStatsState } from './ui/contexts/SessionContext.js';
+import { isProviderCredentialCommand } from './utils/providerCredentialCommand.js';
 
 export const LOCAL_SLASH_COMMAND_HANDLED = Symbol(
   'local slash command handled',
@@ -55,6 +57,15 @@ export const handleSlashCommand = async (
   const commands = commandService.getCommands();
 
   const { commandToExecute, args } = parseSlashCommand(rawQuery, commands);
+
+  if (!commandToExecute && isProviderCredentialCommand(trimmed)) {
+    throw new FatalInputError(
+      I18nManager.getInstance().t(
+        '供应商配置命令不可用，请使用 /provider 打开配置。',
+        'Provider configuration command is unavailable. Use /provider to configure providers.',
+      ),
+    );
+  }
 
   if (commandToExecute) {
     if (commandToExecute.action) {

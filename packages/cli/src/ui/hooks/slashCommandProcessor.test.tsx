@@ -266,6 +266,59 @@ describe('useSlashCommandProcessor', () => {
     };
   };
 
+  it.each(['/provider add', '/p add', '/供应商 添加', '/接口 add'])(
+    'hides provider credential parameters for %s while executing original arguments',
+    async (prefix) => {
+      const action = vi.fn().mockResolvedValue(undefined);
+      const provider = createTestCommand({
+        name: 'provider',
+        altNames: ['p', '供应商', '接口'],
+        subCommands: [
+          createTestCommand({ name: 'add', altNames: ['添加'], action }),
+        ],
+      });
+      const processor = await setupProcessorHook({
+        builtinCommands: [provider],
+      });
+      const args =
+        'Fixture https://fixture.invalid FAKE_PROVIDER_KEY_DO_NOT_USE fixture-model';
+      const raw = `${prefix} ${args}`;
+      await act(async () => {
+        await processor.current.handleSlashCommand(raw);
+      });
+      expect(action).toHaveBeenCalledWith(
+        expect.objectContaining({
+          invocation: expect.objectContaining({ raw, args }),
+        }),
+        args,
+      );
+      expect(mockAddItem).toHaveBeenCalledWith(
+        { type: MessageType.USER, text: `${prefix} ***` },
+        expect.any(Number),
+      );
+      expect(JSON.stringify(mockAddItem.mock.calls)).not.toContain(
+        'FAKE_PROVIDER_KEY_DO_NOT_USE',
+      );
+    },
+  );
+
+  it('handles an unavailable provider credential command locally instead of forwarding it as a model prompt', async () => {
+    const processor = await setupProcessorHook();
+    let handled;
+    await act(async () => {
+      handled = await processor.current.handleSlashCommand(
+        '/Provider add Fixture https://fixture.invalid FAKE_PROVIDER_KEY_DO_NOT_USE fixture-model',
+      );
+    });
+    expect(handled).toEqual({ type: 'handled' });
+    expect(JSON.stringify(mockAddItem.mock.calls)).not.toContain(
+      'FAKE_PROVIDER_KEY_DO_NOT_USE',
+    );
+    expect(
+      await processor.current.handleSlashCommand('/home/user/file.txt'),
+    ).toBe(false);
+  });
+
   describe('Console Clear Safety', () => {
     it('should not call console.clear if alternate buffer is active', async () => {
       mockUseAlternateBuffer.mockReturnValue(true);

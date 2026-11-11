@@ -6,6 +6,7 @@
 
 import { debugLogger } from '@google/gemini-cli-core';
 import { useState, useCallback } from 'react';
+import { isProviderCredentialCommand } from '../../utils/providerCredentialCommand.js';
 
 interface Logger {
   getPreviousUserMessages(): Promise<string[]>;
@@ -64,7 +65,9 @@ export function useInputHistoryStore(): UseInputHistoryStoreReturn {
       if (isInitialized || !logger) return;
 
       try {
-        const pastMessages = (await logger.getPreviousUserMessages()) || [];
+        const pastMessages = (
+          (await logger.getPreviousUserMessages()) || []
+        ).filter((message) => !isProviderCredentialCommand(message));
         setPastSessionMessages(pastMessages); // Store as newest first
         recalculateHistory([], pastMessages);
         setIsInitialized(true);
@@ -89,7 +92,7 @@ export function useInputHistoryStore(): UseInputHistoryStoreReturn {
   const addInput = useCallback(
     (input: string) => {
       const trimmedInput = input.trim();
-      if (!trimmedInput) return; // Filter empty/whitespace-only inputs
+      if (!trimmedInput || isProviderCredentialCommand(trimmedInput)) return;
 
       setCurrentSessionMessages((prevCurrent) => {
         const newCurrentSession = [...prevCurrent, trimmedInput];

@@ -5180,6 +5180,23 @@ describe('useGeminiStream', () => {
     });
   });
 
+  it('hides provider credential parameters in UserPrompt traces while handling the original local command', async () => {
+    const { result } = await renderTestHook();
+    mockHandleSlashCommand.mockResolvedValue({ type: 'handled' });
+    const metadata = {} as SpanMetadata;
+    mockRunInDevTraceSpan.mockImplementationOnce(async (_options, callback) =>
+      callback({ metadata }),
+    );
+    const raw =
+      '/provider add Fixture https://fixture.invalid FAKE_PROVIDER_KEY_DO_NOT_USE fixture-model';
+    await act(async () => {
+      await result.current.submitQuery(raw);
+    });
+    expect(mockHandleSlashCommand).toHaveBeenCalledWith(raw);
+    expect(metadata.input).toBe('/provider add ***');
+    expect(mockSendMessageStream).not.toHaveBeenCalled();
+  });
+
   it('should trace UserPrompt telemetry on submitQuery', async () => {
     const { result } = await renderTestHook();
 
