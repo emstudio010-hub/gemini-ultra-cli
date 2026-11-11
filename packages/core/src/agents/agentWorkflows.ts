@@ -8,7 +8,7 @@ import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { lock, checkSync } from 'proper-lockfile';
 import { z } from 'zod';
-import { latestSwarm } from './swarm.js';
+import { latestSwarm, assertNoPendingSwarm } from './swarm.js';
 import { workflowContext, workflowMilestoneTitle } from './workflowContext.js';
 import {
   saveWorkflowReportText,
@@ -240,6 +240,8 @@ export function createAgentWorkflow(
     throw new Error(
       'Resolve the pending workflow or swarm with resume or cancel before creating another task.',
     );
+  // A cancelled swarm may still have a local writer settling its last turn.
+  assertNoPendingSwarm(projectTempDir);
   const record = workflowSchema.parse({
     id: randomUUID(),
     mode,
@@ -396,6 +398,7 @@ export async function runAgentWorkflow(
   runAgent: WorkflowAgentRunner,
   onProgress?: (message: string) => void,
 ): Promise<AgentWorkflow> {
+  assertNoPendingSwarm(projectTempDir);
   const directory = workflowDir(projectTempDir);
   fs.mkdirSync(directory, { recursive: true });
   // Also prevents separate CLI processes from running writers in this workspace.

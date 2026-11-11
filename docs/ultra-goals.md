@@ -918,3 +918,12 @@
 - E-204：产品源0a9a3a1f6ac2c51ae8cf6d2171fc1c9bb11b7309/run43052663857三平台swarm-resume范围completed/success；版本/源chunk/包SHA/六rg身份权限及安装核对。每平台16命令/7退出0/9预期42，12终态/拒绝场景文件SHA保持，1loopback历史协调请求；预算7→8/30/失败1/轮3、原成员/模型/留言保持，恢复后9非选中文件SHA保持。原始英文3次及中文别名completed提示核对。独立核对器初误要求源标识在轻入口，改查实际拆分chunk后通过，原失败保留，不重跑CI。旧链skipped，47至54基线保留。
 - E-205：offline缓存安装7948ms/退出0，双命令preview.55，425文件匹配Windows
   CI包，旧包保留；包SHA522f82c4…/入口SHA0f75d150…完整值见交接。无本机业务/基准/付费重跑。WI-087交付，E-198真实Teamwork仍blocked，首轮locale夹具写en的情况和后续隔离保留披露；目标active，不合并master/正式Release。下一阶段核实activateWorkflowBudget反向Swarm冲突，不把本轮Swarm方向保护称双向完整。docs/ultra-swarm-resume-handoff.md。
+
+## 2026-11-11 工作流反向Swarm冲突保护
+
+WI-088/E-206/F-056
+in_progress：activateWorkflowBudget未查Swarm，runAgentWorkflow可直接启动。旧core9项7失败/2通过；已安装55在active
+Swarm下/boost
+resume发送1次不应发生的loopback请求并改workflow/current/ledger三文件，本地端点主动拒绝HTTP400（非付费供应商失败），原证据保留。新增共享只读assertNoPendingSwarm，用于预算激活前、直接运行前及创建落盘前，拒绝active/blocked/仍在收尾的本进程成员及损坏binding，terminal且已收尾允许；completed斜杠本地退出保持。10不同core项通过，收尾项补新建不落盘断言后仅复核该项；严格type/lint和源码8命令链继续。没有付费重试、个人locale/供应商/DB/工具改动，不合并master/正式Release。
+
+E-206修复本地完成：源码8原生命令/3退出0/5预期42，6拒绝/终态场景9文件SHA保持、拒绝零请求；取消Swarm后1loopback恢复历史Teamwork草案，scoping/approved=false，请求7→8/30/失败0/轮[]/绑定旧ID，6非选中文件SHA保持。10不同core项及相关严格type/lint通过；无付费重试，本机locale SHA保持55末值，供应商/DB/工具未改。候选56待workflow-exclusion范围三平台包与安装，47至55未受影响基线保留，跨进程同时抢占未验收，goal active。

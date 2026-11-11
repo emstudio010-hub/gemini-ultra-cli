@@ -255,6 +255,18 @@ export function latestSwarm(root: string): Swarm | undefined {
   const pointer = readPointer(root);
   return pointer ? readSwarm(root, pointer.id) : undefined;
 }
+/** Refuse another workflow before it changes state or initializes a budget. */
+export function assertNoPendingSwarm(root: string): void {
+  const swarm = latestSwarm(root);
+  if (
+    swarm &&
+    (['active', 'blocked'].includes(swarm.phase) ||
+      isSwarmRunning(root, swarm.id))
+  )
+    throw new Error(
+      'Resolve the pending swarm with finish or cancel before resuming or running a workflow.',
+    );
+}
 export function readSwarmBoard(root: string, id: string): SwarmPost[] {
   const file = path.join(directory(root, id), 'board.jsonl');
   if (fs.statSync(file).size > 4 * 1024 * 1024)
