@@ -1,6 +1,6 @@
 # Gemini Ultra CLI 原生命令语言与完成提交恢复交接
 
-日期：2026-11-11。WI-082，候选 preview.50。沿用 R26/code-audit 自有源码 case，lead/cae/doc，scope
+日期：2026-11-11。WI-082，preview.50 已安装。沿用 R26/code-audit 自有源码 case，lead/cae/doc，scope
 granted；case-guard 退出0。没有外部扫描、个人配置/数据库或逆向工具安装改动。
 
 ## 真实任务结果与修复
@@ -43,5 +43,17 @@ flowchart LR
 
 候选50使用 agent-localization 范围，只运行三平台新鲜打包/安装、本地语言命令与完成参数恢复链；未受影响的 Swarm/Teamwork/Ghidra 完整基线为47/run43018021899，供应商为48/run43024019734，长报告为49/run43026662717。不把跳过的步骤称作本版本重新验收。
 
-CI、最终源码身份、工件哈希和 Windows 全局安装结果待本阶段追加。goal
+E-187：最终产品源 `5a5697564c443d97c0430c32826ef4c230691434`，
+[run 43032286756](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/43032286756)
+三平台 completed/success，agent-localization 范围。版本/源码身份/包 SHA、六份 rg 哈希及执行权限、安装与4个基础工具均核对通过。每平台12条本地命令、10退出0/2预期42/0模型请求；完成参数修正链16个 loopback 请求、14调度、五阶段 completed、全部 checks 通过，旧链步骤 skipped。
+
+E-188：Windows
+CI 包 offline 已有缓存安装7785ms/退出0，双命令 preview.50，425文件逐一匹配包；旧包保留。包 SHA256 为
+`50e2e08e78f9c0540e8ca314088532559378afb49ff809c3de2b27add809f59b`，入口 SHA256 为
+`6d3655dfbe5c002fc7f84527cd9471c2c8229bcb9121c812e629e406834e7635`。首次宿主安装脚本使用 Windows
+PowerShell 默认编码读取含中文 JSON 而失败，尚未执行 npm；明确 UTF-8 后安装成功，不是产品故障，也没有重跑业务链或付费任务。
+
+最终证据：`github-preview50-run.json`、`github-preview50-artifacts-result.json`、`github-run-43032286756/`、`global-preview50-install-result.json`、`global-install-github-preview50-full-result.json`。源码、工程正式报告和 Obsidian 交接同步。WI-082修复与分发交付，E-185实际失败保持。
+
+goal
 active；真实 Teamwork 自主长任务成功、更多模型、长会话摘要准确性、复杂逆向及跨机器实际交互仍未完成。不合并 master，不创建正式 Release。
