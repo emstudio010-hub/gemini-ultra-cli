@@ -9,19 +9,19 @@
 | ------ | ------------------------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | P0     | 缩短启动，避免父子进程重复加载核心依赖      | 本地完成，持续观察          | preview.46安装ConPTY输入框1771ms/本地命令2018ms、0模型；移除编辑器导入探测，跳过无IDE线索及伴侣文件的进程扫描，单Windows非跨机器基准 |
 | P0     | 加载卡住时可取消、有超时和错误恢复          | 本地完成，持续观察          | E-170至172远程卡片10秒中止后主会话继续；既有流收尾/命令表就绪门控，46修复完整参数Enter反复补全                                       |
-| P0     | 长会话压缩异常保护                          | 三平台定向通过              | E-192至194：无效复核回退有效首轮、全无效保留原历史、自动失败不重复摘要；格式校验不证明语义准确                                      |
+| P0     | 长会话压缩异常保护                          | 三平台定向通过              | E-192至194：无效复核回退有效首轮、全无效保留原历史、自动失败不重复摘要；格式校验不证明语义准确                                       |
 | P0     | `/language` 中文/英文选择与六档唯一推理强度 | 本地完成                    | 显式切换、即时刷新、持久化；终端与浏览器中英文各六档，别名仍可输入                                                                   |
 | P1     | 模型配置便捷可靠                            | 本地及三平台定向通过        | E-179至181：即时切换限定路由、手填零目录、失败保留配置、语言一致；默认gateway跳过额外分类，更多供应商待                              |
 | P1     | 多 Agent 有界排队、取消与结果可见           | 有界真实Boost/Swarm交付通过 | E-156逆向报告与E-163隔离代码交付；独立审查、SHA和用户改动保留；更多模型/长任务与成本仍待                                             |
-| P1     | Teamwork / Boost / Grill me                 | 原生命令与流程接线完成      | E-176至178原生流程通过；E-185真实任务blocked保留，E-186至188一次严格提交修正已分发；真实长任务待验收                                |
-| P1     | 保存任务可发现、按ID只读查看                 | 三平台定向通过              | E-195至197：53四入口共享目录/分页，指定ID不再选错任务，29记录/绑定文件保持、缺失预算不初始化，0模型请求                            |
+| P1     | Teamwork / Boost / Grill me                 | 原生命令与流程接线完成      | E-176至178原生流程通过；E-185失败保留，E-198新真实任务一里程碑完成后预算blocked；宿主修复与模型完整交付分开，长任务待验收            |
+| P1     | 保存任务可发现、按ID查看与恢复              | 三平台定向通过              | E-195至201：53四入口目录/指定状态；54三工作流resume ID正确选择，completed本地返回、7文件保持；Swarm历史执行选择器仍待                |
 | P1     | Swarm具名成员、共享留言与实时看板           | 有界真实代码交付通过        | E-163真实3成员各一轮、隔离worktree审查/显式回写、原24项功能断言通过，原index/用户改动保留；更大任务待验收                            |
 | P1     | 内置红队工作流                              | 本地分析闭环通过            | 临时授权下redteam-analyst真实分析生成样本并归档，E-016；复杂逆向与外部目标未验收                                                     |
 | P2     | 演练台 Morphicons 交互图标与强度动效        | 本地完成                    | 使用 Morphicons 2.0.2；浏览器确认六档、图标、移动布局、减少动态效果与隐藏暂停                                                        |
-| P0     | 安装到 CLI 本身并生成可分发安装包           | 本地完成                    | 当前preview.53 Windows CI包，425文件匹配，双命令更新；E-196/197，旧失败和协作报告保留                                                |
-| P1     | 其他电脑可以开展本地逆向                    | 三平台原生静态链通过        | E-190/191：51三平台Java选择与Ghidra原生链通过；既有r2结构/引用归档保留，复杂格式、多函数关联及动态分析待补                      |
-| P1     | GitHub 三平台分发验收                       | 47完整/48至53按范围通过    | 53/run43043214007任务目录/指定状态通过；52压缩、51 Java/Ghidra、50语言/提交、49报告、48供应商、47协作保留                                 |
-| P1     | 真实供应商与长会话上线验收                  | 有界任务通过，整体未完成    | E-156 Boost逆向报告、E-163 Swarm代码修复真实交付；E-124/185失败保留。更多模型/长任务/成本与摘要准确性继续，不能据此称全面上线            |
+| P0     | 安装到 CLI 本身并生成可分发安装包           | 本地完成                    | 当前preview.54 Windows CI包，425文件匹配，双命令更新；E-200/201，旧失败和协作报告保留                                                |
+| P1     | 其他电脑可以开展本地逆向                    | 三平台原生静态链通过        | E-190/191：51三平台Java选择与Ghidra原生链通过；既有r2结构/引用归档保留，复杂格式、多函数关联及动态分析待补                           |
+| P1     | GitHub 三平台分发验收                       | 47完整/48至54按范围通过     | 54/run43048048157指定工作流恢复/已完成本地返回通过；53目录、52压缩、51 Java/Ghidra、50语言/提交、49报告、48供应商、47协作保留        |
+| P1     | 真实供应商与长会话上线验收                  | 有界任务通过，整体未完成    | E-156 Boost逆向报告、E-163 Swarm代码修复真实交付；E-124/185失败保留。更多模型/长任务/成本与摘要准确性继续，不能据此称全面上线        |
 
 ## 证据记录
 
@@ -837,34 +837,74 @@
 
 ## 2026-11-11 原生命令语言与完成参数修正
 
-- WI-082/E-185：真实Teamwork本地化任务blocked，131737ms/15请求（main9、researcher6、coder0），两个里程碑草案先保存后批准；最终complete_task嵌套额外wait_for_previous遭严格校验拒绝后无修正机会。隔离源码字节未变，无交付补丁；凭据已移除。响应报告165907 token非账单，不重复付费任务，宿主后续文案实现不归功于Teamwork。
+- WI-082/E-185：真实Teamwork本地化任务blocked，131737ms/15请求（main9、researcher6、coder0），两个里程碑草案先保存后批准；最终complete_task嵌套额外wait_for_previous遭严格校验拒绝后无修正机会。隔离源码字节未变，无交付补丁；凭据已移除。响应报告165907
+  token非账单，不重复付费任务，宿主后续文案实现不归功于Teamwork。
 - E-186/F-050：只为普通文本协议停止后遭拒绝的最终完成提交提供一次修正，共用原60秒期限和原预算、completion-only，严格schema保持。MAX_TURNS/TIMEOUT不增加修正，不将执行上限改成成功。team/redteam描述和drill说明/反馈随locale，事实/路径/哈希保持，授权/并发逻辑保持。
-- 旧恢复成功用例先失败，修后15项；旧文案3失败，修后4项，共19定向项及相关严格lint/type通过。源码本地12命令/10退出0/2预期42/0模型；completion-repair原生16 loopback请求/14调度/五阶段completed/退出0。无全量/冒烟/外部扫描。
-- 候选50待agent-localization范围三平台包/安装和上述两链；未受影响基线47完整、48供应商、49长报告保留。WI-082修复本地完成，真实Teamwork长任务质量未验收，goal active，不合并master/正式Release。docs/ultra-native-command-recovery-handoff.md。
-- E-187：产品源5a5697564c443d97c0430c32826ef4c230691434/run43032286756三平台agent-localization范围completed/success，版本/包SHA/源码/六rg身份权限及安装通过。每平台本地12命令/10退出0/2预期42/0模型；完成参数修正16 loopback请求/14调度/五阶段completed/全部checks真。旧链步骤skipped，基线47/48/49保留，不冒充重验收。
-- E-188：offline已有缓存安装7785ms/退出0，双命令preview.50，425文件匹配Windows CI包，旧包保留；包SHA50e2e08e…/入口SHA6d3655df…，完整值见交接。首个宿主安装脚本在npm执行前因PowerShell默认编码误读中文JSON失败，显式UTF-8后成功，非产品故障；未重跑本机业务链/付费任务。WI-082修复和分发交付，E-185真实失败保留，goal active，不合并master/正式Release。docs/ultra-native-command-recovery-handoff.md。
+- 旧恢复成功用例先失败，修后15项；旧文案3失败，修后4项，共19定向项及相关严格lint/type通过。源码本地12命令/10退出0/2预期42/0模型；completion-repair原生16
+  loopback请求/14调度/五阶段completed/退出0。无全量/冒烟/外部扫描。
+- 候选50待agent-localization范围三平台包/安装和上述两链；未受影响基线47完整、48供应商、49长报告保留。WI-082修复本地完成，真实Teamwork长任务质量未验收，goal
+  active，不合并master/正式Release。docs/ultra-native-command-recovery-handoff.md。
+- E-187：产品源5a5697564c443d97c0430c32826ef4c230691434/run43032286756三平台agent-localization范围completed/success，版本/包SHA/源码/六rg身份权限及安装通过。每平台本地12命令/10退出0/2预期42/0模型；完成参数修正16
+  loopback请求/14调度/五阶段completed/全部checks真。旧链步骤skipped，基线47/48/49保留，不冒充重验收。
+- E-188：offline已有缓存安装7785ms/退出0，双命令preview.50，425文件匹配Windows
+  CI包，旧包保留；包SHA50e2e08e…/入口SHA6d3655df…，完整值见交接。首个宿主安装脚本在npm执行前因PowerShell默认编码误读中文JSON失败，显式UTF-8后成功，非产品故障；未重跑本机业务链/付费任务。WI-082修复和分发交付，E-185真实失败保留，goal
+  active，不合并master/正式Release。docs/ultra-native-command-recovery-handoff.md。
+
 ## 2026-11-11 Ghidra JVM 路径一致性
 
-- WI-083/E-189/F-051 in_progress：preview.50实际/drill preflight在JAVA_HOME指向不存在目录但PATH有Java时仍把Java/Ghidra标ready，和反编译实际优先JAVA_HOME矛盾；新脚本在第一个本地命令断言失败后停止，未启动JVM/模型，原日志保留。源码旧实现5项场景4失败/1通过。
-- 巡检与执行共享Java选择和文件/执行权限校验：显式GEMINI_ULTRA_TOOL_JAVA > JAVA_HOME > PATH；无效高优先配置不回退、不隐藏错误，拒绝批处理包装，空格路径保持。反编译在建立分析工件/启动JVM前拒绝坏路径。10项相关定向检查、严格相关lint/type通过，未运行全量/冒烟/付费任务。
-- 候选51待ghidra-runtime三平台新鲜包/安装、三条本地发现命令和实际Ghidra循环分支静态反编译链。未受影响协作/供应商/全文报告/提交修正保留47/48/49/50基线。goal active，不合并master/正式Release。
-- E-190：产品源bea986f6d187e1651cbef3556b8a5ac2679b9f67/run43034637488三平台ghidra-runtime范围completed/success；版本/包SHA/源/六rg身份权限与安装核对通过。每平台3条原生巡检/退出0/0模型，实际Ghidra/JDK链3个loopback请求/退出0，函数00400090及样本/完整代码哈希核对，全部checks真；macOS native构建成功。未受影响旧链skipped，47/48/49/50基线保留。
-- E-191：offline缓存安装7677ms/退出0，双命令preview.51，425文件匹配Windows CI包，旧包保留；包SHA62f97c9d…/入口SHAe5993b03…完整值见交接。未重跑本机反编译/启动基准或付费任务；原50误报、4项旧失败保留，独立复核只读原输出。WI-083交付，goal active，下一阶段检查长会话摘要完整性；真实Teamwork长任务等边界继续，不合并master/正式Release。docs/ultra-ghidra-java-discovery-handoff.md。
+- WI-083/E-189/F-051 in_progress：preview.50实际/drill
+  preflight在JAVA_HOME指向不存在目录但PATH有Java时仍把Java/Ghidra标ready，和反编译实际优先JAVA_HOME矛盾；新脚本在第一个本地命令断言失败后停止，未启动JVM/模型，原日志保留。源码旧实现5项场景4失败/1通过。
+- 巡检与执行共享Java选择和文件/执行权限校验：显式GEMINI_ULTRA_TOOL_JAVA >
+  JAVA_HOME >
+  PATH；无效高优先配置不回退、不隐藏错误，拒绝批处理包装，空格路径保持。反编译在建立分析工件/启动JVM前拒绝坏路径。10项相关定向检查、严格相关lint/type通过，未运行全量/冒烟/付费任务。
+- 候选51待ghidra-runtime三平台新鲜包/安装、三条本地发现命令和实际Ghidra循环分支静态反编译链。未受影响协作/供应商/全文报告/提交修正保留47/48/49/50基线。goal
+  active，不合并master/正式Release。
+- E-190：产品源bea986f6d187e1651cbef3556b8a5ac2679b9f67/run43034637488三平台ghidra-runtime范围completed/success；版本/包SHA/源/六rg身份权限与安装核对通过。每平台3条原生巡检/退出0/0模型，实际Ghidra/JDK链3个loopback请求/退出0，函数00400090及样本/完整代码哈希核对，全部checks真；macOS
+  native构建成功。未受影响旧链skipped，47/48/49/50基线保留。
+- E-191：offline缓存安装7677ms/退出0，双命令preview.51，425文件匹配Windows
+  CI包，旧包保留；包SHA62f97c9d…/入口SHAe5993b03…完整值见交接。未重跑本机反编译/启动基准或付费任务；原50误报、4项旧失败保留，独立复核只读原输出。WI-083交付，goal
+  active，下一阶段检查长会话摘要完整性；真实Teamwork长任务等边界继续，不合并master/正式Release。docs/ultra-ghidra-java-discovery-handoff.md。
+
 ## 2026-11-11 压缩快照保护
 
-- WI-084/E-192/F-052 in_progress：任意非空复核文本可覆盖有效首轮摘要，两轮非快照也会压缩成功；旧2项定向检查和已安装51实际CLI均复现。现检查既定七章节/唯一完整根和非空目标/任务状态，只取快照正文；复核无效回退首轮有效快照，均无效保留原历史并报告INVALID_SUMMARY。自动空/无效失败沿用失败标志停止重复摘要，手动仍可重试；不声称结构能证明语义准确。
-- 57 core项初56通过/1夹具容量过小，容量仍低于触发阈值下修正并单独通过；CLI提示1项通过，共58不同项及严格lint/type通过，不重跑已通过项。源码原生fallback 3+2/invalid 4+2，共11 loopback请求/退出0，后续上下文、原始约束/证据与近期工具配对/原文件哈希通过。
-- 首次源码夹具模拟600k超过128k窗口，正常保护中止；改70k后最终通过，原失败保留，非产品故障。候选52待三平台compression-snapshot范围包/安装和原生两场景；未受影响47至51基线保留，goal active，不合并master/正式Release。docs/ultra-compression-snapshot-handoff.md。
-- E-193：产品源6323a5683666f7f4308b5fe9d53cb1f6a6b62683/run43038706202三平台compression-snapshot范围completed/success。版本/源/包SHA/六rg身份权限及安装通过；每平台fallback 3+2、invalid 4+2，共11 loopback请求/均退出0/全部checks真。独立读归档最终上下文核对约束/证据路径/待办或原历史、近期结果/工具配对、无ACK和思考段污染，不只依赖passed。未受影响旧链skipped，47至51基线保留。
-- E-194：offline缓存安装7878ms/退出0，双命令preview.52，425文件匹配Windows CI包，旧包保留；包SHAd0910c32…/入口SHA899ee20a…完整值见交接。不重复本机业务链/启动基准/付费任务，旧失败与夹具修正记录保留。WI-084交付，goal active；语义完整性/真实Teamwork长任务/更多模型/复杂逆向继续，不合并master/正式Release。docs/ultra-compression-snapshot-handoff.md。
+- WI-084/E-192/F-052
+  in_progress：任意非空复核文本可覆盖有效首轮摘要，两轮非快照也会压缩成功；旧2项定向检查和已安装51实际CLI均复现。现检查既定七章节/唯一完整根和非空目标/任务状态，只取快照正文；复核无效回退首轮有效快照，均无效保留原历史并报告INVALID_SUMMARY。自动空/无效失败沿用失败标志停止重复摘要，手动仍可重试；不声称结构能证明语义准确。
+- 57
+  core项初56通过/1夹具容量过小，容量仍低于触发阈值下修正并单独通过；CLI提示1项通过，共58不同项及严格lint/type通过，不重跑已通过项。源码原生fallback
+  3+2/invalid 4+2，共11
+  loopback请求/退出0，后续上下文、原始约束/证据与近期工具配对/原文件哈希通过。
+- 首次源码夹具模拟600k超过128k窗口，正常保护中止；改70k后最终通过，原失败保留，非产品故障。候选52待三平台compression-snapshot范围包/安装和原生两场景；未受影响47至51基线保留，goal
+  active，不合并master/正式Release。docs/ultra-compression-snapshot-handoff.md。
+- E-193：产品源6323a5683666f7f4308b5fe9d53cb1f6a6b62683/run43038706202三平台compression-snapshot范围completed/success。版本/源/包SHA/六rg身份权限及安装通过；每平台fallback
+  3+2、invalid 4+2，共11
+  loopback请求/均退出0/全部checks真。独立读归档最终上下文核对约束/证据路径/待办或原历史、近期结果/工具配对、无ACK和思考段污染，不只依赖passed。未受影响旧链skipped，47至51基线保留。
+- E-194：offline缓存安装7878ms/退出0，双命令preview.52，425文件匹配Windows
+  CI包，旧包保留；包SHAd0910c32…/入口SHA899ee20a…完整值见交接。不重复本机业务链/启动基准/付费任务，旧失败与夹具修正记录保留。WI-084交付，goal
+  active；语义完整性/真实Teamwork长任务/更多模型/复杂逆向继续，不合并master/正式Release。docs/ultra-compression-snapshot-handoff.md。
+
 ## 2026-11-11 历史 Agent 任务目录
 
-- WI-085/E-195/F-053 in_progress：已安装52实际status旧ID返回最新任务和错误ID并初始化其旧账本，两本地命令/0模型处失败；Swarm旧状态依赖损坏latest而忽略指定ID。新四种list入口共享项目目录，20项/页/正文16MiB预算；status ID直接读对应模式记录，历史预算只读，缺失未知不创建。标签/阶段中文化、原目标保留、完整下页/查看命令；活动绑定/审批/执行规则保留。
-- 5 core+15命令共20不同检查通过；命令初14通过/1夹具顺序失败，修正只复核该1项，旧工作流单测夹具失败不冒充产品证据，安装版原始输出确认真实ID缺陷。严格相关lint/type通过。最终源码16原生命令/12退出0/4预期42/0模型，25保存记录/29文件SHA前后保持、缺失旧账本不初始化。夹具种入记录，不是实际Agent交付验收。
-- 候选53待三平台agent-catalog范围新鲜包/安装和本地链；47至52未受影响基线保留。历史恢复仍用已有resume，本轮不新增执行选择器或付费任务。goal active，不合并master/正式Release。docs/ultra-agent-task-catalog-handoff.md。
+- WI-085/E-195/F-053
+  in_progress：已安装52实际status旧ID返回最新任务和错误ID并初始化其旧账本，两本地命令/0模型处失败；Swarm旧状态依赖损坏latest而忽略指定ID。新四种list入口共享项目目录，20项/页/正文16MiB预算；status
+  ID直接读对应模式记录，历史预算只读，缺失未知不创建。标签/阶段中文化、原目标保留、完整下页/查看命令；活动绑定/审批/执行规则保留。
+- 5
+  core+15命令共20不同检查通过；命令初14通过/1夹具顺序失败，修正只复核该1项，旧工作流单测夹具失败不冒充产品证据，安装版原始输出确认真实ID缺陷。严格相关lint/type通过。最终源码16原生命令/12退出0/4预期42/0模型，25保存记录/29文件SHA前后保持、缺失旧账本不初始化。夹具种入记录，不是实际Agent交付验收。
+- 候选53待三平台agent-catalog范围新鲜包/安装和本地链；47至52未受影响基线保留。历史恢复仍用已有resume，本轮不新增执行选择器或付费任务。goal
+  active，不合并master/正式Release。docs/ultra-agent-task-catalog-handoff.md。
 - E-196：产品源ec8bb5f7de74acc7c0a2a9d513ad601e2a883c80/run43043214007三平台agent-catalog范围completed/success；版本/源/包SHA/六rg身份权限及安装通过。每平台16本地命令/12退出0/4预期42/0模型，29记录/绑定文件SHA前后保持，全部checks真。独立读原生输出确认两份英文旧ID状态正确、预算不可用而不初始化；中文目录/别名/阶段及原目标保持，坏JSON原文不回显。旧链skipped，47至52基线保留。
-- E-197：offline缓存安装8280ms/退出0，双命令preview.53，425文件匹配Windows CI包，旧包保留；包SHA4bb186d7…/入口SHA1991f2c0…完整值见交接。不重跑本机业务链/启动基准/付费任务，旧错误ID与夹具失败保留。WI-085交付，goal active；目录/指定查看没有变成任务恢复执行选择器，真实Teamwork长任务等边界继续，不合并master/正式Release。docs/ultra-agent-task-catalog-handoff.md。
-WI-086/E-198 in_progress：已安装53原生Teamwork执行一次全新实际源码任务（非旧49本地化重跑），隔离快照仅agentWorkflowCommands.ts+SPEC，两个里程碑：resume ID直接选择/模式校验；completed本地返回不再激活或执行。prepare→budget32/失败2/轮1→workspace on→resume草案后显式approve；观察38请求硬限。模型不运行shell/测试/外部目标，宿主独立审查后才回写真正源码，原配置和工作树保存。运行handle在工程run-live-teamwork53.mjs，状态前缀preview53-live-teamwork-resume-；已有只读草案3真实请求、2里程碑、未批准前0实施，执行继续。失败不自动重跑。
-- E-198/WI-086：新实际Teamwork恢复选择任务392200ms/32请求按预算blocked，不是旧付费任务重试；里程碑1实施/独立审查通过，里程碑2调查完成/coder中止。个人配置SHA保持，凭据移除，实际源先未变。响应报告622313 token非账单，部分补丁及5报告/[true,false]保留，不自动增加预算或重跑。
+- E-197：offline缓存安装8280ms/退出0，双命令preview.53，425文件匹配Windows
+  CI包，旧包保留；包SHA4bb186d7…/入口SHA1991f2c0…完整值见交接。不重跑本机业务链/启动基准/付费任务，旧错误ID与夹具失败保留。WI-085交付，goal
+  active；目录/指定查看没有变成任务恢复执行选择器，真实Teamwork长任务等边界继续，不合并master/正式Release。docs/ultra-agent-task-catalog-handoff.md。WI-086/E-198
+  in_progress：已安装53原生Teamwork执行一次全新实际源码任务（非旧49本地化重跑），隔离快照仅agentWorkflowCommands.ts+SPEC，两个里程碑：resume
+  ID直接选择/模式校验；completed本地返回不再激活或执行。prepare→budget32/失败2/轮1→workspace
+  on→resume草案后显式approve；观察38请求硬限。模型不运行shell/测试/外部目标，宿主独立审查后才回写真正源码，原配置和工作树保存。运行handle在工程run-live-teamwork53.mjs，状态前缀preview53-live-teamwork-resume-；已有只读草案3真实请求、2里程碑、未批准前0实施，执行继续。失败不自动重跑。
+- E-198/WI-086：新实际Teamwork恢复选择任务392200ms/32请求按预算blocked，不是旧付费任务重试；里程碑1实施/独立审查通过，里程碑2调查完成/coder中止。个人配置SHA保持，凭据移除，实际源先未变。响应报告622313
+  token非账单，部分补丁及5报告/[true,false]保留，不自动增加预算或重跑。
 - E-199/F-054：宿主审查复用第一阶段ID读取/模式校验，删冗余undefined分支；宿主完成completed本地返回、描述及用法。旧4项失败，修后14项与严格lint/type通过。源码原生14命令/11退出0/3预期42，仅历史草案1loopback请求，scoping/approved=false且请求7→8，7已完成记录/账本/绑定SHA不变。初夹具活owner触发拒绝、次夹具请求数误期望7，修正后accepted通过，原失败保留，非产品逻辑放宽。
-- 候选54待workflow-resume三平台包/安装；47至53未受影响基线保留。真实Teamwork完整交付仍未通过，宿主后续实现不归为模型成功。goal active，不合并master/正式Release。docs/ultra-workflow-resume-handoff.md。
+- 候选54待workflow-resume三平台包/安装；47至53未受影响基线保留。真实Teamwork完整交付仍未通过，宿主后续实现不归为模型成功。goal
+  active，不合并master/正式Release。docs/ultra-workflow-resume-handoff.md。
+
+- E-200：产品源4c56c1423bc7bf42b75cc482dd0a6e518baed71a/run43048048157三平台workflow-resume范围completed/success。版本/源/包SHA/六rg身份权限及安装通过；每平台14命令/11退出0/3预期42，仅历史草案1loopback请求，7已完成记录/账本/绑定SHA保持。草案scoping/approved=false/绑定旧ID、请求7→8/限制30/失败0/轮数[]；原始中英文提示与草案标记独立核对。旧无关链skipped，47至53基线保留。
+- E-201：offline已有缓存安装11070ms/退出0，双命令preview.54，425文件逐一匹配Windows
+  CI包，旧包保留；包SHAa2065fe4…/入口SHAd0b3eaa9…完整值见交接。未重复本机业务链/启动微基准/付费任务；E-198实际Teamwork预算blocked及原报告保持，自动错误文件0凭据匹配，读取统计可能父/成员重复，不能直接推断成本或根因。WI-086修复与分发交付，goal
+  active；读取冗余/长会话语义/真实完整Teamwork和Swarm历史执行选择继续，不合并master/正式Release。docs/ultra-workflow-resume-handoff.md。

@@ -1,6 +1,6 @@
 # Gemini Ultra CLI 指定工作流恢复交接
 
-日期：2026-11-11。WI-086，候选 preview.54。沿用 R26/code-audit 自有源码 case，lead/cae/doc。E-198 是一次新任务，没有重跑49本地化或旧Swarm任务；没有外部安全目标、个人配置/数据库/本机逆向工具改动。
+日期：2026-11-11。WI-086，preview.54 已安装。沿用 R26/code-audit 自有源码 case，lead/cae/doc。E-198 是一次新任务，没有重跑49本地化或旧Swarm任务；没有外部安全目标、个人配置/数据库/本机逆向工具改动。
 
 ## 真实 Teamwork 与代码归属
 
@@ -45,5 +45,21 @@ flowchart LR
 
 工程 C:\Users\Administrator\Documents\ChatGPT\gmncliu：`preview53-live-teamwork-resume-*`、`run-live-teamwork53.mjs`、`observe-live-teamwork53.mjs`；`workflow-resume-before*`、`workflow-resume-junit.xml`、`workflow-resume-test.log`、`workflow-resume-types.log`、`workflow-resume-lint.log`、`workflow-resume-final-script-lint.log`、`workflow-resume-source*`。源码报告version取根包nightly，不是最终包版本。
 
-候选54只运行 workflow-resume 范围三平台新鲜包/安装及本次原生链。47协作、48供应商、49报告、50提交恢复、51Ghidra、52压缩、53目录基线保留。最终源码/CI/工件哈希/安装结果待追加。goal
-active；真实Teamwork完整自主交付仍待，现有预算/实际读取冗余和长会话语义等问题仍需后续处理。不合并 master 或创建正式 Release。
+54只运行 workflow-resume 范围三平台新鲜包/安装及本次原生链。47协作、48供应商、49报告、50提交恢复、51Ghidra、52压缩、53目录基线保留。
+
+E-200：产品源 `4c56c1423bc7bf42b75cc482dd0a6e518baed71a`，
+[run 43048048157](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/43048048157)
+三平台 completed/success。独立下载并核对版本/源码身份/包 SHA、六份 rg 哈希及执行权限、安装与4个基础工具。每平台恢复链14命令，11退出0/3预期42，只有历史未批准草案1次loopback请求；7个已完成记录/账本/绑定文件哈希保持，草案仍scoping/approved=false、绑定选中旧ID、累计请求7→8/限制30/失败0/实施轮数[]。原始输出中的六次英文与一次中文 completed 提示，以及历史草案标记均已核对。未受影响旧链 skipped，不能视作本轮全部重验收。
+
+E-201：Windows
+CI包 offline 已有缓存安装11070ms/退出0，双命令均为 preview.54，425文件逐一匹配CI包，旧包保留。包 SHA256 为
+`a2065fe4196148edca123b9c2e215fa6e04bbfd1550a0197d242df462f10ab62`，入口 SHA256 为
+`d0b3eaa93e36cd72d7cfbbe42393cc47afd999bc4d17e63317f22bad37d7c513`。没有重复本机业务链、启动微基准或付费任务。
+
+最终证据：`github-preview54-run.json`、`github-preview54-artifacts-result.json`、`github-run-43048048157/`、`global-preview54-install-result.json`、`global-install-github-preview54-full-result.json`。真实任务自动错误报告经离线扫描为0凭据匹配，原文件保留，见
+`preview53-live-teamwork-resume-generated-error-review.json`；工具读取统计见
+`preview53-live-teamwork-resume-tool-overhead.json`，其中父/成员记录可能重复，不能直接推断费用下降或根因。
+
+WI-086修复与分发交付；真实Teamwork
+E-198仍为预算blocked，宿主后续实现不算模型完整交付。源码交接、工程正式报告和 Obsidian 同步。goal
+active；真实Teamwork完整自主交付、实际读取冗余和长会话语义等问题继续处理，不自动增加预算或付费重试。不合并 master 或创建正式 Release。
