@@ -60,11 +60,11 @@ function workflowCommand(
         if (!args.trim())
           throw new Error(
             i18n.t(
-              '用法：/boost prepare <任务>',
-              'Usage: /boost prepare <task>',
+              `用法：/${mode} prepare <任务>`,
+              `Usage: /${mode} prepare <task>`,
             ),
           );
-        if (config.getApprovalMode() === ApprovalMode.PLAN)
+        if (mode === 'boost' && config.getApprovalMode() === ApprovalMode.PLAN)
           throw new Error(
             i18n.t('请先退出计划模式。', 'Leave Plan Mode first.'),
           );
@@ -81,6 +81,7 @@ function workflowCommand(
           args.trim(),
           config.getApprovalMode(),
         );
+        if (mode === 'teamwork') config.setApprovalMode(ApprovalMode.PLAN);
         info(
           i18n.t(
             `任务已准备：${prepared.id}。先用 /${mode} model 配置角色，再 /${mode} resume 开始；尚未调用模型。`,
@@ -378,7 +379,7 @@ function workflowCommand(
     'reports',
     ...(mode === 'grill-me' ? [] : ['model']),
     ...(mode === 'grill-me' ? [] : ['workspace']),
-    ...(mode === 'boost' ? ['prepare'] : []),
+    ...(mode !== 'grill-me' ? ['prepare'] : []),
     'budget',
     'resume',
     'cancel',

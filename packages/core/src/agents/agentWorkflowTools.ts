@@ -24,6 +24,7 @@ import {
   isAgentWorkflowRunning,
   agentWorkflowSummary,
 } from './agentWorkflows.js';
+import { assertWorkflowBudgetOwnership } from './workflowBudget.js';
 
 interface DraftParams {
   workflow_id: string;
@@ -47,6 +48,7 @@ class DraftInvocation extends BaseToolInvocation<DraftParams, ToolResult> {
     if (isAgentWorkflowRunning(root))
       throw new Error('A workflow is executing in this workspace.');
     const record = readAgentWorkflow(root, this.params.workflow_id);
+    assertWorkflowBudgetOwnership(root, record);
     if (!['scoping', 'ready'].includes(record.phase) || record.approved)
       throw new Error('Only an unapproved scoping record can be drafted.');
     const plan = workflowPlanSchema.parse(this.params);

@@ -15,7 +15,7 @@ v24.22.2；校验场景使用本地模型fixture，真实逆向工具需另行�
 Release 下载），执行：
 
 ```sh
-npm install -g ./gemini-ultra-cli-1.0.0-preview.32.tgz
+npm install -g ./gemini-ultra-cli-1.0.0-preview.47.tgz
 gemini-ultra --version
 gemini-ultra
 ```
@@ -111,13 +111,13 @@ Release。每个安装包附带 `.sha256` 文件，便于传输后核对。
 Windows PowerShell 校验安装包：
 
 ```powershell
-Get-FileHash ./gemini-ultra-cli-1.0.0-preview.32.tgz -Algorithm SHA256
-Get-Content ./gemini-ultra-cli-1.0.0-preview.32.tgz.sha256
+Get-FileHash ./gemini-ultra-cli-1.0.0-preview.47.tgz -Algorithm SHA256
+Get-Content ./gemini-ultra-cli-1.0.0-preview.47.tgz.sha256
 ```
 
 macOS 使用
-`shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.32.tgz.sha256`；Linux 使用
-`sha256sum -c gemini-ultra-cli-1.0.0-preview.32.tgz.sha256`。
+`shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.47.tgz.sha256`；Linux 使用
+`sha256sum -c gemini-ultra-cli-1.0.0-preview.47.tgz.sha256`。
 
 ## 自定义逆向工具路径
 
@@ -301,12 +301,17 @@ Schema 标准小写。
 
 ## Teamwork、Boost 与需求访谈
 
-preview.30 新增三个入口，参照 Google
+参照 Google
 Antigravity 的公开工作流概念，使用本 CLI 的模型、权限、子 Agent 与本地状态实现；不需要安装 Antigravity 或复制开发者配置。
 
 - `/boost <任务>`：直接启动两条只读调查，再由一个 coder 实施、独立 auditor 检查。每个里程碑最多两轮修正和审查，最后另做整体审查；未通过则保留结果并阻塞，不自动无限重试。
 - `/teamwork <目标>`：在只读计划模式中对齐范围、约束和验收条件，保存里程碑草案。`/teamwork approve`
   确认当前草案后调用原生执行链；已完成的里程碑在恢复时跳过。
+- `/teamwork prepare <目标>`：零模型创建任务并进入只读计划模式。先用
+  `/teamwork model <角色> <供应商ID:模型ID>`、`/teamwork budget <请求数> <失败阶段数> <实施轮数>`
+  和 `/teamwork workspace on` 配置，再 `/teamwork resume`
+  对齐需求和保存草案；resume不会批准执行。审阅草案后显式 `/teamwork approve`
+  才启动成员。
 - `/grill-me <需求>`（别名 `/grillme`、`/需求对齐`）：先读代码，再通过现有
   `ask_user`
   逐题提问，推荐答案在前。无参数时先澄清当前工作区的目标。对齐后保存草案，`/grill-me finish`
@@ -321,8 +326,8 @@ Antigravity 的公开工作流概念，使用本 CLI 的模型、权限、子 Ag
 显示 ID 与里程碑。草案不会自动批准自身；模型的 draft 工具不能启动执行。访谈结束或取消时恢复进入访谈前的权限模式；若原本就在计划模式，该模式仍适用。`/team`
 继续设置会话并发额度；新工作流遵循该额度。
 
-调查有独立上下文，可以并行；实现阶段共享当前工作区并串行运行，跨 CLI 进程也使用工作区锁。当前没有为每个 worker 自动创建 Git
-worktree，不应当作 Antigravity 的隔离工作树实现。独立审查员只能读取工件，采用结构化通过/不通过判定；没有证据的明确验收条件应判不通过。模型判定仍需真实任务验收，不能仅凭结构化字段宣称生产就绪。每次原生执行有20分钟上限，达到上限保留进度并阻塞，可由用户显式恢复。
+调查有独立上下文，可以并行；实现阶段串行运行，跨 CLI 进程也使用工作区锁。首轮前可显式启用
+`workspace on`，整个任务共用一份隔离 Git 工作树，详见下文；成员不各自创建并行分支。独立审查员只能读取工件，采用结构化通过/不通过判定；没有证据的明确验收条件应判不通过。模型判定仍需真实任务验收，不能仅凭结构化字段宣称生产就绪。每次原生执行有20分钟上限，达到上限保留进度并阻塞，可由用户显式恢复。
 
 原始阶段报告按项目保存，主会话只接收有长度上限的近期摘要与原始记录路径，避免大量并行报告撑满上下文。测试范围始终遵循用户要求，只运行必要检查。
 
@@ -352,7 +357,8 @@ worktree，不应当作 Antigravity 的隔离工作树实现。独立审查员�
 
 `/swarm prepare <任务>` 零模型创建，随后可配置模型和 `/swarm workspace on`，再
 `/swarm resume`
-开始。Boost 同样支持 prepare/model/workspace，Teamwork 在原批准流程里配置 model/workspace。
+开始。Boost 和 Teamwork 同样支持 prepare/model/workspace；Teamwork
+resume 仍只对齐草案，须显式 approve 才执行。
 
 workspace
 on 必须在第一轮前启用，要求当前目录是已有HEAD的Git仓库根目录。它捕获实际工作文件及非忽略未跟踪内容，保留原暂存区/HEAD；整个任务共用一份隔离工作树，writer/verifier仍串行，成员文件工具和shell

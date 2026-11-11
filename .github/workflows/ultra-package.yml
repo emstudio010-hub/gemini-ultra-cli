@@ -78,6 +78,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node scripts/verify-ultra-workflow.mjs $entry artifacts/ultra-release/workflow-record-recovery-verification.json record-recovery
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Verify native Teamwork draft and milestone delivery
+        shell: pwsh
+        run: |
+          $entry = Join-Path $env:RUNNER_TEMP 'ultra-install/node_modules/gemini-ultra-cli/bundle/gemini.js'
+          node scripts/verify-ultra-teamwork.mjs $entry artifacts/ultra-release/teamwork-verification.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -146,4 +152,6 @@ jobs:
             artifacts/ultra-release/workflow-recovery-verification-output.txt
             artifacts/ultra-release/workflow-record-recovery-verification.json
             artifacts/ultra-release/workflow-record-recovery-verification-output.txt
+            artifacts/ultra-release/teamwork-verification.json
+            artifacts/ultra-release/teamwork-verification-output.txt
           if-no-files-found: error

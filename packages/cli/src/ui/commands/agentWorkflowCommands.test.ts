@@ -216,3 +216,38 @@ it('prepares boost locally so role models can be chosen before native execution 
     'native:gemini-fixture',
   );
 });
+
+it('prepares teamwork locally, configures roles and budget, and resumes only the read-only interview', async () => {
+  const { config, context } = commandContext();
+  const operation = (name: string) =>
+    teamworkCommand.subCommands!.find((item) => item.name === name)!;
+  expect(
+    await operation('prepare').action!(context, 'Deliver a scoped feature'),
+  ).toBeUndefined();
+  const record = latestAgentWorkflow(root, 'teamwork')!;
+  expect(record).toMatchObject({
+    phase: 'scoping',
+    approved: false,
+    previousApprovalMode: ApprovalMode.DEFAULT,
+  });
+  expect(config.getApprovalMode()).toBe(ApprovalMode.PLAN);
+  await operation('model').action!(context, 'coder native:gemini-fixture');
+  await operation('budget').action!(context, '40 2 1');
+  expect(workflowBudget(root, record)).toMatchObject({
+    requests: 0,
+    maxRequests: 40,
+    maxFailedStages: 2,
+    maxImplementationRounds: 1,
+  });
+  expect(latestAgentWorkflow(root, 'teamwork')?.roleModels.coder).toBe(
+    'native:gemini-fixture',
+  );
+  const resumed = await operation('resume').action!(context, '');
+  expect(resumed).toMatchObject({
+    type: 'submit_prompt',
+    content: expect.stringContaining('draft_agent_workflow'),
+  });
+  expect(latestAgentWorkflow(root, 'teamwork')?.approved).toBe(false);
+  expect(config.getApprovalMode()).toBe(ApprovalMode.PLAN);
+  expect(operation('prepare').autoExecute).toBe(false);
+});

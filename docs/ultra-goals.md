@@ -789,3 +789,13 @@
   CI包，旧包保留。最终安装ConPTY1771ms输入框/2018ms命令确认/2250ms原生ide普通终端提示，正常quit退出0、timedOut=false、0模型，总3738ms含按键退出。旧45仅作参考，不称稳定百分比或跨平台交互基准，不称真实IDE伴侣已连接。
 - WI-078交付，目标池首页更新46。候选版本错误/旧run身份拒绝、原watchdog失败留存，不重复付费/无关fixture，不合并master/正式Release。goal
   active，下一步回到Teamwork实际产品交付和语言/模型操作一致性，避免只追微小性能数字。docs/ultra-ide-startup-handoff.md。
+
+## 2026-11-11 Teamwork 离线准备与完整交付
+
+- E-176/WI-079：新增 Teamwork
+  prepare，零模型创建后先配置角色、预算和任务隔离工作树；resume 只进入需求对齐，显式 approve 才执行。草案工具保存前检查跨 CLI 活进程拥有者，拒绝改写并保留原记录/账本字节；当前拥有者保存不批准也不重置预算。
+- 2 草案工具 +
+  8 命令定向用例、严格相关 lint/type 通过。源码原生 CLI 的草案到两个里程碑、整体独立审查、显式 export/apply 和完整报告链通过：20
+  loopback 请求，批准前 3 次，7 报告，各角色独立选模，原 HEAD/index/用户改动与配置保留。Windows 平台换行按逻辑内容检查，回写保持工件原字节。
+- 源码 bundle 旧策略资产、计划模式内部写计划工具的错误检查假设和换行失败保留，不冒充产品故障或隐藏失败。候选 preview.47 三平台/安装待追加；真实 Teamwork 长任务未验收，Swarm 既有真实交付保留不重复付费。goal
+  active，不合并 master/正式 Release。交接 docs/ultra-teamwork-delivery-handoff.md。
