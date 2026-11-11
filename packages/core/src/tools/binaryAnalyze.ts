@@ -11,6 +11,7 @@ import type { Config } from '../config/config.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { checkBinary } from './drillTools.js';
 import { ToolErrorType } from './tool-error.js';
+import { parseNativeBinaryJson } from './nativeBinaryJson.js';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
@@ -139,15 +140,15 @@ export async function analyzeBinary(
   signal.throwIfAborted();
   let decoded: unknown;
   try {
-    decoded = JSON.parse(stdout);
+    decoded = parseNativeBinaryJson(stdout);
   } catch {
     throw new Error(
       'r2 did not return valid JSON. No partial result is reported as complete.',
     );
   }
   const location = {
-    addr: z.number().int().nonnegative().safe().optional(),
-    offset: z.number().int().nonnegative().safe().optional(),
+    addr: addressSchema.optional(),
+    offset: addressSchema.optional(),
   };
   const row =
     input.view === 'functions'
@@ -166,7 +167,7 @@ export async function analyzeBinary(
             )
         : z
             .object({
-              from: z.number().int().nonnegative().safe(),
+              from: addressSchema,
               type: z.string(),
             })
             .passthrough();
@@ -253,7 +254,7 @@ export class BinaryAnalyzeTool extends BaseDeclarativeTool<
     super(
       BinaryAnalyzeTool.Name,
       'Static Binary Analysis',
-      'Read local binary functions, instruction windows or incoming cross-references using native radare2/r2. Does not execute or modify the sample. Use binary_triage/binary_inspect first to identify format and architecture. Numeric addresses only, no commands or expressions. functions uses aa, xrefs uses aaa and requires an address, instructions defaults to the entrypoint. Bounded to 30 seconds, 4 MiB output and 64 MiB samples. Requires r2 in PATH or GEMINI_ULTRA_TOOL_R2. Empty results do not prove absence. This is static disassembly, not decompilation or runtime verification.',
+      'Read local binary functions, instruction windows or incoming cross-references using native radare2/r2. Does not execute or modify the sample. Use binary_triage/binary_inspect first to identify format and architecture. Numeric addresses only, no commands or expressions. Output integers outside the exact JavaScript range are strings; pass address strings unchanged to preserve 64-bit precision. functions uses aa, xrefs uses aaa and requires an address, instructions defaults to the entrypoint. Bounded to 30 seconds, 4 MiB output and 64 MiB samples. Requires r2 in PATH or GEMINI_ULTRA_TOOL_R2. Empty results do not prove absence. This is static disassembly, not decompilation or runtime verification.',
       Kind.Read,
       {
         type: 'object',

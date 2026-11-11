@@ -46,6 +46,23 @@ describe('Bounded native binary inspection', () => {
     );
   };
 
+  it('preserves 64-bit native metadata integers and numeric-looking string names exactly', async () => {
+    respond(
+      '{"info":{"baddr":18446603336221196417,"bits":64,"name":"18446603336221196417","nested":{"vaddr":18446744073709551615}}}',
+    );
+    const result = await inspectBinary(
+      { filePath: sample },
+      directory,
+      new AbortController().signal,
+    );
+    expect(result.data).toEqual({
+      baddr: '18446603336221196417',
+      bits: 64,
+      name: '18446603336221196417',
+      nested: { vaddr: '18446744073709551615' },
+    });
+  });
+
   it('uses fixed read-only arguments, an absolute literal path and bounded array output', async () => {
     respond(
       JSON.stringify({

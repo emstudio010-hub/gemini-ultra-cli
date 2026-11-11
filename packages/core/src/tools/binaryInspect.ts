@@ -12,6 +12,7 @@ import type { Config } from '../config/config.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { checkBinary } from './drillTools.js';
 import { ToolErrorType } from './tool-error.js';
+import { parseNativeBinaryJson } from './nativeBinaryJson.js';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
@@ -135,7 +136,7 @@ export async function inspectBinary(
   abortSignal.throwIfAborted();
   let data: unknown;
   try {
-    data = JSON.parse(stdout);
+    data = parseNativeBinaryJson(stdout);
   } catch {
     throw new Error(
       'rabin2 did not return valid JSON. Check the tool version and sample format.',
@@ -218,7 +219,7 @@ export class BinaryInspectTool extends BaseDeclarativeTool<
     super(
       BinaryInspectTool.Name,
       'Binary Structure Inspection',
-      'Reads actual binary metadata, imports, sections, libraries or symbols using the local rabin2 from radare2. Does not execute or modify the sample. Use this to verify string-based binary_triage candidates. Requires rabin2 in PATH or GEMINI_ULTRA_TOOL_RABIN2. Bounded to 20 seconds and 4 MiB of output.',
+      'Reads actual binary metadata, imports, sections, libraries or symbols using the local rabin2 from radare2. Does not execute or modify the sample. Output integers outside the exact JavaScript range are strings; retain them as strings for later 64-bit address queries. Use this to verify string-based binary_triage candidates. Requires rabin2 in PATH or GEMINI_ULTRA_TOOL_RABIN2. Bounded to 20 seconds and 4 MiB of output.',
       Kind.Read,
       {
         type: 'object',

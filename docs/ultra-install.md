@@ -19,7 +19,7 @@ v24.22.2；校验场景使用本地模型fixture，真实逆向工具需另行�
 Release 下载），执行：
 
 ```sh
-npm install -g ./gemini-ultra-cli-1.0.0-preview.69.tgz
+npm install -g ./gemini-ultra-cli-1.0.0-preview.70.tgz
 gemini-ultra --version
 gemini-ultra
 ```
@@ -134,13 +134,13 @@ Release。每个安装包附带 `.sha256` 文件，便于传输后核对。
 Windows PowerShell 校验安装包：
 
 ```powershell
-Get-FileHash ./gemini-ultra-cli-1.0.0-preview.69.tgz -Algorithm SHA256
-Get-Content ./gemini-ultra-cli-1.0.0-preview.69.tgz.sha256
+Get-FileHash ./gemini-ultra-cli-1.0.0-preview.70.tgz -Algorithm SHA256
+Get-Content ./gemini-ultra-cli-1.0.0-preview.70.tgz.sha256
 ```
 
 macOS 使用
-`shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.69.tgz.sha256`；Linux 使用
-`sha256sum -c gemini-ultra-cli-1.0.0-preview.69.tgz.sha256`。
+`shasum -a 256 -c gemini-ultra-cli-1.0.0-preview.70.tgz.sha256`；Linux 使用
+`sha256sum -c gemini-ultra-cli-1.0.0-preview.70.tgz.sha256`。
 
 ## 自定义逆向工具路径
 
@@ -185,6 +185,10 @@ gemini-ultra
 MCP 服务可用仍不足以建立连接，需要用户通过 `/mcp` 配置自己的服务。
 
 ## 原生二进制结构检查
+
+原生工具返回的整数超出 JavaScript 安全整数范围时，`binary_inspect` 和
+`binary_analyze`
+保留为精确字符串；普通地址、位数和数量仍是数字。64 位高地址可直接把返回的地址字符串用于下一次查询，不要先转换成 Number，以免舍入。
 
 模型可调用 `binary_inspect`
 读取实际文件信息、导入表、节区、依赖库与符号，使用本机 radare2 中的 rabin2，不执行或改写样本。把 rabin2 加入 PATH 或设置

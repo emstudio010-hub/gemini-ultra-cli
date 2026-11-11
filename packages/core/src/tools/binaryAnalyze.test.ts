@@ -42,6 +42,46 @@ describe('bounded static binary analysis', () => {
       ) => callback(error, output, ''),
     );
 
+  it.each(['functions', 'instructions', 'xrefs'] as const)(
+    'preserves unsigned 64-bit %s addresses from native JSON without rounding',
+    async (view) => {
+      respond(
+        view === 'functions'
+          ? '[{"addr":18446603336221196417,"name":"high"}]'
+          : view === 'instructions'
+            ? '[{"addr":18446603336221196417,"opcode":"ret"}]'
+            : '[{"from":18446603336221196417,"type":"CALL"}]',
+      );
+      const result = await analyzeBinary(
+        { filePath: sample, view, address: '0xffff800000000081' },
+        directory,
+        new AbortController().signal,
+      );
+      expect(result.data[0]).toHaveProperty(
+        view === 'xrefs' ? 'from' : 'addr',
+        '18446603336221196417',
+      );
+      expect(JSON.stringify(result)).not.toContain('18446603336221196000');
+    },
+  );
+  it('preserves large passthrough targets while keeping safe addresses and counts numeric', async () => {
+    respond(
+      '[{"addr":16,"opcode":"call high","jump":18446603336221196417,"refs":[{"addr":18446744073709551615}],"size":5}]',
+    );
+    const result = await analyzeBinary(
+      { filePath: sample, view: 'instructions' },
+      directory,
+      new AbortController().signal,
+    );
+    expect(result.data[0]).toMatchObject({
+      addr: 16,
+      jump: '18446603336221196417',
+      refs: [{ addr: '18446744073709551615' }],
+      size: 5,
+    });
+    expect(result.returnedItems).toBe(1);
+  });
+
   it('uses closed read-only commands, literal absolute paths and bounded instruction windows', async () => {
     respond(
       JSON.stringify([
