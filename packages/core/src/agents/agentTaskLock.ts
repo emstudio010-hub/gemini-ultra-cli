@@ -6,6 +6,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { lockSync } from 'proper-lockfile';
+import { I18nManager } from '../i18n/i18nManager.js';
 
 const held = new Set<string>();
 
@@ -31,7 +32,10 @@ export function withAgentTaskLock<T>(root: string, action: () => T): T {
       error.code === 'ELOCKED'
     )
       throw new Error(
-        'Another CLI is updating Agent task state. Retry the command after that update finishes.',
+        I18nManager.getInstance().t(
+          '另一个 CLI 正在更新 Agent 任务状态，请在更新完成后重试该命令。',
+          'Another CLI is updating Agent task state. Retry the command after that update finishes.',
+        ),
         { cause: error },
       );
     throw error;

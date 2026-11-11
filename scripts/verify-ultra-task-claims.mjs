@@ -12,6 +12,20 @@ import { setTimeout, clearTimeout } from 'node:timers';
 
 const entry = path.resolve(process.argv[2]);
 const output = path.resolve(process.argv[3]);
+const locale = process.argv[4] || 'en';
+assert.ok(['en', 'zh'].includes(locale), 'Locale must be en or zh');
+const pairs =
+  locale === 'zh'
+    ? [['swarm', 'swarm']]
+    : [
+        ['swarm', 'swarm'],
+        ['teamwork', 'boost'],
+        ['swarm', 'teamwork'],
+      ];
+const busyMessage =
+  locale === 'zh'
+    ? '另一个 CLI 正在更新 Agent 任务状态，请在更新完成后重试该命令。'
+    : 'Another CLI is updating Agent task state';
 const metadata = JSON.parse(
   fs
     .readFileSync(
@@ -66,11 +80,7 @@ syncBuiltinESMExports();
 );
 try {
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-  for (const [index, modes] of [
-    ['swarm', 'swarm'],
-    ['teamwork', 'boost'],
-    ['swarm', 'teamwork'],
-  ].entries()) {
+  for (const [index, modes] of pairs.entries()) {
     const folder = path.join(scratch, String(index));
     const profile = path.join(folder, 'profile');
     const workspace = path.join(folder, 'workspace');
@@ -120,10 +130,7 @@ try {
         ],
       }),
     );
-    fs.writeFileSync(
-      env.GEMINI_ULTRA_LOCALE_FILE,
-      JSON.stringify({ locale: 'en' }),
-    );
+    fs.writeFileSync(env.GEMINI_ULTRA_LOCALE_FILE, JSON.stringify({ locale }));
     fs.writeFileSync(
       path.join(profile, '.gemini/settings.json'),
       JSON.stringify({
@@ -270,9 +277,7 @@ try {
     const rejected = outcomes.filter((item) => item.exitCode === 42);
     assert.equal(rejected.length, 1, JSON.stringify(round));
     assert.ok(
-      (rejected[0].stdout + rejected[0].stderr).includes(
-        'Another CLI is updating Agent task state',
-      ),
+      (rejected[0].stdout + rejected[0].stderr).includes(busyMessage),
       JSON.stringify(round),
     );
     assert.equal(round.reachedBindings, 1);
@@ -298,6 +303,7 @@ try {
   assert.equal(timedOut, false);
   const result = {
     passed: true,
+    locale,
     version: metadata.version,
     platform: process.platform,
     timedOut,
@@ -311,7 +317,9 @@ try {
       lockReleased: true,
     },
     scope:
-      'Two independent installed CLI processes per round, paused only immediately before publishing current/latest binding. Three isolated rounds: Swarm/Swarm, Teamwork/Boost, Swarm/Teamwork. Real filesystem/process exclusion, no model calls or user configuration. Does not prove arbitrary concurrent cancellation, network filesystems or old/new version coexistence.',
+      locale === 'zh'
+        ? 'One native Swarm/Swarm claim race in an isolated Chinese profile. Requires the exact Chinese busy message, one winner, one explicit rejection and zero model requests. English three-pair baseline is recorded separately.'
+        : 'Two independent installed CLI processes per round, paused only immediately before publishing current/latest binding. Three isolated rounds: Swarm/Swarm, Teamwork/Boost, Swarm/Teamwork. Real filesystem/process exclusion, no model calls or user configuration. Does not prove arbitrary concurrent cancellation, network filesystems or old/new version coexistence.',
   };
   fs.writeFileSync(output, JSON.stringify(result, null, 2));
   console.log(

@@ -954,3 +954,12 @@ CLI进程/每组一0一42/只有胜者记录和绑定/0模型/无残留锁。6�
   SHA保持56末值。WI-089修复与分发交付，goal
   active；更多恢复/取消交错、硬崩溃/网络文件系统与旧新版本混用未验收，真实Teamwork
   E-198预算blocked保留，更多模型/长会话语义/复杂跨机逆向继续，不合并master/正式Release。docs/ultra-task-claims-handoff.md。
+
+E-212交付：新原生Teamwork任务completed，318847ms/24真实请求，无宿主超时；main7/researcher4/coder5/workflow-auditor8，单里程碑与investigate/implement/review/final
+audit四报告均完成，两静态verdict
+passed。原生coder实际两次replace/0次write_file，只改agentTaskLock.ts；host git
+apply
+--check后接受原补丁，实际源码SHA与原生工作树一致。原生export/apply到隔离快照、原index/HEAD/用户文件与参考字节保留；个人provider
+SHA前后一致、临时凭据删除。响应报告295359输入+19046输出=314405
+token，非账单，不与旧失败任务比较成本/速度。审查报告明确静态限定、未运行测试/git/hash，其不变字节/单文件证明由宿主真实SHA和VCS补足；coder自由文字仍提awaiting
+approval，实际早经宿主批准、状态completed，以真实流程记录为准，不将文字当状态。旧E-185/E-198仍失败保留，未重试/加预算。宿主仅加1项真实锁语言切换检查，旧中文失败/修后en→zh→en通过且cause/原锁保留；相关严格type/lint通过，中文原生竞争链进行中。候选58，actual个人locale未改，无外部目标、Codex子代理或全量/冒烟。
