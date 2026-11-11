@@ -1,6 +1,6 @@
 # Gemini Ultra CLI Teamwork 准备与里程碑交付交接
 
-日期：2026-11-11。WI-079/E-176，候选 preview.47。沿用自有源码范围，不改个人供应商配置、数据库或逆向工具，不调用付费模型。Swarm 继续保留在目标池，既有真实代码交付不重复运行。
+日期：2026-11-11。WI-079/E-176至178，preview.47 已安装。沿用自有源码范围，不改个人供应商配置、数据库或逆向工具，不调用付费模型。Swarm 继续保留在目标池，既有真实代码交付不重复运行。
 
 ## 产品修复
 
@@ -25,7 +25,15 @@ PLANS 限定并检查实现工件只在批准后出现。旧失败记录保留�
 
 ## 分发与目标边界
 
-新增三平台 CI 中实际安装包的相同 Teamwork 完整链，最终 run、源 SHA、包 SHA、Windows 全局安装结果待后续追加；本节不声称候选已安装。只推送 codex/ultra-agent-portable，不合并 master 或正式 Release。
+E-177：产品源 `77546b3cdb6914729b6db82d6302f35d3c7ef6d8`，
+[run 43018021899](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/43018021899)
+三平台 completed/success，版本、源码、包及入口 SHA、安装、六份原生搜索二进制的 hash/权限核对通过。每个平台实际安装包的 Teamwork 完整链均为 20 次 loopback 请求、批准前 3 次、7 报告、两个里程碑各实施 1 次、失败 0，11 条 CLI 命令全部退出 0，所有 checks 为真。既有 Swarm、模型 Session、预算恢复、任务工作树、长报告、卡片期限及原生 Ghidra 链同源通过。
+
+E-178：Windows 包 SHA
+`010f1ed8f08bc25d25dff9471dda162aec9fe3c4072e6b7e6635a323d556330a`，入口 SHA
+`30eff066152bd49b8808aa471360674f71e8219398142b71cfe6fc7e2d16d47f`。offline 已有缓存安装 7252ms、退出 0，双命令 preview.47，425 个文件与 CI 包逐字节匹配。旧包保留。没有重复本机业务链、启动微基准或付费任务。只推送 codex/ultra-agent-portable，不合并 master 或正式 Release。
+
+最终工程证据：github-preview47-run.json、github-preview47-artifacts-result.json、github-run-43018021899/、global-preview47-install-result.json、global-install-github-preview47-full-result.json。源码、工程和 Obsidian 同份交接一致；安装后的文档提交只更新交接与目标池，不重建产品包。
 
 这是原生工具与状态完整链的受控模型证据，不能代替真实 Teamwork 长任务的模型自主交付质量。既有真实 Boost/Swarm 交付证据保留，更多模型、长会话摘要准确性、复杂逆向与其他电脑交互继续列为未完成。goal
 active，目标池持续维护。
