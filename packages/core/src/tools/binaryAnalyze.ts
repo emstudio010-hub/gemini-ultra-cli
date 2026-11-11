@@ -51,12 +51,15 @@ export async function analyzeBinary(
   params: BinaryAnalyzeParams,
   baseDirectory: string,
   signal: AbortSignal,
+  validateRead?: (file: string) => string | null,
 ) {
   const input = analyzeSchema.parse(params);
   signal.throwIfAborted();
   const samplePath = await realpath(
     path.resolve(baseDirectory, input.filePath),
   );
+  const denied = validateRead?.(samplePath);
+  if (denied) throw new Error(denied);
   const sample = await stat(samplePath);
   if (!sample.isFile())
     throw new Error('The target must be a regular local file.');
@@ -221,6 +224,7 @@ class BinaryAnalyzeInvocation extends BaseToolInvocation<
         this.params,
         this.config.getTargetDir(),
         abortSignal,
+        (file) => this.config.validatePathAccess(file, 'read'),
       );
       return {
         llmContent: JSON.stringify(result, null, 2),

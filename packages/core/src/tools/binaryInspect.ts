@@ -53,6 +53,7 @@ export async function inspectBinary(
   params: BinaryInspectParams,
   baseDirectory: string,
   abortSignal: AbortSignal,
+  validateRead?: (file: string) => string | null,
 ): Promise<{
   samplePath: string;
   toolPath: string;
@@ -68,6 +69,8 @@ export async function inspectBinary(
   const samplePath = await realpath(
     path.resolve(baseDirectory, input.filePath),
   );
+  const denied = validateRead?.(samplePath);
+  if (denied) throw new Error(denied);
   if (!(await stat(samplePath)).isFile())
     throw new Error('The target must be a regular local file.');
   const discovered = checkBinary('rabin2');
@@ -186,6 +189,7 @@ class BinaryInspectInvocation extends BaseToolInvocation<
         this.params,
         this.config.getTargetDir(),
         abortSignal,
+        (file) => this.config.validatePathAccess(file, 'read'),
       );
       return {
         llmContent: JSON.stringify(result, null, 2),

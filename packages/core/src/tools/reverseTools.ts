@@ -187,7 +187,9 @@ export function binaryTriage(
         highRiskApis: foundApis,
         notes: `Triage complete. Interesting strings: ${interestingStrings.length}. API matches are string candidates, not verified imports; use binary_inspect to inspect the actual import table.`,
       });
-    } catch {}
+    } catch {
+      // Legacy direct triage remains usable when optional fact storage is unavailable.
+    }
   }
 
   return result;
@@ -480,12 +482,16 @@ class BinaryTriageInvocation extends BaseToolInvocation<
     return `Running static triage on ${this.params.filePath}`;
   }
 
-  override async execute(_options: ExecuteOptions): Promise<ToolResult> {
+  override async execute({ abortSignal }: ExecuteOptions): Promise<ToolResult> {
     try {
-      const res = binaryTriage(
-        this.params.filePath,
-        this.config.getSessionId(),
+      abortSignal.throwIfAborted();
+      const samplePath = fs.realpathSync(
+        path.resolve(this.config.getTargetDir(), this.params.filePath),
       );
+      const denied = this.config.validatePathAccess(samplePath, 'read');
+      if (denied) throw new Error(denied);
+      abortSignal.throwIfAborted();
+      const res = binaryTriage(samplePath, this.config.getSessionId());
       return {
         llmContent: JSON.stringify(res, null, 2),
         returnDisplay: `✓ 样本静态初筛完成: ${res.fileType} | 熵值: ${res.entropy} (${res.isPacked ? '疑似加壳' : '未加壳'}) | SHA256: ${res.sha256.slice(0, 16)}...`,

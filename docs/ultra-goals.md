@@ -1067,3 +1067,12 @@ active。
   CI包，旧包保留；个人locale/provider
   SHA保持63末值，工具配置仍未创建。WI-097/F-063准备期取消修复与PTY服务验收分发交付，无本机业务/启动基准/付费重跑。goal
   active，最低Node证据是63同包，不扩张为64新验收；更多模型长任务/语义质量/完整终端UI及复杂跨机逆向继续，不合并master/正式Release。docs/ultra-shell-lifecycle-handoff.md。
+
+## 2026-11-11 二进制工具工作区读取一致性
+
+WI-098/E-235/F-064：inspect/analyze/triage缺既有Config
+read路径检查，triage按进程cwd解析与项目不一致；旧4定向实际失败。helper可选validateRead在canonical路径、stat/发现/进程前执行，产品入口始终传现有Config.read校验；triage配置项目相对解析、canonical检查及取消检查后才读/归档。没有新增审批或改允许范围。4项通过、strict
+type/lint通过；首完整child_process
+mock导致editor加载失败改partial后才有真实4旧失败，原记录保留。真实source产品入口/Config+独立初始化Storage：3工具各拒绝外部/链接共6次，不泄漏标记、不建事实DB；允许相对样本初筛SHA/路径一致、1条SQLite记录；本机真实rabin2导入ExitProcess/r2函数表非空，样本未执行、允许/拒绝文件SHA保持。首source夹具缺Storage.initialize修正后通过，不改产品绕校验。CI验证真实拒绝及允许triage，额外本机native
+positive单列。候选65待binary-read-access范围三平台包/安装，无模型或个人配置DB工具变更，goal
+active。
