@@ -1,6 +1,6 @@
 # Gemini Ultra CLI Swarm 上下文精简交接
 
-日期：2026-11-11。WI-075/E-164，preview.43候选。沿用自有源码case、R26/code-audit、lead/cae/doc；只修改本地Agent上下文与分发核对，不改个人供应商配置、数据库或逆向工具。
+日期：2026-11-11。WI-075/E-164至166，preview.43已安装。沿用自有源码case、R26/code-audit、lead/cae/doc；只修改本地Agent上下文与分发核对，不改个人供应商配置、数据库或逆向工具。
 
 ## 问题与修复
 
@@ -31,6 +31,17 @@ flowchart LR
   A --> F[原CLI界面和完整记录保留]
 ```
 
+## 最终分发与安装
+
+- E-165：源码af3096001e8eae562c849750010df1de00086755，GitHub run
+  [42926768153](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/42926768153)三平台completed/success。最终包版本、源码、SHA、安装报告、六个rg原生文件身份与权限均核对。每平台新Swarm长交接链21请求/19次任务调度/退出0，实际read_file读取省略中段后审查真实成果；完整长结果/板保留。既有成员独立选模、Session模式、工作树/报告导出、预算与损坏恢复、Boost长交接及原生Ghidra同源链通过。
+- E-166：Windows包SHA-256
+  `0c6687615fa19b8b83c6914b7b5dc851ca8ba952aa2944a17a6075806c50f016`，入口SHA-256
+  `99bacb8dce08449dfb486cee5e6a4dea16904b6b18dcd9d3ba773ccb0050ae6c`。离线已有缓存安装7041ms/退出0，双命令均1.0.0-preview.43，424个文件匹配Windows
+  CI包。旧包保留；没有重复本机loopback链或付费任务，不改个人供应商配置、数据库或本机逆向工具。
+
+最终工程证据：github-preview43-run.json、github-preview43-artifacts-result.json、github-run-42926768153/三平台工件、global-preview43-install-result.json、global-install-github-preview43-full-result.json、verify-github-preview43-artifacts.mjs、install-ci-preview43.ps1、verify-installed-ci43.mjs。
+
 ## 目标池接续
 
-候选源码准备隔离分支三平台工件和Windows全局安装；最终身份与安装结果追加后才称preview.43交付。不合并master、不正式Release。整体goal保持active：真实Boost/Swarm各一次有界成功，更多模型/Teamwork长任务、启动交互、摘要准确性与复杂格式/多函数/动态逆向等边界继续；不把上下文字符改善称完整上线。
+WI-075交付，整体goal保持active，不合并master、不正式Release。真实Boost/Swarm各一次有界成功；更多模型/Teamwork长任务、启动交互、摘要准确性与复杂格式/多函数/动态逆向等边界继续，不把上下文字符改善称完整上线。下一步优先回到用户最初的启动/加载问题，基于最新版本定位具体阻塞；preview.11的5182ms输入框/6290ms本地命令是历史单Windows证据，不能当作preview.43现状，也不据静态代码猜测宣称性能改善。不新增无关功能或自动重复已付费任务。

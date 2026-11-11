@@ -746,3 +746,8 @@
   21请求/退出0，read_file取省略中段再读实际成果、独立审查/finish，原长结果与板保留。E-163三输入+七管理返回离线140312→100596字符(-28.3055%)，23原文件SHA保持；不是实际总Token/费用/耗时改善，无付费重跑/全量/冒烟。
 - 候选preview.43准备三平台工件/Windows安装，最终结果待追加。交接docs/ultra-swarm-context-handoff.md；goal
   active，正式上线/更多模型/长任务/启动及复杂逆向边界保留，不合并master/正式Release。
+
+- E-165：preview.43源af3096001e8eae562c849750010df1de00086755/run42926768153三平台completed/success；包版本/SHA/源/安装及六rg身份权限核对。每平台Swarm长交接21loopback请求/19调度/退出0，read_file读省略中段再独立审查实际成果，完整原长结果与板保留；既有多模型/Session/工作树/报告/预算恢复及原生Ghidra同源链通过。
+- E-166：offline已有缓存安装7041ms/退出0，双命令preview.43，424文件匹配Windows
+  CI包，旧包保留。WI-075交付，无付费重跑或本机重复fixture，不改个人配置/DB/本机逆向工具；离线字符-28.3055%不推断总Token/费用/延迟。goal
+  active，下一步回到最新版本启动/加载定位，旧preview.11启动时间不是当前事实，不合并master/正式Release。
