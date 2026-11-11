@@ -34,5 +34,19 @@ identity、超过 12000 字符的完整结果、授权添加拒绝、撤销暂�
 工程证据在 C:/Users/Administrator/Documents/ChatGPT/gmncliu：swarm-redteam-before-junit.xml/-before.log，swarm-redteam-junit.xml/-log/-first.log，swarm-redteam-command-junit.xml/-log，swarm-redteam-types-final.log，swarm-redteam-cli-types.log，swarm-redteam-final-lint.log，swarm-redteam-build.log，swarm-redteam-source.json/-log/-first.log/-second.log。原类型错误也保存在 swarm-redteam-types.log；拆出正确 Swarm
 runner 类型后严格检查通过。
 
-候选 preview.71 待三平台 swarm-redteam 范围分发与安装；其他旧链跳过。当前已安装70及既有真实 Boost/Swarm/Teamwork 任务证据保留。个人 locale/provider
+preview.71 已完成三平台 swarm-redteam 范围分发与本机安装；其他旧链跳过。70及既有真实 Boost/Swarm/Teamwork 任务证据保留。个人 locale/provider
 SHA 与70末值一致；不改个人数据库或逆向工具。没有全量/冒烟、不合并 master、不创建正式 Release，不宣称全面上线。
+
+补充：首次统一 lint 只有验证脚本的 AbortSignal 全局声明检查失败；改用 globalThis.AbortSignal，脚本单独 lint 退出0，未重复已通过的五项功能检查。swarm-redteam-script-lint.log 保留最终结果。
+
+## 三平台交付结果
+
+E-254：产品源7c47d69eba412ca02fbd7c877cc32fb2ff7df052/run43117245008三平台swarm-redteam范围completed/success；minimum-node、native-address-recheck及旧无关链skipped。独立核对三包版本71、源chunk、包/入口SHA、六rg身份权限及安装4基础工具。每平台实际安装包的Config、工具注册、AgentRegistry、只读redteam-analyst角色及SwarmEngine通过受控runner链：工具schema可接受角色、独立native模型、两分析成员并发、公开成员身份、超过12000字符的全文归档，缺授权add不改状态、撤销新轮次暂停、恢复后继续、当前独立verdict才可完成。4次成员runner/0网络/0模型；不冒充真实模型红队任务或跨机复杂逆向验收。70及以前未受影响证据保留。
+
+E-255：offline已有缓存安装6518ms/退出0，双命令preview.71，425文件逐一匹配Windows
+CI归档，旧归档保留。包SHA256
+4123318875f2a74162fceb583000c366b4f8b26d0688ee6f939fda77b4b8cb99，入口SHA256
+b6fb9349a917ee5d0888fbccac64946755b7afe43c4646d650ecaac6dead6776。个人locale/provider哈希保持70末值，ultra-tools.json仍未创建，无全量/冒烟/付费/旧未受影响业务验证重跑。WI-104/F-071原生红队角色接入Swarm分发交付；已发请求不自动撤回，授权检查仍需明确的任务范围，长任务与更多真实模型质量继续。持续goal
+active，不合并master或正式Release。
+
+证据：github-preview71-run.json、github-preview71-artifacts-result.json、github-preview71-artifacts-verification.log、github-run-43117245008/、global-preview71-install-result.json、global-install-github-preview71-full-result.json、swarm-redteam-personal-config.json。源码报告、工程正式报告和Obsidian全文同步。
