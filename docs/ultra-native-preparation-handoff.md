@@ -1,6 +1,6 @@
 # Gemini Ultra CLI 分析准备期取消与字面路径回滚交接
 
-日期：2026-11-11。WI-100/E-241/F-066/F-067，候选preview.67。R26/code-audit自有源码case、lead/cae/doc、scope
+日期：2026-11-11。WI-100/E-241/F-066/F-067，preview.67本地包已安装。R26/code-audit自有源码case、lead/cae/doc、scope
 granted继续。人工文本/安装目录与独立profile/数据库，0模型，不改个人配置/数据库或本机逆向工具。
 
 ## 已确认缺陷与修复
@@ -27,5 +27,26 @@ verify-ultra-native-preparation.mjs调用source或分发包导出的实际Binary
 
 工程：native-preparation-types.log、native-preparation-lint.log、native-preparation-build.log、native-preparation-export-build.log、native-preparation-source.json/-log、native-preparation-script-lint.log及上述JUnit。没有全量/冒烟、付费请求、外部目标或本机逆向工具改动。
 
-候选67待native-preparation范围三平台包及全局安装。66补丁路径/65工作区read/64原生PTY/63最低Node等未受影响基线保留。goal
+67本地包与全局安装已完成，远端上传失败，三平台工件尚未独立核对。66补丁路径/65工作区read/64原生PTY/63最低Node等未受影响基线保留。goal
 active；更多模型长任务、语义质量、完整终端UI和复杂跨机逆向继续，不合并master或创建正式Release。
+
+## 本地分发与远端上传状态
+
+E-242：产品源27cf894fc69bcf218480d61b76c3da4c7783fb04/run43094935659三平台隔离安装与native-preparation功能检查均success，minimum-node/旧无关链skipped；三平台upload-artifact步骤均failure。最终快照run状态in_progress/尚无终态结论，不标整体CI成功。未取得三平台归档和JSON报告，未独立核对其包SHA/完整结果；旧47至66已下载工件基线保留。上传原因待终态日志确认，没有因上传等待而重启功能检查或取消仍被GitHub报告为运行中的作业。
+
+E-243：为完成可用安装，按同一已推送源本地package:ultra构建preview.67，包源chunk/版本/SHA与六rg身份/权限独立核对；这是本地包，不冒充Windows
+CI归档。offline已有缓存安装7337ms/退出0，双命令preview.67，425文件匹配本地包。安装后实际导出工具/Config再验证最终准备点取消0启动、scratch清理、仅日志、样本SHA保持；#/%20两目标及迁移工件真实Node回滚均成功，2事实/0模型。包SHA256
+da3dc603258c786a2ba31ca6c536f8ffbefad6e1cc2de4bbc5cfedd28db4f17d，入口SHA256
+603df279acc3164118de6fb189bae643141c34abe111e5a598670c8f7bab42c2；包在artifacts/ultra-release/gemini-ultra-cli-1.0.0-preview.67.tgz。个人locale/provider
+SHA保持66末值，工具配置仍未创建，无全量/冒烟/真实模型或旧无关业务重跑。WI-100/F-066/F-067本地修复与安装交付，旧回滚脚本不自动改写；远端工件交付尚未完成，goal
+active，不合并master/正式Release。
+
+证据：github-preview67-run.json、github-preview67-run-pending-upload.json、github-preview67-upload-failure-snapshot.json、github-preview67-watch.log、local-preview67-package.log、local-preview67-package-verification.json/-log、global-install-local-preview67-full-result.json、global-local-preview67-install-result.json、native-preparation-installed-local67.json/-log、native-preparation-personal-config.json。失败日志尝试github-preview67-ubuntu-job.log在当时明确job仍运行，不能将该提示当上传根因。个人locale
+SHA 4fcce506592e55074156cab2f5fea35cce0d48ea5f8c919b69cd71ffc735f2c8；providers
+SHA
+e0bff750cd1f18458cffc175ad3683d1851bbc58958fb4182dd15d9e128e4332。源码、工程正式报告及Obsidian全文同步。
+
+接续：run43094935659仍需跟进终态和上传日志；CLI watch执行session
+73541在收尾时仍实际存活，输出github-preview67-watch.log。先轮询同一session/run，不因观察超时重启CI。三平台upload步骤已失败，Complete
+job步骤已完成，但GitHub
+overall/job仍in_progress，不能据此标成终态。独立CI工件核对脚本仍要求实际归档与成功run，未为本地fallback放宽。
