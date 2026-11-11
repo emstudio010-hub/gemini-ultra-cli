@@ -29,3 +29,9 @@ verify-ultra-native-address-precision.mjs调用实际产品BinaryInspectTool/Bin
 
 候选70分发范围native-address-precision：三平台正常构建/安装基础链后，使用22.19.0执行新增实际包工具受控JSON精度链，不另装r2，不能称三平台新原生r2实测。本机真实native结果独立保留。69并发配置及更早基线保持；goal
 active，复杂逆向/语义质量/完整UI与原始目标继续，不合并master或正式Release。
+
+## 首轮CI路径别名观察器修正
+
+原run43102874981为completed/failure：Linux精度链通过，Windows/macOS实际工具包装了观察器ERR_ASSERTION，非解析失败。原脚本用字面sample路径比较工具已realpath路径；本机将TEMP改小写可实际复现，诊断显示fsp.realpath返回C盘实际大小写，fs.realpathSync的JS路径仍小写，改用fs.realpathSync.native得到同一真实路径后该夹具通过。macOS的/var与/private/var同类别名由两平台补验确认。路径断言仍精确，不改变产品路径规则或精度代码。原失败run/log保留。
+
+新增native-address-recheck验证范围只下载原run的Windows/macOS两包，校验源0b60654/版本70/原基础安装及上传成功/唯一失败步骤与包SHA；不重建产品、不跑已通过Linux。安装同一归档后仅用修正观察器在Node22.19.0补验，另存报告。产品源仍0b60654，当前全局仍69。

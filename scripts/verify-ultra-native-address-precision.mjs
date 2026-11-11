@@ -31,6 +31,7 @@ const workspace = path.join(root, 'workspace');
 fs.mkdirSync(workspace);
 const sample = path.join(workspace, 'high & literal.elf');
 fs.writeFileSync(sample, highAddressElfFixture());
+const canonicalSample = fs.realpathSync.native(sample);
 const hash = () =>
   createHash('sha256').update(fs.readFileSync(sample)).digest('hex');
 const before = hash();
@@ -119,9 +120,14 @@ try {
   process.env.GEMINI_ULTRA_TOOL_RABIN2 = process.execPath;
   // Controlled raw native JSON only; the real product parses and validates it.
   childProcess.execFile = (file, args, options, callback) => {
-    assert.equal(file, process.execPath);
-    assert.equal(options.shell, false);
-    assert.equal(args.at(-1), sample);
+    try {
+      assert.equal(file, process.execPath);
+      assert.equal(options.shell, false);
+      assert.equal(args.at(-1), canonicalSample);
+    } catch (error) {
+      console.error(error);
+      throw error;
+    }
     const command = args[args.indexOf('-c') + 1];
     const view = args.includes('-Ij')
       ? 'info'
