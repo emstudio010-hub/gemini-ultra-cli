@@ -4,6 +4,10 @@
 **22.19 或更新版本**；推荐当前 LTS。运行时使用 Node 内置 SQLite，因此不支持 Node
 20。Windows、Linux、macOS 均通过同一个 npm 包分发；完整终端能力按系统选择可选 PTY 依赖。
 
+preview.63 的同一套安装包已在三平台使用 Node
+22.19.0 完成基础工具与 SQLite 归档流程；最低版本证据见源码的
+`docs/ultra-minimum-node-handoff.md`。终端 PTY、外接模型与各逆向软件仍按各自兼容要求配置。
+
 ## 安装发布包
 
 当前预览源码在

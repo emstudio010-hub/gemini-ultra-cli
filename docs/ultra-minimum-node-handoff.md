@@ -21,8 +21,22 @@ Evidence → Requirement → Path：源码和manifest声明22.19，但原CI只�
 ## 证据与边界
 
 工程：runtime-node22-19/runtime-integrity.json、官方ZIP/SHASUMS256、node-minimum-installed63-version.log、node-minimum-installed63.json/-log、minimum-node-source-run.json、minimum-node-local-plan.json/-log、minimum-node-local-result.json、minimum-node-lint.log。Windows
-Node22.19下最低环境本地通过；Linux/macOS最低Node结果待接续。产品源仍
+Node22.19最低环境本地及三平台CI均通过，见下方E-231。产品源仍
 `e2ed2b697c897e590df9c089c68b0c76f35e1020`，原包来源run43082219156，全局63未重装。
+
+## 三平台最低运行时结果
+
+E-231：验收实现源 `3921cd120995d59d981055404cd126954d580024`，
+[run 43084607330](https://github.com/emstudio010-hub/gemini-ultra-cli/actions/runs/43084607330)
+三个minimum-node job completed/success，package job
+skipped，没有重新构建产品。每平台临时安装原run43082219156的63包，以精确Node
+v22.19.0运行验证脚本和CLI子进程；5次loopback协议请求、4工具、SQLite中1个二进制/1个note及六rg身份/主机执行通过。源码标识仍是原产品
+`e2ed2b697c897e590df9c089c68b0c76f35e1020`。Windows/Linux/macOS原包SHA分别为
+`2eb799c9ea454339a36f1681f46a948112954dbb094abfffe10b729376beaac5`、`ac0fd6539b3b01617d4f61d0d7e6d41fb8358f7ff0b4610248ebbb07d972359d`、`458cf19005f70960aa7f81d17fafe32ff8631bf596f2dea865ee13c497ae63fc`，均与原63独立工件记录相同。各份入口SHA也相同。
+
+独立核对下载的source-run、package-plan、install-verification、minimum-node-verification，检查当前验收源与原产品源分开、确切运行版本、来源run、工具/记录数和样本SHA，不只读取passed。最终证据：github-minimum-node-run.json、github-minimum-node-artifacts-result.json、github-run-43084607330/、verify-github-minimum-node-artifacts.mjs、minimum-node-preserved-system.json。个人provider/locale
+SHA保持63末值，工具配置仍未创建；系统Node仍是 `C:\Program Files\nodejs\node.exe`
+/ v24.19.0。全局CLI仍preview.63，未重装。源码、工程正式报告与Obsidian全文同步。
 
 goal
 active。最低环境只证明指定原生基础链，不等于所有终端/PTY/原生插件、Google登录、供应商、深度逆向或长任务的全覆盖验收。既有63搜索和62看板等基线保留，更多真实模型长任务、语义质量及复杂跨机逆向继续。不合并master或创建正式Release。
