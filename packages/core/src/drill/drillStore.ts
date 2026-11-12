@@ -9,6 +9,13 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 
+export const DRILL_FINDING_STATUSES = [
+  'unverified',
+  'static-reviewed',
+  'verified',
+] as const;
+export type DrillFindingStatus = (typeof DRILL_FINDING_STATUSES)[number];
+
 function getDrillDbPath(): string {
   const custom = process.env['GEMINI_DRILL_DB'];
   if (custom) return custom;
@@ -227,6 +234,14 @@ export class DrillStore {
     evidence?: string;
     poc?: string;
   }): number {
+    const status = data.status || 'unverified';
+    if (
+      ['static-reviewed', 'verified'].includes(status) &&
+      !data.evidence?.trim()
+    )
+      throw new Error(
+        'Static-reviewed or verified findings require concrete evidence.',
+      );
     const stmt = this.db.prepare(`
       INSERT INTO vuln (
         session_id, asset_id, cve, title, severity, status, evidence, poc, created_at
@@ -238,7 +253,7 @@ export class DrillStore {
       data.cve || null,
       data.title,
       data.severity || 'medium',
-      data.status || 'verified',
+      status,
       data.evidence || '',
       data.poc || '',
       new Date().toISOString(),

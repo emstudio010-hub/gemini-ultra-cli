@@ -8,7 +8,11 @@ import { execFile, execFileSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { DrillStore } from '../drill/drillStore.js';
+import {
+  DrillStore,
+  DRILL_FINDING_STATUSES,
+  type DrillFindingStatus,
+} from '../drill/drillStore.js';
 import { readDrillGrant } from '../drill/drillGrant.js';
 import { ToolErrorType } from './tool-error.js';
 import { configuredDrillToolPath } from './drillToolPaths.js';
@@ -188,19 +192,16 @@ export async function runDrillPreflight(): Promise<DrillPreflightResult> {
 
 export function recordFactTool(
   sessionId: string,
-  params: {
-    category: 'vuln' | 'binary' | 'note';
-    title: string;
-    cve?: string;
-    severity?: string;
-    evidence?: string;
-    poc?: string;
-    samplePath?: string;
-    sha256?: string;
-    notes?: string;
-  },
-): { success: boolean; id?: number; error?: string } {
+  params: DrillRecordFactParams,
+): {
+  success: boolean;
+  id?: number;
+  status?: DrillFindingStatus;
+  error?: string;
+} {
   try {
+    const statusError = validateFactStatus(params);
+    if (statusError) return { success: false, error: statusError };
     const store = DrillStore.getInstance();
     if (params.category === 'vuln') {
       const id = store.recordVuln({
@@ -210,8 +211,9 @@ export function recordFactTool(
         severity: params.severity,
         evidence: params.evidence,
         poc: params.poc,
+        status: params.status,
       });
-      return { success: true, id };
+      return { success: true, id, status: params.status ?? 'unverified' };
     } else if (params.category === 'note') {
       const id = store.recordNote({
         sessionId,
@@ -313,11 +315,25 @@ export interface DrillRecordFactParams {
   title: string;
   cve?: string;
   severity?: string;
+  status?: DrillFindingStatus;
   evidence?: string;
   poc?: string;
   samplePath?: string;
   sha256?: string;
   notes?: string;
+}
+
+function validateFactStatus(params: DrillRecordFactParams): string | null {
+  if (params.status === undefined) return null;
+  if (params.category !== 'vuln') return 'status applies only to vuln facts.';
+  if (!DRILL_FINDING_STATUSES.includes(params.status))
+    return 'status must be unverified, static-reviewed or verified.';
+  if (
+    params.status !== 'unverified' &&
+    (typeof params.evidence !== 'string' || !params.evidence.trim())
+  )
+    return 'Static-reviewed or verified findings require concrete evidence.';
+  return null;
 }
 
 class DrillRecordFactInvocation extends BaseToolInvocation<
@@ -401,6 +417,12 @@ export class DrillRecordFactTool extends BaseDeclarativeTool<
             type: 'string',
             description: 'Severity level (CRITICAL, HIGH, MEDIUM, LOW, INFO).',
           },
+          status: {
+            type: 'string',
+            enum: [...DRILL_FINDING_STATUSES],
+            description:
+              'Vulnerability facts only. Defaults to unverified. Use static-reviewed for source-only review and verified only for explicit corroborating validation described in evidence. Both promoted states require concrete evidence; recording a fact does not itself verify it.',
+          },
           evidence: {
             type: 'string',
             description: 'Key technical evidence or log snippet.',
@@ -439,7 +461,7 @@ export class DrillRecordFactTool extends BaseDeclarativeTool<
     if (!params.title || typeof params.title !== 'string') {
       return `Missing required property 'title'.`;
     }
-    return null;
+    return validateFactStatus(params);
   }
 
   protected createInvocation(

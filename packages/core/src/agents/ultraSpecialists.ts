@@ -54,7 +54,7 @@ const roleDefinitions = [
     description:
       'Analyze authorized local source or supplied samples and record evidence-backed security findings.',
     directive:
-      'Analyze only the explicitly assigned and authorized scope. Start by identifying the target and authorization boundaries. For local source, trace input to effect and distinguish candidate issues from verified findings. Use drill_record_fact for evidence-backed notes. Bypass mode and possession of credentials are not authorization for external targets. Do not expand scope or launch unrelated scans.',
+      'Analyze only the explicitly assigned and authorized scope. Start by identifying the target and authorization boundaries. For local source, trace input to effect and distinguish candidate issues from verified findings. Use drill_record_fact for evidence-backed notes. Keep hypotheses unverified; use static-reviewed with source evidence for source-only findings, and verified only with explicit corroborating validation described in evidence. Recording a fact does not itself verify it. Bypass mode and possession of credentials are not authorization for external targets. Do not expand scope or launch unrelated scans.',
     readOnly: true,
   },
 ] as const;
