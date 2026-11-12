@@ -110,6 +110,31 @@ const request = () =>
     LlmRole.SUBAGENT,
   );
 
+it('keeps a saved member provider ID on its configured endpoint after another provider takes that display name', async () => {
+  const manager = ProviderManager.getInstance();
+  const primary = manager.getProvider('primary')!;
+  const research = manager.getProvider('research')!;
+  manager.upsertProvider({
+    ...research,
+    name: 'Research Gateway',
+    setActive: false,
+  });
+  manager.upsertProvider({ ...primary, name: 'Research', setActive: false });
+  const before = fs.readFileSync(providersFile);
+  expect(normalizeAgentModel('research:research-model')).toBe(
+    'research:research-model',
+  );
+  await withAgentModel('research:research-model', request, (used) =>
+    expect(used).toEqual(['research:research-model']),
+  );
+  expect(vi.mocked(fetch).mock.calls[0][0]).toBe(
+    'https://research.invalid/v1/chat/completions',
+  );
+  expect(fallback.generateContent).not.toHaveBeenCalled();
+  expect(fs.readFileSync(providersFile)).toEqual(before);
+  expect(manager.getActiveProvider()?.id).toBe(primary.id);
+});
+
 it('isolates parallel member routes and capacity lookup without changing the provider file or main route', async () => {
   const original = fs.readFileSync(providersFile, 'utf8');
   const used: string[][] = [];

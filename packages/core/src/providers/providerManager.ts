@@ -328,9 +328,9 @@ export class ProviderManager {
 
   getProvider(idOrName: string): ExternalProviderProfile | undefined {
     const needle = idOrName.trim().toLowerCase();
-    const provider = this.data.providers.find(
-      (p) => p.id.toLowerCase() === needle || p.name.toLowerCase() === needle,
-    );
+    const provider =
+      this.data.providers.find((p) => p.id.toLowerCase() === needle) ??
+      this.data.providers.find((p) => p.name.toLowerCase() === needle);
     return provider ? structuredClone(provider) : undefined;
   }
 

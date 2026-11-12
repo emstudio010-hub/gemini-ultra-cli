@@ -1383,3 +1383,6 @@ WI-132/E-319至320/F-092：原恢复先保存active再检查恢复留言，满50
 ## 2026-11-12 Swarm源码真实Windows终端验收
 
 WI-133/E-321：实际Windows ConPTY启动当前编译源码CLI/core，preload隔离Config.storage任务/受控运行器；真实输入运行中resume拒绝、cancel显示停止、清理未释放resume再拒绝，释放后status见paused、reports实际导出原接受全文、quit自然退出0。11条件通过、23834ms/0模型请求，原成果/归档/累计两唤醒失败0保持，迟到completed=true未接受。PTY文本独立核对关键提示均存在。此为英文源码终端跨层证据，受控执行器不是供应商自主任务，preload不是正常任务创建，不冒称完整功能/启动基准/分发包验收。本轮纯验证资料与文档，无业务源码改动或重复类型lint/全量冒烟，未打包/重装/版本/CI/付费请求；个人配置与安装83保持，goal active。详见docs/ultra-swarm-source-terminal-handoff.md。
+## 2026-11-12 供应商稳定ID优先解析
+
+WI-134/E-322至323/F-093：显示名称与另一供应商ID冲突时，原find按列表顺序可选错记录，影响模型端点/活动选择及按ID编辑删除；4旧复现失败。现在先ID再名称别名，不迁移配置；6项必要检查、strict core源码编译及相关lint退出0。Windows实际core ProviderManager→Swarm角色模型→UniversalContentGenerator，两个loopback端点，1次本地协议请求只到目标ID，model/认证头布尔核对正确、另一端点0请求、无native fallback，主选择/调度配置字节保持，编辑删除只命中目标；10条件通过、5685ms/退出0。0真实模型/外部请求，不是配置窗口/供应商质量/最终平台验收。无打包/重装/新版本/CI，个人配置与安装83保持，goal active。详见docs/ultra-provider-id-priority-handoff.md。

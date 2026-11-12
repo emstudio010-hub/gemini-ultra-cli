@@ -38,6 +38,65 @@ describe('ProviderManager', () => {
     expect(mgr.getReasoningEffort()).toBe('high');
   });
 
+  it.each(['lookup', 'update', 'remove'] as const)(
+    'prioritizes a stable provider ID over another display name during %s',
+    (operation) => {
+      const mgr = new ProviderManager(tmpFile);
+      const first = mgr.upsertProvider({
+        name: 'Alpha',
+        baseUrl: 'https://alpha.invalid/v1',
+        apiKey: 'fixture-alpha',
+        models: ['alpha-model'],
+      });
+      const second = mgr.upsertProvider({
+        name: 'Research',
+        baseUrl: 'https://research.invalid/v1',
+        apiKey: 'fixture-research',
+        models: ['research-model'],
+      });
+      mgr.upsertProvider({
+        ...second,
+        name: 'Research Gateway',
+        setActive: false,
+      });
+      mgr.upsertProvider({ ...first, name: 'Research', setActive: false });
+      const preserved = mgr
+        .listProviders()
+        .find((provider) => provider.id === first.id)!;
+      const before = fs.readFileSync(tmpFile);
+      if (operation === 'lookup') {
+        expect(mgr.getProvider(' RESEARCH ')?.id).toBe(second.id);
+        expect(mgr.getActiveProvider()?.id).toBe(second.id);
+        expect(mgr.getProvider('Research Gateway')?.id).toBe(second.id);
+        expect(
+          mgr.resolveProviderForModel('research:research-model')?.provider.id,
+        ).toBe(second.id);
+        expect(fs.readFileSync(tmpFile)).toEqual(before);
+      } else if (operation === 'update') {
+        mgr.upsertProvider({
+          ...second,
+          name: 'Research Gateway',
+          models: ['replacement-model'],
+          defaultModel: 'replacement-model',
+          setActive: false,
+        });
+        expect(
+          mgr.listProviders().find((provider) => provider.id === second.id)
+            ?.defaultModel,
+        ).toBe('replacement-model');
+        expect(
+          mgr.listProviders().find((provider) => provider.id === first.id),
+        ).toEqual(preserved);
+      } else {
+        expect(mgr.removeProvider('research')).toBe(true);
+        expect(mgr.listProviders().map((provider) => provider.id)).toEqual([
+          first.id,
+        ]);
+        expect(mgr.listProviders()[0]).toEqual(preserved);
+      }
+    },
+  );
+
   it('can upsert, resolve and switch providers', () => {
     const mgr = ProviderManager.getInstance(tmpFile);
     const p = mgr.upsertProvider({
