@@ -33,6 +33,7 @@ import { getCitations } from '../utils/generateContentResponseUtilities.js';
 import { LlmRole } from '../telemetry/types.js';
 import { populateToolDisplay } from '../agent/tool-display-utils.js';
 import { SwarmBudgetError } from '../agents/swarmBudgetError.js';
+import { WorkflowBudgetError } from '../agents/workflowBudgetError.js';
 
 import {
   type ToolCallRequestInfo,
@@ -441,7 +442,7 @@ export class Turn {
         return;
       }
 
-      if (e instanceof SwarmBudgetError) {
+      if (e instanceof SwarmBudgetError || e instanceof WorkflowBudgetError) {
         yield {
           type: GeminiEventType.Error,
           value: { error: { message: e.message } },

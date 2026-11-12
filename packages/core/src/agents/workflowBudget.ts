@@ -11,6 +11,8 @@ import { z } from 'zod';
 import type { AgentWorkflow } from './agentWorkflows.js';
 import { assertNoPendingSwarm } from './swarm.js';
 import { withAgentTaskLock } from './agentTaskLock.js';
+import { WorkflowBudgetError } from './workflowBudgetError.js';
+import { I18nManager } from '../i18n/i18nManager.js';
 
 const limitsSchema = z.object({
   maxRequests: z.number().int().min(1).max(10000).default(240),
@@ -291,14 +293,33 @@ function reason(
     return `milestone ${milestone + 1} implementation-round`;
   return undefined;
 }
+function workflowBudgetHandoff(
+  root: string,
+  budget: WorkflowBudget,
+): WorkflowBudgetError {
+  const i18n = I18nManager.getInstance();
+  return new WorkflowBudgetError(
+    [
+      `${i18n.t('工作流已在本地受阻', 'Workflow blocked locally')}: ${budget.mode}/${budget.id}`,
+      budget.stopReason ||
+        i18n.t(
+          '需要显式恢复此工作流。',
+          'Explicit workflow resume is required.',
+        ),
+      `${i18n.t('保留任务记录', 'Saved task record')}: ${path.join(root, 'agent-workflows', `${budget.id}.json`)}`,
+      `${i18n.t('累计预算', 'Cumulative budget')}: ${budgetPath(root, budget.id)}`,
+      `${i18n.t('查看状态', 'Inspect status')}: /${budget.mode} status ${budget.id}`,
+      `${i18n.t('导出已存报告', 'Export saved reports')}: /${budget.mode} reports ${budget.id}`,
+    ].join('\n'),
+  );
+}
 function stop(root: string, budget: WorkflowBudget, limit: string): never {
   budget.state = 'paused';
   budget.stopReason = `Workflow ${limit} budget exhausted. Results retained. Use /${budget.mode} budget <requests> <failed-stages> <rounds-per-milestone>, then /${budget.mode} resume; or /${budget.mode} cancel.`;
   save(root, budget);
-  controllers
-    .get(budgetPath(root, budget.id))
-    ?.abort(new Error(budget.stopReason));
-  throw new Error(budget.stopReason);
+  const error = workflowBudgetHandoff(root, budget);
+  controllers.get(budgetPath(root, budget.id))?.abort(error);
+  throw error;
 }
 export function assertWorkflowBudget(
   root: string,
@@ -308,6 +329,7 @@ export function assertWorkflowBudget(
   const budget = read(root, id);
   if (budget.recordUnavailable) throw new Error(recordUnavailable);
   if (budget.accountingUnknown) throw new Error(unavailable);
+  if (budget.state === 'paused') throw workflowBudgetHandoff(root, budget);
   if (budget.state !== 'active')
     throw new Error(
       budget.stopReason || 'Explicit workflow resume is required.',
