@@ -16,8 +16,7 @@ Evidence → Finding → Path：旧3回归失败（命令Promise拒绝、窗口E
 F-077语言保存异常无本地反馈 → 共用安全错误/窗口可重试/仅成功刷新 →
 3定向与隔离实际按键检查。
 
-工程证据C:/Users/Administrator/Documents/ChatGPT/gmncliu：language-save-before-junit.xml/-before.log、language-save-junit.xml/-log、language-save-types.log、language-save-lint.log。候选preview.77待本地打包与Windows
-ConPTY；不将此前75三平台分发证据冒称77三平台新验收，无新CI，不合并master或正式Release。
+工程证据C:/Users/Administrator/Documents/ChatGPT/gmncliu：language-save-before-junit.xml/-before.log、language-save-junit.xml/-log、language-save-types.log、language-save-lint.log。preview.77本地打包与Windows ConPTY已完成；不将此前75三平台分发证据冒称77三平台新验收，无新CI，不合并master或正式Release。
 
 ## 本机交付结果
 
