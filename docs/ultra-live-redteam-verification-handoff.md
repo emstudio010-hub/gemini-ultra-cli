@@ -1,6 +1,6 @@
 # Gemini Ultra CLI 真实红队 Swarm 与事实验证状态交接
 
-日期：2026-11-12。WI-107/E-260 真实任务；WI-108/E-261/F-073 默认验证状态修复。R26/code-audit，自有生成源码，沿用 work/gemini-ultra-agent-20261110/scope.md 的 granted 范围；lead/cae/doc。本机当前preview.72，持续goal
+日期：2026-11-12。WI-107/E-260 真实任务；WI-108/E-261/F-073 默认验证状态修复。R26/code-audit，自有生成源码，沿用 work/gemini-ultra-agent-20261110/scope.md 的 granted 范围；lead/cae/doc。本机当前preview.73，持续goal
 active。
 
 ## 真实任务交付
