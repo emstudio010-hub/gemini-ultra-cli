@@ -12,6 +12,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import {
   ApprovalMode,
   latestAgentWorkflow,
+  readAgentWorkflow,
   saveAgentWorkflow,
   workflowBudget,
   consumeWorkflowRequest,
@@ -48,6 +49,78 @@ function commandContext() {
   });
   return { config, context };
 }
+
+it.each([boostCommand, teamworkCommand, grillMeCommand])(
+  'keeps current interview permissions when cancelling a historical $name task',
+  async (command) => {
+    const { config, context } = commandContext();
+    config.setApprovalMode(ApprovalMode.YOLO);
+    await command.action!(context, 'Historical task from a permissive session');
+    const older = latestAgentWorkflow(
+      root,
+      command.name as 'boost' | 'teamwork' | 'grill-me',
+    )!;
+    const cancel = command.subCommands!.find((item) => item.name === 'cancel')!;
+    await cancel.action!(context, older.id);
+    config.setApprovalMode(ApprovalMode.DEFAULT);
+    await teamworkCommand.action!(
+      context,
+      'Current interview must stay read only',
+    );
+    const current = latestAgentWorkflow(root, 'teamwork')!;
+    const directory = path.join(root, 'agent-workflows');
+    const before = new Map(
+      [`${current.id}.json`, `${current.id}.budget.json`, 'current.json'].map(
+        (file) => [file, fs.readFileSync(path.join(directory, file))],
+      ),
+    );
+    vi.mocked(config.setApprovalMode).mockClear();
+    expect(await cancel.action!(context, older.id)).toBeUndefined();
+    expect(config.getApprovalMode()).toBe(ApprovalMode.PLAN);
+    expect(config.setApprovalMode).not.toHaveBeenCalled();
+    expect(readAgentWorkflow(root, current.id).approved).toBe(false);
+    for (const [file, bytes] of before)
+      expect(fs.readFileSync(path.join(directory, file))).toEqual(bytes);
+  },
+);
+
+it('keeps a manually selected Plan Mode when cancelling boost because boost did not enter interview mode', async () => {
+  const { config, context } = commandContext();
+  await boostCommand.action!(context, 'Existing approved execution');
+  config.setApprovalMode(ApprovalMode.PLAN);
+  vi.mocked(config.setApprovalMode).mockClear();
+  expect(
+    await boostCommand.subCommands!.find((item) => item.name === 'cancel')!
+      .action!(context, ''),
+  ).toBeUndefined();
+  expect(latestAgentWorkflow(root, 'boost')!.phase).toBe('cancelled');
+  expect(config.getApprovalMode()).toBe(ApprovalMode.PLAN);
+  expect(config.setApprovalMode).not.toHaveBeenCalled();
+});
+
+it('keeps Plan Mode when cancelling a damaged interview ledger whose active ownership cannot be established', async () => {
+  const { config, context } = commandContext();
+  await grillMeCommand.action!(
+    context,
+    'Preserve permissions during local recovery',
+  );
+  const record = latestAgentWorkflow(root, 'grill-me')!;
+  fs.writeFileSync(
+    path.join(root, 'agent-workflows', `${record.id}.budget.json`),
+    '{original damaged ledger',
+  );
+  vi.mocked(config.setApprovalMode).mockClear();
+  expect(
+    await grillMeCommand.subCommands!.find((item) => item.name === 'cancel')!
+      .action!(context, record.id),
+  ).toBeUndefined();
+  expect(readAgentWorkflow(root, record.id)).toMatchObject({
+    phase: 'cancelled',
+    budgetUnavailable: true,
+  });
+  expect(config.getApprovalMode()).toBe(ApprovalMode.PLAN);
+  expect(config.setApprovalMode).not.toHaveBeenCalled();
+});
 
 it.each(['live-owner', 'missing-ledger', 'damaged-ledger', 'close-failure'])(
   'keeps grill-me finish unchanged on %s without restoring permissions or submitting work',

@@ -203,6 +203,25 @@ export function latestAgentWorkflow(
 ): AgentWorkflow | undefined {
   const directory = workflowDir(projectTempDir);
   if (!fs.existsSync(directory)) return undefined;
+  let current: ReturnType<typeof currentWorkflowBudget>;
+  try {
+    current = currentWorkflowBudget(projectTempDir);
+  } catch {
+    // A broken ledger must still allow the existing record lookup used by
+    // local cancellation recovery; selection never initializes or repairs it.
+  }
+  if (current?.mode === mode && current.state !== 'closed') {
+    try {
+      const bound = readAgentWorkflow(projectTempDir, current.id);
+      if (bound.mode === mode) return bound;
+    } catch (error) {
+      if (!damagedRecord(error)) throw error;
+      onDamaged?.(current.id);
+    }
+    throw new Error(
+      `Workflow record ${current.id} is unavailable. Use /${mode} cancel ${current.id}; older tasks were not selected.`,
+    );
+  }
   const records: AgentWorkflow[] = [];
   for (const file of fs
     .readdirSync(directory)

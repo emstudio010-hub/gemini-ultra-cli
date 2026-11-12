@@ -13,6 +13,7 @@ import {
   readAgentWorkflow,
   saveAgentWorkflow,
   cancelAgentWorkflow,
+  latestAgentWorkflow,
   type WorkflowAgentRunner,
 } from './agentWorkflows.js';
 import { workflowAuditor } from './ultraSpecialists.js';
@@ -45,6 +46,107 @@ const verdict = (passed: boolean) =>
       evidence: ['deliverable.txt'],
     }),
   );
+
+it.each(['active', 'paused'] as const)(
+  'selects the current %s workflow ahead of a recently changed historical task without writes',
+  (state) => {
+    const older = createAgentWorkflow(
+      root,
+      'teamwork',
+      'Historical interview',
+      'default',
+    );
+    cancelAgentWorkflow(root, older.id);
+    const current = createAgentWorkflow(
+      root,
+      'teamwork',
+      'Current interview',
+      'default',
+    );
+    const directory = path.join(root, 'agent-workflows');
+    const ledger = path.join(directory, `${current.id}.budget.json`);
+    fs.writeFileSync(
+      ledger,
+      JSON.stringify({ ...workflowBudget(root, current), state }),
+    );
+    fs.writeFileSync(
+      path.join(directory, `${older.id}.json`),
+      JSON.stringify({
+        ...readAgentWorkflow(root, older.id),
+        updatedAt: '2099-01-01T00:00:00.000Z',
+      }),
+    );
+    const before = new Map(
+      fs
+        .readdirSync(directory)
+        .map((file) => [file, fs.readFileSync(path.join(directory, file))]),
+    );
+    expect(latestAgentWorkflow(root, 'teamwork')?.id).toBe(current.id);
+    for (const [file, bytes] of before)
+      expect(fs.readFileSync(path.join(directory, file))).toEqual(bytes);
+  },
+);
+
+it('keeps no-ID local cancellation available when the current workflow ledger is damaged', () => {
+  const record = createAgentWorkflow(
+    root,
+    'teamwork',
+    'Recover the interrupted interview',
+    'default',
+  );
+  const ledger = path.join(root, 'agent-workflows', `${record.id}.budget.json`);
+  fs.writeFileSync(ledger, '{original damaged ledger');
+  const selected = latestAgentWorkflow(root, 'teamwork')!;
+  expect(selected.id).toBe(record.id);
+  expect(fs.readFileSync(ledger, 'utf8')).toBe('{original damaged ledger');
+  expect(cancelAgentWorkflow(root, selected.id)).toMatchObject({
+    phase: 'cancelled',
+    budgetUnavailable: true,
+  });
+});
+
+it('does not select history when the bound open workflow record is missing', () => {
+  const older = createAgentWorkflow(
+    root,
+    'teamwork',
+    'Historical interview',
+    'default',
+  );
+  cancelAgentWorkflow(root, older.id);
+  const current = createAgentWorkflow(
+    root,
+    'teamwork',
+    'Current interview',
+    'default',
+  );
+  fs.rmSync(path.join(root, 'agent-workflows', `${current.id}.json`));
+  expect(() => latestAgentWorkflow(root, 'teamwork')).toThrow(
+    `/teamwork cancel ${current.id}`,
+  );
+});
+
+it('does not load unrelated damaged history when selecting a bound open workflow', () => {
+  const older = createAgentWorkflow(
+    root,
+    'teamwork',
+    'Historical interview',
+    'default',
+  );
+  cancelAgentWorkflow(root, older.id);
+  const current = createAgentWorkflow(
+    root,
+    'teamwork',
+    'Current interview',
+    'default',
+  );
+  fs.writeFileSync(
+    path.join(root, 'agent-workflows', `${older.id}.json`),
+    '{unrelated damaged history',
+  );
+  const onDamaged = vi.fn();
+  expect(latestAgentWorkflow(root, 'teamwork', onDamaged)?.id).toBe(current.id);
+  expect(onDamaged).not.toHaveBeenCalled();
+});
 
 it('requires resolving an open native task before another mode can claim the same workspace', () => {
   const record = createAgentWorkflow(root, 'boost', 'First task', 'default');

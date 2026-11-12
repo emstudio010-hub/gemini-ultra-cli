@@ -17,6 +17,7 @@ import {
   setWorkflowBudget,
   activateWorkflowBudget,
   closeWorkflowBudget,
+  currentWorkflowBudget,
   availableAgentModels,
   setWorkflowRoleModel,
   agentWorktreeCommand,
@@ -138,6 +139,15 @@ function workflowCommand(
       const requestedCancellation = operation === 'cancel' ? args.trim() : '';
       const requestedStatus = operation === 'status' ? args.trim() : '';
       const requestedResume = operation === 'resume' ? args.trim() : '';
+      let cancellingBudget: ReturnType<typeof currentWorkflowBudget>;
+      if (operation === 'cancel') {
+        try {
+          cancellingBudget = currentWorkflowBudget(root);
+        } catch {
+          // Local cancellation must still recover damaged state. An unreadable
+          // binding or ledger cannot establish which interview owns Plan Mode.
+        }
+      }
       let record = requestedStatus
         ? readAgentWorkflow(root, requestedStatus)
         : requestedCancellation
@@ -219,7 +229,15 @@ function workflowCommand(
         if (operation === 'cancel') {
           if (!requestedCancellation)
             record = cancelAgentWorkflow(root, record.id, mode);
-          restoreApproval(record);
+          if (
+            cancellingBudget?.id === record.id &&
+            cancellingBudget.ownerPid === process.pid &&
+            cancellingBudget.state !== 'closed' &&
+            record.mode !== 'boost' &&
+            !record.approved &&
+            !record.recordUnavailable
+          )
+            restoreApproval(record);
           info(
             i18n.t(
               '已请求停止；阶段结果保留，运行中的子任务清理结束后释放工作区。',
