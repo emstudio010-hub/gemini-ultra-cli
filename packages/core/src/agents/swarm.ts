@@ -716,16 +716,27 @@ export class SwarmEngine {
     return this.running.size > 0;
   }
   async wait(signal: AbortSignal): Promise<void> {
-    const cancel = () => this.cancel();
+    let cancellationFailure: { error: unknown } | undefined;
+    const cancel = () => {
+      // Always interrupt members, including when persisting cancellation fails.
+      this.stopMembers();
+      try {
+        this.cancel();
+      } catch (error) {
+        // Abort event listeners must not throw outside the wait promise.
+        cancellationFailure = { error };
+      }
+    };
     signal.addEventListener('abort', cancel, { once: true });
     try {
-      signal.throwIfAborted();
+      if (signal.aborted) cancel();
       while (this.running.size) {
         await Promise.allSettled(
           [...this.running.values()].map((entry) => entry.promise),
         );
-        signal.throwIfAborted();
       }
+      if (cancellationFailure) throw cancellationFailure.error;
+      signal.throwIfAborted();
     } finally {
       signal.removeEventListener('abort', cancel);
     }

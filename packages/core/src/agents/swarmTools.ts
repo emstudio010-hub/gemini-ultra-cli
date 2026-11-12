@@ -45,7 +45,8 @@ class ManageInvocation extends BaseToolInvocation<ManageParams, ToolResult> {
     return `Swarm ${this.params.action}`;
   }
   async execute(options: ExecuteOptions): Promise<ToolResult> {
-    options.abortSignal.throwIfAborted();
+    // A cancelled wait still owns the cleanup of already launched members.
+    if (this.params.action !== 'wait') options.abortSignal.throwIfAborted();
     if (this.context.config.getApprovalMode() === ApprovalMode.PLAN)
       throw new Error('Swarm execution is unavailable in Plan Mode.');
     const root = this.context.config.storage.getProjectTempDir();
