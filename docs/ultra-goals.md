@@ -1386,3 +1386,6 @@ WI-133/E-321：实际Windows ConPTY启动当前编译源码CLI/core，preload隔
 ## 2026-11-12 供应商稳定ID优先解析
 
 WI-134/E-322至323/F-093：显示名称与另一供应商ID冲突时，原find按列表顺序可选错记录，影响模型端点/活动选择及按ID编辑删除；4旧复现失败。现在先ID再名称别名，不迁移配置；6项必要检查、strict core源码编译及相关lint退出0。Windows实际core ProviderManager→Swarm角色模型→UniversalContentGenerator，两个loopback端点，1次本地协议请求只到目标ID，model/认证头布尔核对正确、另一端点0请求、无native fallback，主选择/调度配置字节保持，编辑删除只命中目标；10条件通过、5685ms/退出0。0真实模型/外部请求，不是配置窗口/供应商质量/最终平台验收。无打包/重装/新版本/CI，个人配置与安装83保持，goal active。详见docs/ultra-provider-id-priority-handoff.md。
+## 2026-11-13 已删除供应商ID不回退名称
+
+WI-135/E-324至325/F-094：供应商删除后，保存成员路由/旧编辑仍可能按同名别名选错剩余记录；4旧复现失败。新增getProviderById用于编辑input.id、活动身份、显式路由及成员正规化，通用getProvider仍先ID后别名。6项必要检查、strict core源码编译及相关lint退出0。Windows实际core隔离两场景：成员启动前删除则runner不进入、paused/旧角色保持、请求0/失败1；作用域建立后删除则调用前拒绝。17条件通过、5495ms/退出0，0HTTP/native请求，旧编辑拒绝且剩余/主选择保持。只覆盖本进程明确删除，不声称跨进程热刷新或所有主模型fallback处理。无打包/重装/新版本/CI/真实模型请求，个人配置及安装83保持，goal active。详见docs/ultra-provider-deleted-id-handoff.md。

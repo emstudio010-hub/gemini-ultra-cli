@@ -126,6 +126,52 @@ describe('ProviderManager', () => {
     expect(mgr.getReasoningEffort()).toBe('xhigh');
   });
 
+  it.each(['route', 'stale-edit'] as const)(
+    'does not replace a deleted provider ID with a remaining display-name alias during %s',
+    (operation) => {
+      const mgr = new ProviderManager(tmpFile);
+      const first = mgr.upsertProvider({
+        name: 'Alpha',
+        baseUrl: 'https://alpha.invalid/v1',
+        apiKey: 'fixture-alpha',
+        models: ['alpha-model'],
+      });
+      const second = mgr.upsertProvider({
+        name: 'Research',
+        baseUrl: 'https://research.invalid/v1',
+        apiKey: 'fixture-research',
+        models: ['research-model'],
+        setActive: false,
+      });
+      mgr.upsertProvider({
+        ...second,
+        name: 'Research Gateway',
+        setActive: false,
+      });
+      mgr.upsertProvider({ ...first, name: 'Research', setActive: false });
+      mgr.removeProvider(second.id);
+      const before = fs.readFileSync(tmpFile);
+      if (operation === 'route') {
+        expect(
+          mgr.resolveProviderForModel('research:research-model'),
+        ).toBeNull();
+        expect(mgr.getProvider('Research')?.id).toBe(first.id);
+      } else {
+        expect(() =>
+          mgr.upsertProvider({
+            ...second,
+            name: 'Research Gateway',
+            models: ['stale-model'],
+            setActive: false,
+          }),
+        ).toThrow('Provider no longer exists');
+      }
+      expect(fs.readFileSync(tmpFile)).toEqual(before);
+      expect(mgr.listProviders()).toHaveLength(1);
+      expect(mgr.listProviders()[0].name).toBe('Research');
+    },
+  );
+
   it('persists, preserves and explicitly clears the optional output limit', () => {
     const mgr = new ProviderManager(tmpFile);
     const input = {

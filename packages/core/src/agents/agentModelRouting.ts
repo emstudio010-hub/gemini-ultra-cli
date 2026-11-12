@@ -50,7 +50,7 @@ export function normalizeAgentModel(value: string): string | undefined {
     throw new Error(
       'Choose an explicit provider:model route, native:gemini-<model-id>, or inherit.',
     );
-  const provider = ProviderManager.getInstance().getProvider(
+  const provider = ProviderManager.getInstance().getProviderById(
     spec.slice(0, separator),
   );
   if (!provider || !spec.slice(separator + 1))

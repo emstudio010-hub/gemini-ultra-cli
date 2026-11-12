@@ -135,6 +135,45 @@ it('keeps a saved member provider ID on its configured endpoint after another pr
   expect(manager.getActiveProvider()?.id).toBe(primary.id);
 });
 
+it.each(['before-scope', 'during-scope'] as const)(
+  'refuses a deleted member route %s instead of dispatching to its display-name alias',
+  async (timing) => {
+    const manager = ProviderManager.getInstance();
+    const primary = manager.getProvider('primary')!;
+    const research = manager.getProvider('research')!;
+    manager.upsertProvider({
+      ...research,
+      name: 'Research Gateway',
+      setActive: false,
+    });
+    manager.upsertProvider({ ...primary, name: 'Research', setActive: false });
+    let afterDeletion: Buffer | undefined;
+    if (timing === 'before-scope') {
+      manager.removeProvider(research.id);
+      afterDeletion = fs.readFileSync(providersFile);
+    }
+    await expect(
+      withAgentModel(
+        'research:research-model',
+        async () => {
+          if (timing === 'during-scope') {
+            manager.removeProvider(research.id);
+            afterDeletion = fs.readFileSync(providersFile);
+          }
+          return request();
+        },
+        () => {},
+      ),
+    ).rejects.toThrow('provider is unavailable');
+    expect(fetch).not.toHaveBeenCalled();
+    expect(fallback.generateContent).not.toHaveBeenCalled();
+    expect(afterDeletion).toBeDefined();
+    expect(fs.readFileSync(providersFile)).toEqual(afterDeletion);
+    expect(manager.getActiveProvider()?.id).toBe(primary.id);
+    expect(manager.getProvider('Research')?.id).toBe(primary.id);
+  },
+);
+
 it('isolates parallel member routes and capacity lookup without changing the provider file or main route', async () => {
   const original = fs.readFileSync(providersFile, 'utf8');
   const used: string[][] = [];

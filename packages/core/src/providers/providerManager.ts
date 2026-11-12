@@ -327,10 +327,21 @@ export class ProviderManager {
   }
 
   getProvider(idOrName: string): ExternalProviderProfile | undefined {
+    const byId = this.getProviderById(idOrName);
+    if (byId) return byId;
     const needle = idOrName.trim().toLowerCase();
-    const provider =
-      this.data.providers.find((p) => p.id.toLowerCase() === needle) ??
-      this.data.providers.find((p) => p.name.toLowerCase() === needle);
+    const provider = this.data.providers.find(
+      (p) => p.name.toLowerCase() === needle,
+    );
+    return provider ? structuredClone(provider) : undefined;
+  }
+
+  /** Persisted identities and model routes must never fall back to a name. */
+  getProviderById(id: string): ExternalProviderProfile | undefined {
+    const needle = id.trim().toLowerCase();
+    const provider = this.data.providers.find(
+      (p) => p.id.toLowerCase() === needle,
+    );
     return provider ? structuredClone(provider) : undefined;
   }
 
@@ -353,7 +364,7 @@ export class ProviderManager {
     const normalizedUrl = normalizeProviderUrl(input.baseUrl);
     let id = slugifyProviderId(input.name);
     const existing = input.id
-      ? this.getProvider(input.id)
+      ? this.getProviderById(input.id)
       : this.data.providers.find(
           (provider) =>
             provider.name.toLowerCase() === input.name.trim().toLowerCase(),
@@ -519,7 +530,7 @@ export class ProviderManager {
     if (!this.data.activeProviderId) {
       return undefined;
     }
-    return this.getProvider(this.data.activeProviderId);
+    return this.getProviderById(this.data.activeProviderId);
   }
 
   getActiveModel(): string | undefined {
@@ -556,7 +567,7 @@ export class ProviderManager {
   } {
     const provId = this.data.activeImageProviderId;
     const provider = provId
-      ? this.getProvider(provId)
+      ? this.getProviderById(provId)
       : this.getActiveProvider();
     const modelId =
       this.data.activeImageModel ||
@@ -588,7 +599,7 @@ export class ProviderManager {
     if (colonIdx > 0) {
       const prefix = trimmed.slice(0, colonIdx);
       const modelId = trimmed.slice(colonIdx + 1);
-      const provider = this.getProvider(prefix);
+      const provider = this.getProviderById(prefix);
       if (provider && modelId) {
         return { provider, modelId };
       }
