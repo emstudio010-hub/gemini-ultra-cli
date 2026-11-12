@@ -34,6 +34,11 @@ import {
 } from './types.js';
 import { MessageType } from '../types.js';
 import { agentTaskCatalogText } from './agentTaskCatalog.js';
+import {
+  agentRoleModelsText,
+  agentTaskStateLabel,
+  agentTaskStageLabel,
+} from '../utils/agentTaskLabels.js';
 
 function interviewPrompt(record: AgentWorkflow): string {
   return `Workflow ${record.id} (${record.mode}), phase ${record.phase}.\nObjective: ${record.objective}\nExisting brief: ${record.brief}\nRead relevant workspace sources first; never ask the user what the code already answers. Ask ONE focused question at a time using ask_user, with 2-4 concrete options and the recommended option first, plus the existing free-text facility. Respect answered questions, stated constraints, and the user's language. Do not ask redundant approval questions. Clarify outcome, boundaries, compatibility and objective acceptance. You are in read-only Plan Mode: no implementation, commands that modify files, or worker launch. When aligned, call draft_agent_workflow with workflow_id=${record.id}, an agreed brief and bounded milestones each with explicit acceptance criteria. Present the draft and await ${record.mode === 'grill-me' ? '/grill-me finish' : '/teamwork approve'}. Run only necessary relevant validation when implementation is later approved; no unsolicited full or smoke suites.`;
@@ -215,7 +220,7 @@ function workflowCommand(
         }
         info(
           record
-            ? `${record.mode}: ${record.phase}\n${record.objective}\n${record.stage}\n${i18n.t('角色模型', 'Role models')}: ${JSON.stringify(record.roleModels)}\n${i18n.t('累计预算', 'Cumulative budget')}: ${JSON.stringify(statusBudget)}\n${record.milestones.map((item, index) => `${index + 1}. [${item.completed ? 'x' : ' '}] ${item.title}\n${item.acceptance}`).join('\n')}\nID: ${record.id}`
+            ? `${record.mode}: ${agentTaskStateLabel(record.phase, i18n.getLocale())}\n${record.objective}\n${agentTaskStageLabel(record.stage, i18n.getLocale())}\n${i18n.t('角色模型', 'Role models')}: ${agentRoleModelsText(record.roleModels, i18n.getLocale())}\n${i18n.t('累计预算', 'Cumulative budget')}: ${JSON.stringify(statusBudget)}\n${record.milestones.map((item, index) => `${index + 1}. [${item.completed ? 'x' : ' '}] ${item.title}\n${item.acceptance}`).join('\n')}\nID: ${record.id}`
             : i18n.t(
                 '当前项目没有该工作流。',
                 'No workflow of this kind in this project.',

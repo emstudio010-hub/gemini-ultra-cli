@@ -10,6 +10,10 @@ import { readSwarm, readSwarmBoard } from '@google/gemini-cli-core';
 import { useKeypress } from '../hooks/useKeypress.js';
 import { useLocale } from '../hooks/useLocale.js';
 import { theme } from '../semantic-colors.js';
+import {
+  agentTaskModelLabel,
+  agentTaskStateLabel,
+} from '../utils/agentTaskLabels.js';
 
 function safe(text: string): string {
   return Array.from(stripAnsi(text))
@@ -84,7 +88,8 @@ export function SwarmBoard({
     >
       <Box justifyContent="space-between">
         <Text bold color={theme.text.accent}>
-          Swarm · {view.swarm?.phase || '—'}
+          {locale === 'zh' ? '蜂群' : 'Swarm'} ·{' '}
+          {view.swarm ? agentTaskStateLabel(view.swarm.phase, locale) : '—'}
         </Text>
         <Text color={theme.text.secondary}>
           {locale === 'zh' ? '↑↓ 历史 · Esc 返回' : '↑↓ History · Esc Back'}
@@ -123,7 +128,7 @@ export function SwarmBoard({
             {view.swarm?.members
               .map(
                 (member) =>
-                  `@${member.name} [${member.state}] ${member.model ?? view.swarm?.roleModels[member.agent] ?? 'inherit'}`,
+                  `@${member.name} [${agentTaskStateLabel(member.state, locale)}] ${agentTaskModelLabel(member.model ?? view.swarm?.roleModels[member.agent], locale)}`,
               )
               .join(' · ') ||
               (locale === 'zh'

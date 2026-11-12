@@ -9,6 +9,7 @@ import {
   type AgentWorkflowMode,
 } from '@google/gemini-cli-core';
 import stripAnsi from 'strip-ansi';
+import { agentTaskStateLabel } from '../utils/agentTaskLabels.js';
 
 export function agentTaskCatalogText(
   root: string,
@@ -32,17 +33,8 @@ export function agentTaskCatalogText(
   if (!catalog.entries.length)
     return text + '\n' + i18n.t('此页没有任务。', 'No tasks on this page.');
   for (const entry of catalog.entries) {
-    const phases: Record<string, string> = {
-      scoping: '需求对齐中',
-      ready: '已就绪',
-      running: '运行中',
-      active: '进行中',
-      blocked: '已受阻',
-      completed: '已完成',
-      cancelled: '已取消',
-    };
     const phase = entry.phase
-      ? i18n.t(phases[entry.phase] ?? entry.phase, entry.phase)
+      ? agentTaskStateLabel(entry.phase, i18n.getLocale())
       : i18n.t('详情未加载', 'details unavailable');
     text += `\n\n[${entry.mode}] ${phase} · ${entry.id}\n${i18n.t('保存时间', 'Saved')}: ${entry.savedAt}`;
     if (entry.objective)

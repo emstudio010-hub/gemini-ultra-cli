@@ -8,13 +8,21 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { act } from 'react';
 import { expect, it, vi } from 'vitest';
-import { createSwarm, getSwarmEngine } from '@google/gemini-cli-core';
+import {
+  createSwarm,
+  getSwarmEngine,
+  I18nManager,
+} from '@google/gemini-cli-core';
 import { renderWithProviders } from '../../test-utils/render.js';
 import { waitFor } from '../../test-utils/async.js';
 import { SwarmBoard } from './SwarmBoard.js';
 
 it('renders the saved roster, refreshes public posts and closes with Escape', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ultra-swarm-board-'));
+  vi.stubEnv('GEMINI_ULTRA_LOCALE_FILE', path.join(root, 'locale.json'));
+  const i18n = I18nManager.getInstance();
+  const previousLocale = i18n.getLocale();
+  i18n.setLocale('en');
   const swarm = createSwarm(root, 'Public swarm evidence');
   const engine = getSwarmEngine(root, swarm.id, async () => ({
     completed: true,
@@ -34,6 +42,24 @@ it('renders the saved roster, refreshes public posts and closes with Escape', as
       expect(rendered.lastFrame()).toContain('UPDATED_ENTRY'),
     );
     expect(rendered.lastFrame()).not.toContain('[2J');
+    const stateFile = path.join(root, 'swarms', swarm.id, 'members.json');
+    const beforeLocaleChange = fs.readFileSync(stateFile);
+    await act(async () => {
+      i18n.setLocale('zh');
+    });
+    await waitFor(() =>
+      expect(rendered.lastFrame()).toContain('蜂群 · 进行中'),
+    );
+    expect(rendered.lastFrame()).toContain('@reader [等待] 继承主模型');
+    expect(rendered.lastFrame()).not.toContain('[waiting]');
+    expect(rendered.lastFrame()).not.toContain('inherit');
+    expect(fs.readFileSync(stateFile).equals(beforeLocaleChange)).toBe(true);
+    await act(async () => {
+      i18n.setLocale('en');
+    });
+    await waitFor(() =>
+      expect(rendered.lastFrame()).toContain('@reader [waiting] inherit'),
+    );
     await act(async () => {
       rendered.stdin.write('\u001b');
       await rendered.waitUntilReady();
@@ -41,6 +67,8 @@ it('renders the saved roster, refreshes public posts and closes with Escape', as
     await waitFor(() => expect(onClose).toHaveBeenCalled());
   } finally {
     rendered.unmount();
+    i18n.setLocale(previousLocale);
+    vi.unstubAllEnvs();
     engine.cancel();
     fs.rmSync(root, { recursive: true, force: true });
   }

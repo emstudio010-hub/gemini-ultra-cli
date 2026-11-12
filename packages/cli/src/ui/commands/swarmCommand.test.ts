@@ -116,6 +116,12 @@ it.each(['zh', 'en'] as const)(
       locale === 'zh' ? 'Latest turn error' : '最近一轮错误',
     );
     expect(text).toContain('Transport interrupted');
+    expect(text).toContain(locale === 'zh' ? '蜂群 进行中' : 'Swarm active');
+    expect(text).toContain(
+      locale === 'zh'
+        ? '@reader: 已暂停 · 继承主模型'
+        : '@reader: paused · inherit',
+    );
     expect(fs.readFileSync(file)).toEqual(before);
   },
 );

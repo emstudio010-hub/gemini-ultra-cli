@@ -17,6 +17,7 @@ import {
   workflowBudget,
   consumeWorkflowRequest,
   closeWorkflowBudget,
+  I18nManager,
   type Config,
 } from '@google/gemini-cli-core';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
@@ -32,6 +33,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   syncBuiltinESMExports();
   fs.rmSync(root, { recursive: true, force: true });
 });
@@ -293,6 +295,7 @@ it('retries grill-me finish after a record save failure without submitting work 
 });
 
 it('inspects the requested historical workflow without changing the current task or creating its missing ledger', async () => {
+  vi.stubEnv('GEMINI_ULTRA_LOCALE_FILE', path.join(root, 'locale.json'));
   const { context } = commandContext();
   const prepare = teamworkCommand.subCommands!.find(
     (item) => item.name === 'prepare',
@@ -300,6 +303,8 @@ it('inspects the requested historical workflow without changing the current task
   await prepare.action!(context, 'Older historical objective');
   const older = latestAgentWorkflow(root, 'teamwork')!;
   older.phase = 'cancelled';
+  older.stage = 'review 1.2';
+  older.roleModels = { 'workflow-auditor': 'native:gemini-reviewer' };
   saveAgentWorkflow(root, older);
   closeWorkflowBudget(root, older);
   older.updatedAt = '2000-01-01T00:00:00.000Z';
@@ -321,11 +326,24 @@ it('inspects the requested historical workflow without changing the current task
   const status = teamworkCommand.subCommands!.find(
     (item) => item.name === 'status',
   )!;
-  expect(await status.action!(context, older.id)).toBeUndefined();
-  const output = JSON.stringify(vi.mocked(context.ui.addItem).mock.calls);
-  expect(output).toContain('Older historical objective');
-  expect(output).toContain(older.id);
-  expect(output).not.toContain('Newer current objective');
+  for (const locale of ['zh', 'en'] as const) {
+    I18nManager.getInstance().setLocale(locale);
+    vi.mocked(context.ui.addItem).mockClear();
+    expect(await status.action!(context, older.id)).toBeUndefined();
+    const output = JSON.stringify(vi.mocked(context.ui.addItem).mock.calls);
+    expect(output).toContain('Older historical objective');
+    expect(output).toContain(older.id);
+    expect(output).not.toContain('Newer current objective');
+    expect(output).toContain(
+      locale === 'zh' ? 'teamwork: 已取消' : 'teamwork: cancelled',
+    );
+    expect(output).toContain(locale === 'zh' ? '独立复核 1.2' : 'review 1.2');
+    expect(output).toContain(
+      locale === 'zh'
+        ? '独立复核员: native:gemini-reviewer'
+        : 'workflow-auditor: native:gemini-reviewer',
+    );
+  }
   expect(fs.readdirSync(directory).sort()).toEqual(Object.keys(before).sort());
   for (const [file, bytes] of Object.entries(before))
     expect(fs.readFileSync(path.join(directory, file))).toEqual(bytes);
