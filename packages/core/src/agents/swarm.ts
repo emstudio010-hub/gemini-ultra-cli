@@ -1207,6 +1207,13 @@ export function cancelSavedSwarm(root: string, requestedId?: string): Swarm {
 
 export async function resumeSwarm(root: string, id: string): Promise<void> {
   const engine = engines.get(engineKey(root, id));
+  if (engine?.hasRunningMembers())
+    throw new Error(
+      I18nManager.getInstance().t(
+        `成员仍在执行或清理，尚未恢复。请用 /swarm status ${id} 查看状态，收尾结束后再显式 resume。`,
+        `Members are still running or cleaning up; no resume started. Inspect /swarm status ${id} and explicitly resume after they settle.`,
+      ),
+    );
   if (engine) await engine.wait(new AbortController().signal);
   if (readSwarm(root, id).phase === 'completed') return;
   withAgentTaskLock(root, () => resumeSwarmState(root, id));

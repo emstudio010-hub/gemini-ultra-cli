@@ -63,6 +63,72 @@ it('rebinds an explicitly resumed historical swarm while preserving its cumulati
     expect(fs.readFileSync(path.join(root, file))).toEqual(bytes);
 });
 
+it.each([false, true])(
+  'refuses resume promptly while members are running with cancellation=%s, without waiting or changing saved state',
+  async (cancelled) => {
+    const swarm = createSwarm(
+      root,
+      'Keep local resume responsive during member work',
+    );
+    let started!: () => void;
+    const start = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let childSignal: AbortSignal | undefined;
+    let calls = 0;
+    const engine = getSwarmEngine(
+      root,
+      swarm.id,
+      async (_agent, _prompt, signal) => {
+        calls++;
+        childSignal = signal;
+        started();
+        await gate;
+        return { completed: true, text: 'Generated member output' };
+      },
+    );
+    engine.add('reader', 'researcher', 'Wait for a bounded fixture release');
+    await start;
+    if (cancelled) cancelSavedSwarm(root, swarm.id);
+    const before = savedFiles();
+    let result: { error?: unknown; completed?: boolean } | undefined;
+    const resuming = resumeSwarm(root, swarm.id).then(
+      () => {
+        result = { completed: true };
+      },
+      (error: unknown) => {
+        result = { error };
+      },
+    );
+    try {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(result?.error).toBeInstanceOf(Error);
+      expect((result?.error as Error).message).toMatch(/swarm status/);
+      expect(savedFiles()).toEqual(before);
+      expect(calls).toBe(1);
+      expect(childSignal?.aborted).toBe(cancelled);
+      release();
+      await engine.wait(signal());
+      await resuming;
+      await resumeSwarm(root, swarm.id);
+      expect(latestSwarm(root)?.phase).toBe('active');
+      expect(readSwarm(root, swarm.id).budget).toMatchObject({
+        turns: 1,
+        failedTurns: 0,
+      });
+    } finally {
+      engine.cancel();
+      release();
+      await engine.wait(signal());
+      await resuming;
+    }
+  },
+);
+
 it.each(['active', 'blocked'] as const)(
   'refuses historical resume while a different swarm is %s without mutating either task',
   async (phase) => {
