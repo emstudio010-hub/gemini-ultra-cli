@@ -44,6 +44,82 @@ function savedFiles() {
   );
 }
 
+it.each(['full', 'overflow', 'damaged'] as const)(
+  'refuses historical resume with a %s board before changing task state or binding',
+  async (damage) => {
+    const older = createSwarm(root, 'Preserve the cancelled historical task');
+    consumeSwarmRequest(root);
+    cancelSavedSwarm(root, older.id);
+    const newer = createSwarm(root, 'Keep the current terminal binding');
+    cancelSavedSwarm(root, newer.id);
+    const file = path.join(root, 'swarms', older.id, 'board.jsonl');
+    const post = {
+      seq: 1,
+      sender: 'coordinator',
+      text: 'Saved evidence',
+      time: '2026-11-12T00:00:00.000Z',
+    };
+    if (damage === 'full')
+      fs.writeFileSync(
+        file,
+        Array.from(
+          { length: 500 },
+          (_, index) => JSON.stringify({ ...post, seq: index + 1 }) + '\n',
+        ).join(''),
+      );
+    else if (damage === 'overflow') {
+      post.text = '';
+      post.text = 'x'.repeat(
+        4 * 1024 * 1024 - 10 - Buffer.byteLength(JSON.stringify(post) + '\n'),
+      );
+      fs.writeFileSync(file, JSON.stringify(post) + '\n');
+    } else fs.writeFileSync(file, '{original damaged board');
+    const before = savedFiles();
+    await expect(resumeSwarm(root, older.id)).rejects.toThrow();
+    const after = savedFiles();
+    expect(Object.keys(after).sort()).toEqual(Object.keys(before).sort());
+    for (const [name, bytes] of Object.entries(before))
+      expect(after[name].equals(bytes), `Saved file changed: ${name}`).toBe(
+        true,
+      );
+    expect(readSwarm(root, older.id)).toMatchObject({
+      phase: 'cancelled',
+      budget: { requests: 1 },
+    });
+    expect(latestSwarm(root)?.id).toBe(newer.id);
+  },
+);
+
+it('resumes at the final available board slot without dropping saved posts or resetting usage', async () => {
+  const swarm = createSwarm(root, 'Use the final allowed resume post');
+  consumeSwarmRequest(root);
+  cancelSavedSwarm(root, swarm.id);
+  const file = path.join(root, 'swarms', swarm.id, 'board.jsonl');
+  const original = Array.from(
+    { length: 499 },
+    (_, index) =>
+      JSON.stringify({
+        seq: index + 1,
+        sender: 'coordinator',
+        text: 'Earlier evidence',
+        time: '2026-11-12T00:00:00.000Z',
+      }) + '\n',
+  ).join('');
+  fs.writeFileSync(file, original);
+  await resumeSwarm(root, swarm.id);
+  expect(latestSwarm(root)).toMatchObject({
+    id: swarm.id,
+    phase: 'active',
+    budget: { requests: 1 },
+  });
+  expect(fs.readFileSync(file, 'utf8').startsWith(original)).toBe(true);
+  expect(readSwarmBoard(root, swarm.id)).toHaveLength(500);
+  expect(readSwarmBoard(root, swarm.id).at(-1)).toMatchObject({
+    seq: 500,
+    text: expect.stringContaining('Explicitly resumed'),
+  });
+});
+
 it('rebinds an explicitly resumed historical swarm while preserving its cumulative usage and the newer terminal task', async () => {
   const older = createSwarm(root, 'Resume this historical swarm');
   consumeSwarmRequest(root);

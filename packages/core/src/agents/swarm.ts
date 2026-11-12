@@ -308,6 +308,24 @@ export function readSwarmBoard(root: string, id: string): SwarmPost[] {
         .parse(JSON.parse(line)),
     );
 }
+function preparePost(root: string, id: string, sender: string, text: string) {
+  const file = path.join(directory(root, id), 'board.jsonl');
+  const board = readSwarmBoard(root, id);
+  if (board.length >= 500)
+    throw new Error(
+      'Swarm board reached its 500-post limit; preserve this board and start a scoped successor.',
+    );
+  const entry = {
+    seq: board.length + 1,
+    sender,
+    text: z.string().trim().min(1).max(4000).parse(text),
+    time: new Date().toISOString(),
+  };
+  const line = JSON.stringify(entry) + '\n';
+  if (fs.statSync(file).size + Buffer.byteLength(line) > 4 * 1024 * 1024)
+    throw new Error('Swarm board limit exceeded.');
+  return { entry, line };
+}
 function appendPost(
   root: string,
   id: string,
@@ -317,20 +335,7 @@ function appendPost(
   const file = path.join(directory(root, id), 'board.jsonl');
   const release = lockSync(file, { realpath: false, retries: 0 });
   try {
-    const board = readSwarmBoard(root, id);
-    if (board.length >= 500)
-      throw new Error(
-        'Swarm board reached its 500-post limit; preserve this board and start a scoped successor.',
-      );
-    const entry = {
-      seq: board.length + 1,
-      sender,
-      text: z.string().trim().min(1).max(4000).parse(text),
-      time: new Date().toISOString(),
-    };
-    const line = JSON.stringify(entry) + '\n';
-    if (fs.statSync(file).size + Buffer.byteLength(line) > 4 * 1024 * 1024)
-      throw new Error('Swarm board limit exceeded.');
+    const { entry, line } = preparePost(root, id, sender, text);
     fs.appendFileSync(file, line, { mode: 0o600 });
     return entry;
   } finally {
@@ -1242,6 +1247,9 @@ function resumeSwarmState(root: string, id: string): void {
     throw new Error(
       `Swarm ${limit} budget is still exhausted; /swarm budget must increase the limit before resume.`,
     );
+  const resumePost =
+    'Explicitly resumed. Mention paused members to continue; killed names remain retired.';
+  preparePost(root, id, 'coordinator', resumePost);
   // Do not transfer ownership or rewrite evidence before all refusal checks pass.
   if (swarm.ownerPid !== process.pid)
     for (const member of swarm.members)
@@ -1250,12 +1258,7 @@ function resumeSwarmState(root: string, id: string): void {
   swarm.stopReason = '';
   swarm.ownerPid = process.pid;
   saveSwarm(root, swarm);
-  appendPost(
-    root,
-    id,
-    'coordinator',
-    'Explicitly resumed. Mention paused members to continue; killed names remain retired.',
-  );
+  appendPost(root, id, 'coordinator', resumePost);
   // Main dispatch accounting and coordinator tools resolve this binding.
   writeJson(path.join(root, 'swarms/latest.json'), {
     id: swarm.id,
