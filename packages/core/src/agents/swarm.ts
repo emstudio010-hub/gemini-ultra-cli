@@ -873,6 +873,7 @@ export class SwarmEngine {
           ? agentWorktreeTree(this.root, this.id)
           : undefined;
       saveSwarm(this.root, swarm);
+      let memberSignal = signal;
       const result = await actors.run(
         { root: this.root, id: this.id, name },
         () =>
@@ -882,15 +883,17 @@ export class SwarmEngine {
               inAgentWorktree(
                 this.root,
                 this.id,
-                (directory) =>
-                  this.runAgent(
+                (directory) => {
+                  memberSignal = AbortSignal.any([
+                    signal,
+                    AbortSignal.timeout(10 * 60 * 1000),
+                  ]);
+                  return this.runAgent(
                     member.agent,
                     `${directory ? `ISOLATED TASK WORKTREE: ${directory}. Resolve assigned repository paths here; do not edit the source checkout. Git-ignored dependencies are not copied. This is a working-directory boundary, not an OS sandbox.\n` : ''}${swarmMemberContext(this.root, swarm, member, board)}\nWork only within your assigned scope; preserve unrelated changes. Writes share a workspace and are serialized. Communicate publicly with post_swarm_message; @name or @all mentions wake peers. Do not continually mention completed peers. Finish this turn through complete_task when you have a result or need to wait; you then wait without model calls until mentioned. No fabricated checks; run only necessary checks allowed by the user. Verifiers must independently inspect current artifacts and return passed, summary, evidence through complete_task.`,
-                    AbortSignal.any([
-                      signal,
-                      AbortSignal.timeout(10 * 60 * 1000),
-                    ]),
-                  ),
+                    memberSignal,
+                  );
+                },
                 swarm.worktreeRequired,
               ),
             (models) => {
@@ -900,15 +903,20 @@ export class SwarmEngine {
       );
       swarm = readSwarm(this.root, this.id);
       member = swarm.members.find((entry) => entry.name === name)!;
+      const timedOut = memberSignal.aborted && !signal.aborted;
       const stopped =
-        signal.aborted || swarm.phase !== 'active' || member.state === 'killed';
+        memberSignal.aborted ||
+        swarm.phase !== 'active' ||
+        member.state === 'killed';
       const hadResult = !!member.result || !!member.fullResult;
       if (stopped || (!result.completed && hadResult)) {
         // A runner may return completion after cancellation. Retain that output
         // as an unaccepted attempt rather than replacing earlier evidence.
-        const diagnostic = stopped
-          ? 'Member turn was stopped; late output was not accepted.'
-          : 'Member turn did not complete.';
+        const diagnostic = timedOut
+          ? 'Member turn timed out; late output was not accepted.'
+          : stopped
+            ? 'Member turn was stopped; late output was not accepted.'
+            : 'Member turn did not complete.';
         const partial = saveSwarmResultText(
           this.root,
           this.id,
@@ -931,10 +939,7 @@ export class SwarmEngine {
       // A late research result may invalidate an auditor that started earlier.
       if (member.agent !== 'workflow-auditor') swarm.revision++;
       if (member.state !== 'killed')
-        member.state =
-          signal.aborted || swarm.phase !== 'active' || !result.completed
-            ? 'paused'
-            : 'waiting';
+        member.state = stopped || !result.completed ? 'paused' : 'waiting';
       if (
         member.agent === 'workflow-auditor' &&
         result.completed &&
@@ -966,7 +971,8 @@ export class SwarmEngine {
       if (
         swarm.phase === 'active' &&
         !signal.aborted &&
-        (!result.completed ||
+        (timedOut ||
+          !result.completed ||
           (member.agent === 'workflow-auditor' &&
             member.verifiedRevision !== revision))
       ) {
