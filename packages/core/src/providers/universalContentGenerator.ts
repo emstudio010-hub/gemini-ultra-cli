@@ -203,6 +203,7 @@ export class UniversalContentGenerator implements ContentGenerator {
     userPromptId: string,
     role: LlmRole,
   ): Promise<GenerateContentResponse> {
+    request.config?.abortSignal?.throwIfAborted();
     const selected = currentAgentModel();
     if (selected)
       request = {
@@ -247,6 +248,7 @@ export class UniversalContentGenerator implements ContentGenerator {
     userPromptId: string,
     role: LlmRole,
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
+    request.config?.abortSignal?.throwIfAborted();
     const selected = currentAgentModel();
     if (selected)
       request = {

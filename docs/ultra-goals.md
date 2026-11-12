@@ -1401,3 +1401,6 @@ WI-138/E-330至331/F-097：原countTokens路由识别native但未替换传出mod
 ## 2026-11-13 外部网关原生认证本地拒绝
 
 WI-139/E-332至333/F-098：仅gateway认证的ExternalFallbackGenerator原先在native生成/流式及未登记主模型失败前扣预算且抛普通API错误，3旧复现失败。现在生成路由在记账前本地ProviderRouteError，提示/provider list、/model及/auth；真正原生生成器/可解析外部路由和离线估算保持。最终6项必要检查、strict core源码编译及两个文件lint退出0；离线估算初精确数字断言错误已按实际正整数契约纠正，旧日志保留。Windows实际Config/storage/createContentGenerator网关构造链11条件通过、4905ms/退出0，三拒绝路径零HTTP且预算字节保持，正常外部对照唯一loopback请求成功且累计1。0真实模型/Google调用，不是完整终端/供应商质量/最终平台验收。无打包重装新版本CI付费请求，个人配置及全局83保持，goal active。详见docs/ultra-native-gateway-auth-handoff.md。
+## 2026-11-13 模型请求前取消不消耗额度
+
+WI-140/E-334至335/F-099：生成入口原先对已aborted请求先扣工作流/Swarm额度，8旧复现全部改写预算。现在普通/流式生成首行throwIfAborted，在路由/记账/模型观察/适配器前保留原取消原因。8项加既有共享预算/取消后正常调用对照共9项通过，strict core源码编译及两个文件lint退出0。Windows实际Config/storage及gateway/native构造链12次预取消覆盖AbortError/TimeoutError和不可用native路由，状态保持/原reason/零fetch；两种预算随后各1次正常loopback调用成功且累计1，9组汇总条件通过、4962ms/退出0。不是在途取消/真实认证或模型/完整终端验收。无打包重装新版本CI付费请求，个人配置及安装83保持，goal active。详见docs/ultra-pre-cancelled-dispatch-handoff.md。
