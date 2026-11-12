@@ -230,12 +230,12 @@ jobs:
           $entry = Join-Path $env:RUNNER_TEMP 'ultra-install/node_modules/gemini-ultra-cli/bundle/gemini.js'
           node scripts/verify-ultra-drill-verification.mjs $entry artifacts/ultra-release/drill-verification.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Verify retained Swarm reports after follow-up failures
+      - name: Verify Swarm incomplete results across process restart
         if: inputs.verification_scope == 'swarm-result-recovery' || inputs.verification_scope == 'full' || inputs.verification_scope == ''
         shell: pwsh
         run: |
           $entry = Join-Path $env:RUNNER_TEMP 'ultra-install/node_modules/gemini-ultra-cli/bundle/gemini.js'
-          node scripts/verify-ultra-swarm-result-recovery.mjs $entry artifacts/ultra-release/swarm-result-recovery-verification.json
+          node scripts/verify-ultra-swarm-incomplete.mjs $entry artifacts/ultra-release/swarm-incomplete-verification.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Verify scoped native redteam Swarm members
         if: inputs.verification_scope == 'swarm-redteam' || inputs.verification_scope == 'full' || inputs.verification_scope == ''
@@ -407,6 +407,8 @@ jobs:
             artifacts/ultra-release/native-address-precision-verification.json
             artifacts/ultra-release/swarm-redteam-verification.json
             artifacts/ultra-release/swarm-result-recovery-verification.json
+            artifacts/ultra-release/swarm-incomplete-verification.json
+            artifacts/ultra-release/swarm-incomplete-verification-output.txt
             artifacts/ultra-release/drill-verification.json
             artifacts/ultra-release/drill-search-verification.json
             artifacts/ultra-release/provider-catalog-verification.json

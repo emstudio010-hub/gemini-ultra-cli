@@ -15,7 +15,10 @@ import {
   swarmModelSnapshot,
   swarmSnapshot,
 } from './swarm.js';
-import { readSwarmResultText } from './swarmResultText.js';
+import {
+  readSwarmResultText,
+  swarmResultArchivePath,
+} from './swarmResultText.js';
 import { readAgentTaskDetails } from './agentTaskDetails.js';
 import { exportSwarmReports } from './agentReports.js';
 
@@ -27,6 +30,73 @@ beforeEach(() => {
 afterEach(() => {
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+it.each([false, true])(
+  'preserves an accepted report when a later incomplete long=%s turn returns partial output',
+  async (long) => {
+    const swarm = createSwarm(
+      root,
+      'Resume without discarding accepted evidence',
+    );
+    const original = 'Accepted evidence from the prior turn\n'.repeat(500);
+    const partial = long
+      ? 'Unfinished observation\n'.repeat(900) + 'PARTIAL-END'
+      : 'Interrupted before the remaining question was resolved.';
+    let turn = 0;
+    const engine = getSwarmEngine(root, swarm.id, async () => {
+      turn++;
+      if (turn === 2) return { completed: false, text: partial };
+      return {
+        completed: true,
+        text: turn === 1 ? original : 'Accepted correction',
+      };
+    });
+    engine.add('reader', 'researcher', 'Inspect assigned evidence');
+    await engine.wait(signal());
+    const previous = readSwarm(root, swarm.id).members[0];
+    engine.post('coordinator', '@reader continue the unresolved question');
+    await engine.wait(signal());
+    const paused = readSwarm(root, swarm.id).members[0];
+    expect(readSwarmResultText(root, swarm.id, paused)).toBe(original);
+    expect(paused.fullResult).toEqual(previous.fullResult);
+    expect(paused.state).toBe('paused');
+    expect(paused.lastError).toContain('Member turn did not complete.');
+    if (long) {
+      const file = paused.lastError!.match(
+        /Partial output archived: ([^\n]+)/,
+      )?.[1];
+      expect(file).toBeDefined();
+      expect(fs.readFileSync(file!, 'utf8')).toBe(
+        'Member turn did not complete.\n' + partial,
+      );
+      expect(file).not.toBe(
+        swarmResultArchivePath(root, swarm.id, previous.fullResult!),
+      );
+    } else expect(paused.lastError).toContain(partial);
+    expect(readSwarm(root, swarm.id).budget.failedTurns).toBe(1);
+    const snapshot = swarmModelSnapshot(root, swarm.id).members[0];
+    expect(snapshot.lastError).toBeDefined();
+    const exported = exportSwarmReports(root, swarm.id);
+    const manifest = JSON.parse(fs.readFileSync(exported.manifestPath, 'utf8'));
+    expect(
+      fs.readFileSync(
+        path.join(
+          path.dirname(exported.manifestPath),
+          manifest.reports[0].file,
+        ),
+        'utf8',
+      ),
+    ).toBe(original);
+    expect(() => engine.finish()).toThrow(/paused/);
+    engine.post('coordinator', '@reader retry after recovery');
+    await engine.wait(signal());
+    expect(readSwarm(root, swarm.id).members[0]).toMatchObject({
+      state: 'waiting',
+      result: 'Accepted correction',
+    });
+    expect(readSwarm(root, swarm.id).members[0].lastError).toBeUndefined();
+  },
+);
 
 it.each([false, true])(
   'retains the prior long=%s report through a failed follow-up, exposes the error and clears it only after a new result',

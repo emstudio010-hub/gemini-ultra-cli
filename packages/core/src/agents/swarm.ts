@@ -833,11 +833,28 @@ export class SwarmEngine {
       );
       swarm = readSwarm(this.root, this.id);
       member = swarm.members.find((entry) => entry.name === name)!;
-      const saved = saveSwarmResultText(this.root, this.id, result.text);
-      member.result = saved.result;
-      member.fullResult = saved.fullResult;
-      member.lastError = undefined;
-      member.modelsUsed = modelsUsed;
+      if (!result.completed && (member.result || member.fullResult)) {
+        // Incomplete returns are failures too, not replacements for earlier
+        // evidence. Keep a long partial attempt separately so it remains useful
+        // when the member is explicitly resumed.
+        const partial = saveSwarmResultText(
+          this.root,
+          this.id,
+          `Member turn did not complete.\n${result.text}`,
+        );
+        recordMemberFailure(
+          member,
+          partial.fullResult
+            ? `Member turn did not complete.\nPartial output archived: ${swarmResultArchivePath(this.root, this.id, partial.fullResult)}\n${partial.result}`
+            : partial.result,
+        );
+      } else {
+        const saved = saveSwarmResultText(this.root, this.id, result.text);
+        member.result = saved.result;
+        member.fullResult = saved.fullResult;
+        member.lastError = undefined;
+        member.modelsUsed = modelsUsed;
+      }
       // A late research result may invalidate an auditor that started earlier.
       if (member.agent !== 'workflow-auditor') swarm.revision++;
       if (member.state !== 'killed')
