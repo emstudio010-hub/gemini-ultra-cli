@@ -1,6 +1,6 @@
 # Gemini Ultra CLI 模型目录有界加载交接
 
-日期：2026-11-12。WI-110/E-267/F-075。当前安装preview.74，持续goal
+日期：2026-11-12。WI-110/E-267/F-075。当前安装preview.75，持续goal
 active；本阶段只修改供应商目录读取，个人配置、数据库及逆向工具保持，不调用付费模型。
 
 ## 已确认问题与修复
@@ -29,4 +29,18 @@ Evidence → Finding → Path：无界response.json及旧5失败 →
 F-075目录正文无界/取消覆盖不足 → 字节上限流式读取与同signal取消 →
 6定向、严格构建及实际loopback目录链。
 
-工程证据在C:/Users/Administrator/Documents/ChatGPT/gmncliu：provider-catalog-before-stopped.log、provider-catalog-before-junit.xml/-before.log、provider-catalog-first.log、provider-catalog-final-junit.xml/-final.log、provider-catalog-types.log（首次类型错误）、provider-catalog-lint.log、provider-catalog-build-first.log/-build.log、provider-catalog-script-lint.log、provider-catalog-source.json/-source.log。候选preview.75待provider-catalog范围三平台及本机安装，旧74及以前证据保持，不合并master或正式Release。
+工程证据在C:/Users/Administrator/Documents/ChatGPT/gmncliu：provider-catalog-before-stopped.log、provider-catalog-before-junit.xml/-before.log、provider-catalog-first.log、provider-catalog-final-junit.xml/-final.log、provider-catalog-types.log（首次类型错误）、provider-catalog-lint.log、provider-catalog-build-first.log/-build.log、provider-catalog-script-lint.log、provider-catalog-source.json/-source.log。preview.75已通过provider-catalog范围三平台检查并安装，旧74及以前证据保持，不合并master或正式Release。
+
+## 三平台交付结果
+
+E-268：产品源18a31c53088622e9f93fa504e8ed90605717eca5/run43219241298三平台provider-catalog范围completed/success；minimum-node、native-address-recheck及旧无关链skipped。独立核对三包版本75、源chunk、包/入口SHA、六rg身份权限及安装4基础工具。每平台实际安装包ProviderManager连接5个loopback目录GET，声明/实际流式超2MiB均拒绝，正文停滞超时、header后显式取消、预取消无第6请求、正常UTF8中文目录解析；三个停滞连接关闭，原配置字节及选择保持。0模型/外部端点请求，不重跑旧协作/逆向/启动或付费任务。
+
+E-269：offline已有缓存安装7589ms/退出0，双命令preview.75，425文件匹配Windows
+CI包。包SHA256
+0c49bef63dd23d0fd1f5762eff5aeea5c7e0380d8e157f467b529621c5c0b9a4，入口SHA256
+dbe66a077af29a8a86adc776962c5190c5ee2a81a45bca75974e58f2b3c07e36。旧包保留，个人locale/provider哈希保持74末值，ultra-tools.json仍未创建。WI-110/F-075目录有界加载和正文取消分发交付；2MiB限目录正文，不改变模型上下文/推理请求，目录过大可手填。无全量/冒烟/付费或未变更业务重跑，goal
+active，不合并master或正式Release。
+
+脚本首lint为Buffer未声明，补显式node:buffer导入后provider-catalog-script-final-lint.log退出0；仅脚本声明提交2b6cdec，产品包源仍18a31c5，没有重派构建或改动运行逻辑。最终构建已通过严格core编译；首次provider-catalog-types.log仅保存旧夹具Header类型错误。源码loopback成功记录在修复该类型后的产品输出基础上生成，最终脚本另外将取消时机改为收到header后，三平台验证此观察器版本。
+
+最终证据：github-preview75-run.json、github-preview75-artifacts-result.json、github-preview75-artifacts-verification.log、github-run-43219241298/、global-preview75-install-result.json、global-install-github-preview75-full-result.json、provider-catalog-personal-config.json。源码、工程正式报告和Obsidian全文同步。
