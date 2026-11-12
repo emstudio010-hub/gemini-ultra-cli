@@ -244,6 +244,9 @@ export interface SlashCommand {
    */
   showCompletionLoading?: boolean;
 
+  /** Keep @member or model@version arguments in this command's own completer. */
+  completionHandlesAt?: boolean;
+
   /**
    * Whether the command expects arguments.
    * If false, and the command is a subcommand, the command parser may treat

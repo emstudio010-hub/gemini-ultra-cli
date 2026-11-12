@@ -33,6 +33,7 @@ import {
 import { MessageType } from '../types.js';
 import { SwarmBoard } from '../components/SwarmBoard.js';
 import { agentTaskCatalogText } from './agentTaskCatalog.js';
+import { completeAgentModel } from './agentModelCompletion.js';
 import {
   agentTaskModelLabel,
   agentTaskStateLabel,
@@ -372,5 +373,13 @@ export const swarmCommand: SlashCommand = {
       'resume',
     ].includes(name),
     action: (context, args) => action(context, args, name),
+    ...(name === 'model'
+      ? {
+          completion: (context: CommandContext, partial: string) =>
+            completeAgentModel(context, partial, true),
+          showCompletionLoading: false,
+          completionHandlesAt: true,
+        }
+      : {}),
   })),
 };

@@ -134,9 +134,28 @@ export function useCommandCompletion({
       };
     }
 
-    // FIRST: Check for @ completion (scan backwards from cursor)
-    // This must happen before slash command check so that `/cmd @file`
-    // triggers file completion, not just slash command completion.
+    if (cursorRow === 0 && currentLine.startsWith('/')) {
+      let level = slashCommands;
+      for (const part of currentLine.slice(1).split(/\s+/)) {
+        const command = level.find((entry) =>
+          [entry.name, ...(entry.altNames ?? [])].some(
+            (name) => name.toLowerCase() === part.toLowerCase(),
+          ),
+        );
+        if (!command) break;
+        if (command.completion && command.completionHandlesAt) {
+          return {
+            completionMode: CompletionMode.SLASH,
+            query: currentLine,
+            completionStart: 0,
+            completionEnd: currentLine.length,
+          };
+        }
+        level = command.subCommands ?? [];
+      }
+    }
+
+    // Other commands still prefer file references such as `/cmd @file`.
     for (let i = cursorCol - 1; i >= 0; i--) {
       const char = codePoints[i];
 
@@ -207,7 +226,14 @@ export function useCommandCompletion({
       completionStart: -1,
       completionEnd: -1,
     };
-  }, [cursorRow, cursorCol, buffer.lines, buffer.text, shellModeActive]);
+  }, [
+    cursorRow,
+    cursorCol,
+    buffer.lines,
+    buffer.text,
+    shellModeActive,
+    slashCommands,
+  ]);
 
   useAtCompletion({
     enabled: active && completionMode === CompletionMode.AT,
@@ -342,7 +368,11 @@ export function useCommandCompletion({
     }
   }, [active, completionMode, reverseSearchActive, resetCompletionState]);
 
+  const currentSuggestions =
+    completionMode !== CompletionMode.SLASH ||
+    slashCompletionRange.areSuggestionsCurrent !== false;
   const showSuggestions =
+    currentSuggestions &&
     active &&
     completionMode !== CompletionMode.IDLE &&
     !reverseSearchActive &&
@@ -358,6 +388,7 @@ export function useCommandCompletion({
    */
   const getCompletedText = useCallback(
     (suggestion: Suggestion): string | null => {
+      if (!currentSuggestions) return null;
       const currentLine = buffer.lines[cursorRow] || '';
 
       let start = completionStart;
@@ -398,11 +429,13 @@ export function useCommandCompletion({
       completionEnd,
       slashCompletionRange,
       shellCompletionRange,
+      currentSuggestions,
     ],
   );
 
   const handleAutocomplete = useCallback(
     (indexToUse: number) => {
+      if (!currentSuggestions) return;
       if (indexToUse < 0 || indexToUse >= suggestions.length) {
         return;
       }
@@ -465,16 +498,17 @@ export function useCommandCompletion({
       slashCompletionRange,
       shellCompletionRange,
       getCompletedText,
+      currentSuggestions,
     ],
   );
 
   return {
-    suggestions,
+    suggestions: currentSuggestions ? suggestions : [],
     activeSuggestionIndex,
     visibleStartIndex,
     showSuggestions,
     isLoadingSuggestions,
-    isPerfectMatch,
+    isPerfectMatch: currentSuggestions && isPerfectMatch,
     forceShowShellSuggestions,
     setForceShowShellSuggestions,
     isShellSuggestionsVisible,

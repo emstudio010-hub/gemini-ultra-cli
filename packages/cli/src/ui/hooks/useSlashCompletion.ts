@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { AsyncFzf } from 'fzf';
 import type { Suggestion } from '../components/SuggestionsDisplay.js';
 import {
@@ -56,6 +56,8 @@ interface CommandParserResult {
   currentLevel: readonly SlashCommand[] | undefined;
   leafCommand: SlashCommand | null;
   isArgumentCompletion: boolean;
+  argumentText: string;
+  argumentStart: number;
 }
 
 function useCommandParser(
@@ -71,25 +73,30 @@ function useCommandParser(
         currentLevel: slashCommands,
         leafCommand: null,
         isArgumentCompletion: false,
+        argumentText: '',
+        argumentStart: -1,
       };
     }
 
     const fullPath = query.substring(1) || '';
     const hasTrailingSpace = !!query.endsWith(' ');
-    const rawParts = fullPath.split(/\s+/).filter((p) => p);
-    let commandPathParts = rawParts;
+    const tokens = [...fullPath.matchAll(/\S+/g)];
+    const rawParts = tokens.map((token) => token[0]);
+    let completedParts = rawParts;
     let partial = '';
 
     if (!hasTrailingSpace && rawParts.length > 0) {
       partial = rawParts[rawParts.length - 1];
-      commandPathParts = rawParts.slice(0, -1);
+      completedParts = rawParts.slice(0, -1);
     }
 
     let currentLevel: readonly SlashCommand[] | undefined = slashCommands;
     let leafCommand: SlashCommand | null = null;
+    const commandPathParts: string[] = [];
 
-    for (const part of commandPathParts) {
-      if (!currentLevel) {
+    for (const part of completedParts) {
+      if (!currentLevel?.length) {
+        if (leafCommand?.completion) break;
         leafCommand = null;
         currentLevel = [];
         break;
@@ -99,12 +106,14 @@ function useCommandParser(
       );
 
       if (found) {
+        commandPathParts.push(part);
         leafCommand = found;
         currentLevel = found.subCommands as readonly SlashCommand[] | undefined;
         if (found.kind === CommandKind.MCP_PROMPT) {
           break;
         }
       } else {
+        if (leafCommand?.completion) break;
         leafCommand = null;
         currentLevel = [];
         break;
@@ -112,6 +121,11 @@ function useCommandParser(
     }
 
     const depth = commandPathParts.length;
+    const argumentStart =
+      tokens[depth]?.index !== undefined
+        ? tokens[depth].index + 1
+        : query.length;
+    const argumentText = query.slice(argumentStart);
     const isArgumentCompletion = !!(
       leafCommand?.completion &&
       (hasTrailingSpace ||
@@ -125,6 +139,8 @@ function useCommandParser(
       currentLevel,
       leafCommand,
       isArgumentCompletion,
+      argumentText,
+      argumentStart,
     };
   }, [query, slashCommands]);
 }
@@ -132,6 +148,7 @@ function useCommandParser(
 interface SuggestionsResult {
   suggestions: Suggestion[];
   isLoading: boolean;
+  isCurrent: boolean;
 }
 
 interface CompletionPositions {
@@ -155,7 +172,15 @@ function useCommandSuggestions(
     partial: string,
   ) => SlashCommand[],
 ): SuggestionsResult {
-  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [suggestions, updateSuggestions] = useState<Suggestion[]>([]);
+  const [resolvedQuery, setResolvedQuery] = useState<string | null>(null);
+  const setSuggestions = useCallback(
+    (values: Suggestion[]) => {
+      updateSuggestions(values);
+      setResolvedQuery(query);
+    },
+    [query],
+  );
   const locale = useLocale();
   const [isLoading, setIsLoading] = useState(false);
 
@@ -188,16 +213,13 @@ function useCommandSuggestions(
           setIsLoading(true);
         }
         try {
-          const rawParts = [...commandPathParts];
-          if (partial) rawParts.push(partial);
-          const depth = commandPathParts.length;
-          const argString = rawParts.slice(depth).join(' ');
+          const argString = parserResult.argumentText;
           const results =
             (await leafCommand.completion(
               {
                 ...commandContext,
                 invocation: {
-                  raw: query || `/${rawParts.join(' ')}`,
+                  raw: query || `/${commandPathParts.join(' ')}`,
                   name: leafCommand.name,
                   args: argString,
                 },
@@ -316,7 +338,9 @@ function useCommandSuggestions(
           });
 
           const finalSuggestions = sortedSuggestions.map((cmd) => {
-            const zhAlias = cmd.altNames?.find((a) => /[\u4e00-\u9fa5]/.test(a));
+            const zhAlias = cmd.altNames?.find((a) =>
+              /[\u4e00-\u9fa5]/.test(a),
+            );
             const suggestion: Suggestion = {
               label: locale === 'zh' && zhAlias ? zhAlias : cmd.name,
               value: cmd.name,
@@ -383,9 +407,10 @@ function useCommandSuggestions(
     commandContext,
     getFzfForCommands,
     getPrefixSuggestions,
+    setSuggestions,
   ]);
 
-  return { suggestions, isLoading };
+  return { suggestions, isLoading, isCurrent: resolvedQuery === query };
 }
 
 function useCompletionPositions(
@@ -400,18 +425,12 @@ function useCompletionPositions(
     const { hasTrailingSpace, partial } = parserResult;
 
     // Set completion start/end positions
-    if (hasTrailingSpace) {
+    if (parserResult.isArgumentCompletion) {
+      return { start: parserResult.argumentStart, end: query.length };
+    } else if (hasTrailingSpace) {
       return { start: query.length, end: query.length };
     } else if (partial) {
-      if (parserResult.isArgumentCompletion) {
-        const commandSoFar = `/${parserResult.commandPathParts.join(' ')}`;
-        const argStartIndex =
-          commandSoFar.length +
-          (parserResult.commandPathParts.length > 0 ? 1 : 0);
-        return { start: argStartIndex, end: query.length };
-      } else {
-        return { start: query.length - partial.length, end: query.length };
-      }
+      return { start: query.length - partial.length, end: query.length };
     } else {
       return { start: 1, end: query.length };
     }
@@ -490,6 +509,7 @@ export function useSlashCompletion(props: UseSlashCompletionProps): {
   ) => SlashCommand | undefined;
   isArgumentCompletion: boolean;
   leafCommand: SlashCommand | null;
+  areSuggestionsCurrent: boolean;
 } {
   const {
     enabled,
@@ -500,8 +520,6 @@ export function useSlashCompletion(props: UseSlashCompletionProps): {
     setIsLoadingSuggestions,
     setIsPerfectMatch,
   } = props;
-  const [completionStart, setCompletionStart] = useState(-1);
-  const [completionEnd, setCompletionEnd] = useState(-1);
 
   // Simplified cache for AsyncFzf instances - WeakMap handles automatic cleanup
   const fzfInstanceCache = useMemo(
@@ -582,7 +600,11 @@ export function useSlashCompletion(props: UseSlashCompletionProps): {
 
   // Use extracted hooks for better separation of concerns
   const parserResult = useCommandParser(query, slashCommands);
-  const { suggestions: hookSuggestions, isLoading } = useCommandSuggestions(
+  const {
+    suggestions: hookSuggestions,
+    isLoading,
+    isCurrent,
+  } = useCommandSuggestions(
     query,
     parserResult,
     commandContext,
@@ -601,8 +623,6 @@ export function useSlashCompletion(props: UseSlashCompletionProps): {
       setSuggestions([]);
       setIsLoadingSuggestions(false);
       setIsPerfectMatch(false);
-      setCompletionStart(-1);
-      setCompletionEnd(-1);
     }
   }, [enabled, setSuggestions, setIsLoadingSuggestions, setIsPerfectMatch]);
 
@@ -615,8 +635,6 @@ export function useSlashCompletion(props: UseSlashCompletionProps): {
     setSuggestions(hookSuggestions);
     setIsLoadingSuggestions(isLoading);
     setIsPerfectMatch(isPerfectMatch);
-    setCompletionStart(calculatedStart);
-    setCompletionEnd(calculatedEnd);
   }, [
     enabled,
     query,
@@ -631,11 +649,12 @@ export function useSlashCompletion(props: UseSlashCompletionProps): {
   ]);
 
   return {
-    completionStart,
-    completionEnd,
+    completionStart: enabled ? calculatedStart : -1,
+    completionEnd: enabled ? calculatedEnd : -1,
     getCommandFromSuggestion: (suggestion: Suggestion) =>
       getCommandFromSuggestion(suggestion, parserResult),
     isArgumentCompletion: parserResult.isArgumentCompletion,
     leafCommand: parserResult.leafCommand,
+    areSuggestionsCurrent: enabled && isCurrent,
   };
 }

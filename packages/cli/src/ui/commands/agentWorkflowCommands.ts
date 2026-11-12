@@ -34,6 +34,7 @@ import {
 } from './types.js';
 import { MessageType } from '../types.js';
 import { agentTaskCatalogText } from './agentTaskCatalog.js';
+import { completeAgentModel } from './agentModelCompletion.js';
 import {
   agentRoleModelsText,
   agentTaskStateLabel,
@@ -525,6 +526,13 @@ function workflowCommand(
       ].includes(name),
       isSafeConcurrent: ['list', 'status', 'cancel'].includes(name),
       action: (context, args) => action(context, args, name),
+      ...(name === 'model'
+        ? {
+            completion: completeAgentModel,
+            showCompletionLoading: false,
+            completionHandlesAt: true,
+          }
+        : {}),
     })),
   };
 }

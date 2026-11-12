@@ -1261,6 +1261,136 @@ describe('useSlashCompletion', () => {
   });
 
   describe('Argument Completion', () => {
+    it('marks prior-query suggestions unavailable until the current arguments resolve', async () => {
+      const pending = new Map<string, (values: string[]) => void>();
+      const completion = vi.fn(
+        (_context: CommandContext, args: string) =>
+          new Promise<string[]>((resolve) => {
+            pending.set(args, resolve);
+          }),
+      );
+      const commands = [
+        createTestCommand({
+          name: 'model',
+          description: 'Choose a model',
+          completion,
+        }),
+      ];
+      const onSuggestions = vi.fn();
+      const onLoading = vi.fn();
+      const onPerfect = vi.fn();
+      const { result, rerender, unmount } = await renderHook(
+        ({ query }: { query: string }) =>
+          useSlashCompletion({
+            enabled: true,
+            query,
+            slashCommands: commands,
+            commandContext: mockCommandContext,
+            setSuggestions: onSuggestions,
+            setIsLoadingSuggestions: onLoading,
+            setIsPerfectMatch: onPerfect,
+          }),
+        { initialProps: { query: '/model researcher ' } },
+      );
+      try {
+        await waitFor(() => expect(pending.has('researcher ')).toBe(true));
+        await act(async () => {
+          pending.get('researcher ')!(['researcher inherit']);
+        });
+        await waitFor(() =>
+          expect(result.current.areSuggestionsCurrent).toBe(true),
+        );
+        await act(async () => {
+          rerender({ query: '/model researcher local:f' });
+        });
+        expect(result.current.areSuggestionsCurrent).toBe(false);
+        expect(result.current.completionStart).toBe('/model '.length);
+        await waitFor(() =>
+          expect(pending.has('researcher local:f')).toBe(true),
+        );
+        await act(async () => {
+          pending.get('researcher local:f')!(['researcher local:fixture']);
+        });
+        await waitFor(() =>
+          expect(result.current.areSuggestionsCurrent).toBe(true),
+        );
+      } finally {
+        unmount();
+      }
+    });
+
+    it.each([
+      { query: '/swarm model researcher local:m', args: 'researcher local:m' },
+      { query: '/蜂群   model researcher ', args: 'researcher ' },
+    ])(
+      'completes multi-argument values without duplicating prior arguments: $query',
+      async ({ query, args }) => {
+        let resolveCompletion: ((values: string[]) => void) | undefined;
+        const completion = vi.fn(
+          () =>
+            new Promise<string[]>((resolve) => {
+              resolveCompletion = resolve;
+            }),
+        );
+        const commands = [
+          createTestCommand({
+            name: 'swarm',
+            description: 'Choose collaboration models',
+            altNames: ['蜂群'],
+            subCommands: [
+              createTestCommand({
+                name: 'model',
+                description: 'Choose a member model',
+                completion,
+              }),
+            ],
+          }),
+        ];
+        const { result, unmount } = await renderHook(() =>
+          useTestHarnessForSlashCompletion(
+            true,
+            query,
+            commands,
+            mockCommandContext,
+          ),
+        );
+        try {
+          await waitFor(() =>
+            expect(completion).toHaveBeenCalledWith(
+              expect.objectContaining({
+                invocation: { raw: query, name: 'model', args },
+              }),
+              args,
+            ),
+          );
+          await act(async () => {
+            resolveCompletion!(['researcher local:model']);
+          });
+          await waitFor(() =>
+            expect(result.current.suggestions).toEqual([
+              {
+                label: 'researcher local:model',
+                value: 'researcher local:model',
+              },
+            ]),
+          );
+          expect(result.current.completionStart).toBe(
+            query.indexOf('researcher'),
+          );
+          const completed =
+            query.slice(0, result.current.completionStart) +
+            result.current.suggestions[0].value +
+            query.slice(result.current.completionEnd);
+          expect(completed).toBe(
+            query.slice(0, query.indexOf('researcher')) +
+              'researcher local:model',
+          );
+        } finally {
+          unmount();
+        }
+      },
+    );
+
     it('should call the command.completion function for argument suggestions', async () => {
       const availableTags = [
         'my-chat-tag-1',

@@ -20,7 +20,11 @@ import {
   useCommandCompletion,
   CompletionMode,
 } from './useCommandCompletion.js';
-import type { CommandContext, SlashCommand } from '../commands/types.js';
+import {
+  CommandKind,
+  type CommandContext,
+  type SlashCommand,
+} from '../commands/types.js';
 import type { Config } from '@google/gemini-cli-core';
 import { useTextBuffer } from '../components/shared/text-buffer.js';
 import type { Suggestion } from '../components/SuggestionsDisplay.js';
@@ -95,6 +99,7 @@ const setupMocks = ({
     getCommandFromSuggestion: (
       suggestion: Suggestion,
     ) => SlashCommand | undefined;
+    areSuggestionsCurrent?: boolean;
   };
   shellCompletionRange?: {
     completionStart: number;
@@ -183,17 +188,19 @@ describe('useCommandCompletion', () => {
     cursorOffset,
     shellModeActive,
     active,
+    commands = [],
   }: {
     initialText: string;
     cursorOffset?: number;
     shellModeActive: boolean;
     active: boolean;
+    commands?: readonly SlashCommand[];
   }) {
     const textBuffer = useTextBufferForTest(initialText, cursorOffset);
     const completion = useCommandCompletion({
       buffer: textBuffer,
       cwd: testRootDir,
-      slashCommands: [],
+      slashCommands: commands,
       commandContext: mockCommandContext,
       reverseSearchActive: false,
       shellModeActive,
@@ -951,6 +958,81 @@ describe('useCommandCompletion', () => {
   });
 
   describe('@ completion after slash commands (issue #14420)', () => {
+    it('refuses a stale slash suggestion before display or Tab replacement', async () => {
+      const oldSuggestion = {
+        label: 'researcher inherit',
+        value: 'researcher inherit',
+      };
+      setupMocks({
+        slashSuggestions: [oldSuggestion],
+        isPerfectMatch: true,
+        slashCompletionRange: {
+          completionStart: 13,
+          completionEnd: 24,
+          getCommandFromSuggestion: () => undefined,
+          areSuggestionsCurrent: false,
+        },
+      });
+      const text = '/swarm model researcher local:fi';
+      const rendered = await renderCommandCompletionHook(text);
+      try {
+        expect(rendered.result.current.suggestions).toEqual([]);
+        expect(rendered.result.current.showSuggestions).toBe(false);
+        expect(rendered.result.current.isPerfectMatch).toBe(false);
+        expect(
+          rendered.result.current.getCompletedText(oldSuggestion),
+        ).toBeNull();
+        await act(async () => {
+          rendered.result.current.handleAutocomplete(0);
+        });
+        expect(rendered.result.current.textBuffer.text).toBe(text);
+      } finally {
+        rendered.unmount();
+      }
+    });
+
+    it.each(['/swarm model @reader', '/蜂群 model researcher local:model@v1'])(
+      'keeps declared command-owned @ arguments in slash completion: %s',
+      async (text) => {
+        const commands: SlashCommand[] = [
+          {
+            name: 'swarm',
+            altNames: ['蜂群'],
+            description: 'Swarm',
+            kind: CommandKind.BUILT_IN,
+            subCommands: [
+              {
+                name: 'model',
+                description: 'Member model',
+                kind: CommandKind.BUILT_IN,
+                completion: () => [],
+                completionHandlesAt: true,
+              },
+            ],
+          },
+        ];
+        const rendered = await renderWithProviders(
+          <TestComponent
+            initialText={text}
+            shellModeActive={false}
+            active
+            commands={commands}
+          />,
+        );
+        try {
+          expect(hookResult.completionMode).toBe(CompletionMode.SLASH);
+          expect(useAtCompletion).toHaveBeenLastCalledWith(
+            expect.objectContaining({ enabled: false }),
+          );
+          expect(useSlashCompletion).toHaveBeenLastCalledWith(
+            expect.objectContaining({ enabled: true, query: text }),
+          );
+        } finally {
+          rendered.unmount();
+        }
+      },
+    );
+
     it('should show file suggestions when typing @path after a slash command', async () => {
       setupMocks({
         atSuggestions: [{ label: 'src/file.txt', value: 'src/file.txt' }],
