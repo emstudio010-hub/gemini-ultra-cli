@@ -14,6 +14,7 @@ import {
   type SlashCommandActionReturn,
 } from './types.js';
 import { MessageType } from '../types.js';
+import { languageSaveError } from '../utils/languageSaveError.js';
 
 export const langCommand: SlashCommand = {
   name: 'language',
@@ -61,7 +62,15 @@ export const langCommand: SlashCommand = {
       return;
     }
 
-    i18n.setLocale(target);
+    try {
+      i18n.setLocale(target);
+    } catch {
+      context.ui.addItem({
+        type: MessageType.ERROR,
+        text: languageSaveError(),
+      });
+      return;
+    }
     context.ui.reloadCommands();
     context.ui.addItem({
       type: MessageType.INFO,

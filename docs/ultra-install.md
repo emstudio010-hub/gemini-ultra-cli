@@ -35,6 +35,9 @@ gemini-ultra
 `/effort`、`/language` 等输入发给模型。
 
 1. `/language` 选择中文或英文；也可 `/language 中文`、`/language 英文`。
+
+   语言偏好写入失败时，命令和选择窗口就地提示“未保存”，保持当前语言，不回显文件路径；窗口可按 Esc 返回，也可恢复写入条件后直接重试。只有保存成功才刷新语言并关闭窗口。
+
 2. 首次启动选择「配置外接供应商」即可录入端点与密钥，无需先登录 Google。进入会话后也可使用
    `/provider`
    管理。支持抓取模型列表或手动填写模型名称；兼容 Chat、Responses、Anthropic 和 Gemini。Google 原生登录仍可单独选择。
