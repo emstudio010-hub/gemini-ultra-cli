@@ -90,17 +90,21 @@ export function checkBinary(cmd: string): {
 
 async function checkBinaryAsync(
   name: string,
+  signal?: AbortSignal,
 ): Promise<{ available: boolean; pathOrStatus: string }> {
+  signal?.throwIfAborted();
   const configured = configuredTool(name);
   if (configured) return configured;
   try {
     const { stdout } = await executeFile(
       process.platform === 'win32' ? 'where.exe' : 'which',
       [name],
-      { timeout: 1500, windowsHide: true },
+      { timeout: 1500, windowsHide: true, signal },
     );
+    signal?.throwIfAborted();
     return { available: true, pathOrStatus: stdout.trim().split(/\r?\n/)[0] };
   } catch {
+    signal?.throwIfAborted();
     return {
       available: false,
       pathOrStatus: `not found; add to PATH or set ${toolPathEnv(name)}`,
@@ -110,22 +114,33 @@ async function checkBinaryAsync(
 
 export async function checkIdaMcp(
   port = 8745,
+  signal?: AbortSignal,
 ): Promise<{ available: boolean; pathOrStatus: string }> {
+  signal?.throwIfAborted();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 1000);
   try {
     const res = await fetch(`http://127.0.0.1:${port}/status`, {
-      signal: controller.signal,
+      signal: signal
+        ? AbortSignal.any([signal, controller.signal])
+        : controller.signal,
     });
+    // The status is sufficient; do not leave an unread streaming body open.
+    await res.body?.cancel().catch(() => {});
+    signal?.throwIfAborted();
     return { available: res.ok, pathOrStatus: `HTTP ${res.status}` };
   } catch {
+    signal?.throwIfAborted();
     return { available: false, pathOrStatus: 'connection refused / inactive' };
   } finally {
     clearTimeout(timer);
   }
 }
 
-export async function runDrillPreflight(): Promise<DrillPreflightResult> {
+export async function runDrillPreflight(
+  signal?: AbortSignal,
+): Promise<DrillPreflightResult> {
+  signal?.throwIfAborted();
   const grant = readDrillGrant();
 
   const toolNames = [
@@ -146,19 +161,23 @@ export async function runDrillPreflight(): Promise<DrillPreflightResult> {
     'lldb',
   ];
   const [ida, discovered] = await Promise.all([
-    checkIdaMcp(Number(process.env['GEMINI_ULTRA_IDA_MCP_PORT']) || 8745),
+    checkIdaMcp(
+      Number(process.env['GEMINI_ULTRA_IDA_MCP_PORT']) || 8745,
+      signal,
+    ),
     Promise.all(
       toolNames.map(
         async (name) =>
           [
             name,
             name === 'java'
-              ? await discoverGhidraJava(() => checkBinaryAsync(name))
-              : await checkBinaryAsync(name),
+              ? await discoverGhidraJava(() => checkBinaryAsync(name, signal))
+              : await checkBinaryAsync(name, signal),
           ] as const,
       ),
     ),
   ]);
+  signal?.throwIfAborted();
   const tools: DrillPreflightResult['tools'] = {
     'ida-pro-mcp': ida,
     ...Object.fromEntries(discovered),
@@ -267,8 +286,8 @@ class DrillPreflightInvocation extends BaseToolInvocation<
     return 'Checking local analysis & drill toolchain availability';
   }
 
-  override async execute(_options: ExecuteOptions): Promise<ToolResult> {
-    const res = await runDrillPreflight();
+  override async execute(options: ExecuteOptions): Promise<ToolResult> {
+    const res = await runDrillPreflight(options.abortSignal);
     const availableCount = Object.values(res.tools).filter(
       (t) => t.available,
     ).length;
