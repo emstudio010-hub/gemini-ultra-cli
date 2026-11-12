@@ -8,7 +8,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { type SkillDefinition, loadSkillsFromDir } from './skillLoader.js';
-import { checkBinary, checkIdaMcp } from '../tools/drillTools.js';
+import { checkBinaryAsync, runDrillPreflight } from '../tools/drillTools.js';
+import { I18nManager, type UiLocale } from '../i18n/i18nManager.js';
 
 export type UniversalSkillDomain =
   | 'design-ui'
@@ -62,7 +63,9 @@ export async function discoverAllMultiSourceSkills(): Promise<SkillDefinition[]>
           all.push(s);
         }
       }
-    } catch {}
+    } catch {
+      // Continue discovery in the remaining independent skill directories.
+    }
   }
 
   return all;
@@ -205,51 +208,155 @@ export function classifySkill(skill: SkillDefinition): SkillDomainProfile {
  * Universal Tool Preflight:
  * Probes environment and local tooling based on domain.
  */
-export async function preflightSkillTools(domain: UniversalSkillDomain): Promise<SkillToolPreflightReport> {
-  const ready: Array<{ name: string; detail: string }> = [];
-  const missing: Array<{ name: string; hint: string }> = [];
-
-  const probe = (cmd: string, name: string, hint: string) => {
-    const res = checkBinary(cmd);
-    if (res.available) {
-      ready.push({ name, detail: res.pathOrStatus || 'available' });
-    } else {
-      missing.push({ name, hint });
-    }
-  };
-
-  if (domain === 'design-ui') {
-    probe('node', 'Node.js 运行时', '需配置 Node.js >= 20');
-    probe('npm', 'NPM 包管理器', '用于安装组件库依赖');
-    probe('git', 'Git 版本控制', '用于追踪 UI 资产与样式修改');
-  } else if (domain === 'multimedia-video') {
-    probe('ffmpeg', 'FFmpeg 多媒体核心 (GPU加速已就绪)', '音视频转码渲染核心');
-    probe('ffprobe', 'FFprobe 媒体探针', '用于解析多媒体分辨率与帧率');
-    probe('remotion', 'Remotion CLI', '可执行 npm i -g @remotion/cli');
-  } else if (domain === 'security-reverse') {
-    const ida = await checkIdaMcp();
-    if (ida.available) {
-      ready.push({ name: 'IDA Pro MCP 服务', detail: '127.0.0.1:8745 (在线)' });
-    } else {
-      missing.push({ name: 'IDA Pro MCP 服务', hint: '需在 IDA 中启动 MCP 脚本 (端口 8745)' });
-    }
-    probe('ghidra', 'Ghidra 反编译框架', '推荐加入 PATH 或通过 MCP 连接');
-    probe('radare2', 'Radare2 逆向工具集', '命令行二进制分析工具');
-    probe('jadx', 'JADX 反编译引擎', '用于 Android DEX/APK 逆向');
-    probe('python3', 'Python3 自动化脚本', '逆向辅助与解密环境');
-  } else if (domain === 'ai-workflow-mcp') {
-    probe('node', 'Node.js MCP 宿主', '用于运行 MCP 服务器');
-    probe('python', 'Python MCP / 脚本宿主', '用于运行 Python 自动化任务');
+export async function preflightSkillTools(
+  domain: UniversalSkillDomain,
+  signal?: AbortSignal,
+  locale: UiLocale = I18nManager.getInstance().getLocale(),
+): Promise<SkillToolPreflightReport> {
+  signal?.throwIfAborted();
+  const t = (zh: string, en: string) => (locale === 'zh' ? zh : en);
+  type Probe = { keys: string[]; name: string; hint: string };
+  const probe = (key: string, name: string, zh: string, en: string): Probe => ({
+    keys: [key],
+    name,
+    hint: t(zh, en),
+  });
+  let probes: Probe[];
+  let discovered: Record<string, { available: boolean; pathOrStatus?: string }>;
+  if (domain === 'security-reverse') {
+    probes = [
+      probe(
+        'ida-pro-mcp',
+        'IDA MCP',
+        '请检查 IDA MCP 服务与演练台连接设置。',
+        'Check the IDA MCP service and drill connection settings.',
+      ),
+      probe(
+        'ghidra-decompiler',
+        t('Ghidra 反编译器', 'Ghidra decompiler'),
+        '配置 Ghidra 安装目录和 Java；实际兼容性在使用时检查。',
+        'Configure the Ghidra installation and Java; compatibility is checked on use.',
+      ),
+      {
+        keys: ['r2', 'radare2'],
+        name: 'Radare2',
+        hint: t(
+          '通过 /drill tools 配置 r2 路径或添加到 PATH。',
+          'Configure r2 with /drill tools or add it to PATH.',
+        ),
+      },
+      probe(
+        'jadx',
+        'JADX',
+        '通过 /drill tools 配置 jadx 路径或添加到 PATH。',
+        'Configure jadx with /drill tools or add it to PATH.',
+      ),
+      {
+        keys: ['python3', 'python'],
+        name: 'Python',
+        hint: t(
+          '配置 Python 路径或添加到 PATH。',
+          'Configure Python or add it to PATH.',
+        ),
+      },
+    ];
+    discovered = (await runDrillPreflight(signal)).tools;
   } else {
-    probe('git', 'Git 代码仓库', '追踪工程演进与回滚');
-    probe('node', 'Node.js 运行环境', '运行本地构建');
+    if (domain === 'design-ui') {
+      probes = [
+        probe(
+          'node',
+          'Node.js',
+          '请将 Node.js 添加到 PATH。',
+          'Add Node.js to PATH.',
+        ),
+        probe('npm', 'npm', '请将 npm 添加到 PATH。', 'Add npm to PATH.'),
+        probe('git', 'Git', '请将 Git 添加到 PATH。', 'Add Git to PATH.'),
+      ];
+    } else if (domain === 'multimedia-video') {
+      probes = [
+        probe(
+          'ffmpeg',
+          'FFmpeg',
+          '请将 FFmpeg 添加到 PATH。',
+          'Add FFmpeg to PATH.',
+        ),
+        probe(
+          'ffprobe',
+          'FFprobe',
+          '请将 FFprobe 添加到 PATH。',
+          'Add FFprobe to PATH.',
+        ),
+        probe(
+          'remotion',
+          'Remotion CLI',
+          '检查项目依赖或 Remotion CLI 的 PATH。',
+          'Check project dependencies or Remotion CLI on PATH.',
+        ),
+      ];
+    } else if (domain === 'ai-workflow-mcp') {
+      probes = [
+        probe(
+          'node',
+          'Node.js',
+          '请将 Node.js 添加到 PATH。',
+          'Add Node.js to PATH.',
+        ),
+        probe(
+          'python',
+          'Python',
+          '请将 Python 添加到 PATH。',
+          'Add Python to PATH.',
+        ),
+      ];
+    } else {
+      probes = [
+        probe('git', 'Git', '请将 Git 添加到 PATH。', 'Add Git to PATH.'),
+        probe(
+          'node',
+          'Node.js',
+          '请将 Node.js 添加到 PATH。',
+          'Add Node.js to PATH.',
+        ),
+      ];
+    }
+    discovered = Object.fromEntries(
+      await Promise.all(
+        probes.map(
+          async (item) =>
+            [
+              item.keys[0],
+              await checkBinaryAsync(item.keys[0], signal),
+            ] as const,
+        ),
+      ),
+    );
   }
-
-  return {
-    domain,
-    readyTools: ready,
-    missingTools: missing,
-  };
+  signal?.throwIfAborted();
+  const ready: SkillToolPreflightReport['readyTools'] = [];
+  const missing: SkillToolPreflightReport['missingTools'] = [];
+  for (const item of probes) {
+    const found = item.keys
+      .map((key) => discovered[key])
+      .find((result) => result?.available);
+    if (found) {
+      ready.push({
+        name: item.name,
+        detail: [
+          found.pathOrStatus,
+          t(
+            '已发现；版本与能力未验证。',
+            'Discovered; version and capabilities not verified.',
+          ),
+        ]
+          .filter(Boolean)
+          .join(' · '),
+      });
+    } else {
+      missing.push({ name: item.name, hint: item.hint });
+    }
+  }
+  return { domain, readyTools: ready, missingTools: missing };
 }
 
 /**
@@ -274,7 +381,7 @@ export function suggestSkillTags(name: string, content: string): {
     body: content,
   };
   const profile = classifySkill(mockSkill);
-  const tags: string[] = [profile.badge.replace(/[\[\]]/g, '').trim()];
+  const tags: string[] = [profile.badge.replace(/[[\]]/g, '').trim()];
 
   if (profile.domain === 'design-ui') tags.push('#UI设计', '#前端工程', '#组件美学');
   else if (profile.domain === 'multimedia-video') tags.push('#音视频', '#Remotion', '#FFmpeg');
@@ -335,6 +442,8 @@ export function loadSkillLibraryRegistry(): Record<string, SkillLibraryEntry> {
   const filePath = getSkillTagsRegistryPath();
   if (!fs.existsSync(filePath)) return {};
   try {
+    // Preserve the legacy registry read; its persistence schema is separate from inspection.
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
     return JSON.parse(fs.readFileSync(filePath, 'utf8')) as Record<
       string,
       SkillLibraryEntry

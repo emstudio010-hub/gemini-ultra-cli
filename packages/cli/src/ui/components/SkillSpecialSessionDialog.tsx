@@ -70,10 +70,11 @@ export function SkillSpecialSessionDialog({
   }, []);
   useEffect(() => {
     if (!inspect) return;
+    const controller = new AbortController();
     let active = true;
     setPreflight(undefined);
     setPreflightFailed(false);
-    void preflightSkillTools(domain)
+    void preflightSkillTools(domain, controller.signal, locale)
       .then((report) => {
         if (active) setPreflight(report);
       })
@@ -82,8 +83,9 @@ export function SkillSpecialSessionDialog({
       });
     return () => {
       active = false;
+      controller.abort();
     };
-  }, [domain, inspect]);
+  }, [domain, inspect, locale]);
 
   useKeypress(
     (key) => {

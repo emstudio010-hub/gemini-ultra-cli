@@ -167,3 +167,48 @@ it('catches async activation failure, blocks duplicate Enter while pending and a
     rendered.unmount();
   }
 });
+
+it('cancels replaced and unmounted inspections and ignores late reports', async () => {
+  const pending: Array<{
+    signal: AbortSignal;
+    locale: string;
+    resolve: (value: Awaited<ReturnType<typeof preflightSkillTools>>) => void;
+  }> = [];
+  vi.mocked(preflightSkillTools).mockImplementation(
+    (_domain, signal, locale) =>
+      new Promise((resolve) => {
+        pending.push({ signal: signal!, locale: locale!, resolve });
+      }),
+  );
+  const rendered = await renderDialog();
+  try {
+    await rendered.key('p');
+    await waitFor(() => expect(pending).toHaveLength(1));
+    await rendered.key('p');
+    await waitFor(() => expect(pending).toHaveLength(2));
+    expect(pending[0].signal.aborted).toBe(true);
+    await act(async () => {
+      pending[0].resolve({
+        domain: 'specialized-domain',
+        readyTools: [{ name: 'STALE_TOOL', detail: 'late report' }],
+        missingTools: [],
+      });
+    });
+    expect(rendered.lastFrame()).not.toContain('STALE_TOOL');
+    await act(async () => {
+      I18nManager.getInstance().setLocale('zh');
+    });
+    await waitFor(() => expect(pending).toHaveLength(3));
+    expect(pending[1].signal.aborted).toBe(true);
+    expect(pending[2].locale).toBe('zh');
+    expect(pending[2].signal.aborted).toBe(false);
+  } finally {
+    rendered.unmount();
+    expect(pending.at(-1)?.signal.aborted).toBe(true);
+    vi.mocked(preflightSkillTools).mockResolvedValue({
+      domain: 'specialized-domain',
+      readyTools: [],
+      missingTools: [],
+    });
+  }
+});

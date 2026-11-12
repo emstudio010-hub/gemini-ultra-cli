@@ -88,11 +88,13 @@ export function checkBinary(cmd: string): {
   }
 }
 
-async function checkBinaryAsync(
+export async function checkBinaryAsync(
   name: string,
   signal?: AbortSignal,
 ): Promise<{ available: boolean; pathOrStatus: string }> {
   signal?.throwIfAborted();
+  if (!/^[a-zA-Z0-9._-]+$/.test(name))
+    return { available: false, pathOrStatus: 'invalid tool name' };
   const configured = configuredTool(name);
   if (configured) return configured;
   try {
