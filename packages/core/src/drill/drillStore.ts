@@ -16,6 +16,30 @@ export const DRILL_FINDING_STATUSES = [
 ] as const;
 export type DrillFindingStatus = (typeof DRILL_FINDING_STATUSES)[number];
 
+const factSources = [
+  [
+    'binary_artifact',
+    'binary',
+    'sample_path',
+    [
+      'sample_path',
+      'sha256',
+      'md5',
+      'file_type',
+      'notes',
+      'high_risk_apis',
+      'rva_offsets',
+    ],
+  ],
+  [
+    'vuln',
+    'vuln',
+    'title',
+    ['title', 'cve', 'severity', 'status', 'evidence', 'poc'],
+  ],
+  ['note', 'note', 'title', ['title', 'content', 'evidence']],
+] as const;
+
 function getDrillDbPath(): string {
   const custom = process.env['GEMINI_DRILL_DB'];
   if (custom) return custom;
@@ -39,6 +63,7 @@ export const HAS_FTS5 = (() => {
 export class DrillStore {
   private static instance: DrillStore | null = null;
   private db: DatabaseSync;
+  private searchIndexReady = false;
 
   constructor(dbPath: string = getDrillDbPath()) {
     fs.mkdirSync(path.dirname(dbPath), { recursive: true });
@@ -151,12 +176,52 @@ export class DrillStore {
 
     if (HAS_FTS5) {
       try {
+        // The legacy index has no canonical IDs. Retain it and build a linked,
+        // derived index once; canonical records are never rewritten here.
+        this.db.exec('SAVEPOINT drill_search_index');
         this.db.exec(`
-          CREATE VIRTUAL TABLE IF NOT EXISTS facts_fts USING fts5(
-            session_id UNINDEXED, category, title, content
+          CREATE VIRTUAL TABLE IF NOT EXISTS facts_search_v2 USING fts5(
+            session_id UNINDEXED, category UNINDEXED, record_id UNINDEXED, title, content
           );
         `);
+        const total = factSources.reduce(
+          (count, [table]) =>
+            count +
+            Number(
+              this.db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get()?.[
+                'count'
+              ],
+            ),
+          0,
+        );
+        const indexed = Number(
+          this.db
+            .prepare('SELECT COUNT(*) AS count FROM facts_search_v2')
+            .get()?.['count'],
+        );
+        if (total !== indexed) {
+          this.db.exec('DELETE FROM facts_search_v2');
+          for (const [table, category, title, columns] of factSources) {
+            const content = columns
+              .map((column) => `COALESCE(${column}, '')`)
+              .join(" || ' ' || ");
+            this.db
+              .prepare(
+                `INSERT INTO facts_search_v2 (session_id, category, record_id, title, content) SELECT session_id, ?, id, ${title}, ${content} FROM ${table}`,
+              )
+              .run(category);
+          }
+        }
+        this.db.exec('RELEASE drill_search_index');
+        this.searchIndexReady = true;
       } catch {
+        try {
+          this.db.exec(
+            'ROLLBACK TO drill_search_index; RELEASE drill_search_index',
+          );
+        } catch {
+          /* No savepoint when the lock itself failed. */
+        }
         // Full-text search is optional; canonical tables remain available.
       }
     }
@@ -206,18 +271,20 @@ export class DrillStore {
     );
     const lastId = Number(res.lastInsertRowid);
 
-    if (HAS_FTS5) {
+    if (this.searchIndexReady) {
       try {
         this.db
           .prepare(
-            `INSERT INTO facts_fts (session_id, category, title, content) VALUES (?, 'binary', ?, ?);`,
+            `INSERT INTO facts_search_v2 (session_id, category, record_id, title, content) VALUES (?, 'binary', ?, ?, ?);`,
           )
           .run(
             data.sessionId,
-            path.basename(data.samplePath),
-            `${data.sha256} ${data.fileType || ''} ${data.notes || ''}`,
+            lastId,
+            data.samplePath,
+            `${data.samplePath} ${data.sha256} ${data.md5} ${data.fileType || 'binary'} ${data.notes || ''} ${JSON.stringify(data.highRiskApis || [])} ${JSON.stringify(data.rvaOffsets || {})}`,
           );
       } catch {
+        this.searchIndexReady = false;
         // Preserve the binary record when the optional index is unavailable.
       }
     }
@@ -260,18 +327,20 @@ export class DrillStore {
     );
     const lastId = Number(res.lastInsertRowid);
 
-    if (HAS_FTS5) {
+    if (this.searchIndexReady) {
       try {
         this.db
           .prepare(
-            `INSERT INTO facts_fts (session_id, category, title, content) VALUES (?, 'vuln', ?, ?);`,
+            `INSERT INTO facts_search_v2 (session_id, category, record_id, title, content) VALUES (?, 'vuln', ?, ?, ?);`,
           )
           .run(
             data.sessionId,
+            lastId,
             data.title,
-            `${data.cve || ''} ${data.severity || ''} ${data.evidence || ''} ${data.poc || ''}`,
+            `${data.title} ${data.cve || ''} ${data.severity || 'medium'} ${status} ${data.evidence || ''} ${data.poc || ''}`,
           );
       } catch {
+        this.searchIndexReady = false;
         // Preserve the finding when the optional index is unavailable.
       }
     }
@@ -295,18 +364,20 @@ export class DrillStore {
         data.evidence || '',
         new Date().toISOString(),
       );
-    if (HAS_FTS5) {
+    if (this.searchIndexReady) {
       try {
         this.db
           .prepare(
-            "INSERT INTO facts_fts (session_id, category, title, content) VALUES (?, 'note', ?, ?);",
+            "INSERT INTO facts_search_v2 (session_id, category, record_id, title, content) VALUES (?, 'note', ?, ?, ?);",
           )
           .run(
             data.sessionId,
+            Number(result.lastInsertRowid),
             data.title,
-            `${data.content || ''} ${data.evidence || ''}`,
+            `${data.title} ${data.content || ''} ${data.evidence || ''}`,
           );
       } catch {
+        this.searchIndexReady = false;
         // The canonical note remains available without the optional search index.
       }
     }
@@ -344,37 +415,36 @@ export class DrillStore {
     sessionId?: string,
     keyword?: string,
   ): Array<Record<string, SQLOutputValue>> {
-    if (keyword && HAS_FTS5) {
+    if (keyword && this.searchIndexReady) {
       try {
-        const sessionFilter = sessionId ? ' AND session_id = ?' : '';
-        const stmt = this.db.prepare(
-          `SELECT *, category AS factType FROM facts_fts WHERE facts_fts MATCH ?${sessionFilter} ORDER BY rowid DESC LIMIT 50;`,
-        );
-        return sessionId ? stmt.all(keyword, sessionId) : stmt.all(keyword);
+        return this.queryFactTables(sessionId, keyword, true);
       } catch {
         // Invalid FTS syntax or unavailable index: use literal search below.
       }
     }
+    return this.queryFactTables(sessionId, keyword);
+  }
 
+  private queryFactTables(
+    sessionId?: string,
+    keyword?: string,
+    indexed = false,
+  ): Array<Record<string, SQLOutputValue>> {
     // Literal substring fallback also works without FTS5 and for punctuation
     // that is not a valid FTS expression. Never discard the session boundary.
-    const sources = [
-      [
-        'binary_artifact',
-        'binary',
-        ['sample_path', 'sha256', 'file_type', 'notes'],
-      ],
-      ['vuln', 'vuln', ['title', 'cve', 'severity', 'evidence', 'poc']],
-      ['note', 'note', ['title', 'content', 'evidence']],
-    ] as const;
-    const rows = sources.flatMap(([table, factType, columns]) => {
+    const rows = factSources.flatMap(([table, factType, _title, columns]) => {
       const filters: string[] = [];
       const bindings: string[] = [];
       if (sessionId) {
         filters.push('session_id = ?');
         bindings.push(sessionId);
       }
-      if (keyword) {
+      if (keyword && indexed) {
+        filters.push(
+          `id IN (SELECT record_id FROM facts_search_v2 WHERE facts_search_v2 MATCH ? AND category = ?${sessionId ? ' AND session_id = ?' : ''})`,
+        );
+        bindings.push(keyword, factType, ...(sessionId ? [sessionId] : []));
+      } else if (keyword) {
         filters.push(
           `(${columns.map((column) => `instr(lower(COALESCE(${column}, '')), lower(?)) > 0`).join(' OR ')})`,
         );

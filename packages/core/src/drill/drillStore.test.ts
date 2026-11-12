@@ -128,6 +128,7 @@ describe('Drill fact categories and search boundaries', () => {
     const connection = new DatabaseSync(database);
     try {
       connection.exec('DROP TABLE IF EXISTS facts_fts');
+      connection.exec('DROP TABLE IF EXISTS facts_search_v2');
     } finally {
       connection.close();
     }
