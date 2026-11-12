@@ -15,6 +15,7 @@ import type { GenerateContentResponse, Part, Content } from '@google/genai';
 import { reportError } from '../utils/errorReporting.js';
 import { SwarmBudgetError } from '../agents/swarmBudgetError.js';
 import { WorkflowBudgetError } from '../agents/workflowBudgetError.js';
+import { ProviderRouteError } from '../providers/providerRouteError.js';
 import {
   InvalidStreamError,
   StreamEventType,
@@ -300,6 +301,28 @@ describe('Turn', () => {
       for await (const event of turn.run(
         { model: 'gemini' },
         [{ text: 'Continue the workflow' }],
+        new AbortController().signal,
+      ))
+        events.push(event);
+      expect(events).toEqual([
+        {
+          type: GeminiEventType.Error,
+          value: { error: { message: error.message } },
+        },
+      ]);
+      expect(reportError).not.toHaveBeenCalled();
+      expect(mockMaybeIncludeSchemaDepthContext).not.toHaveBeenCalled();
+    });
+
+    it('returns a local provider route error without creating an API failure report', async () => {
+      const error = new ProviderRouteError(
+        'Provider route unavailable. Inspect /provider list.',
+      );
+      mockSendMessageStream.mockRejectedValue(error);
+      const events = [];
+      for await (const event of turn.run(
+        { model: 'missing-provider:fixture' },
+        [{ text: 'Keep invalid routing local' }],
         new AbortController().signal,
       ))
         events.push(event);

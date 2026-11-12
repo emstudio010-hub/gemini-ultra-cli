@@ -110,6 +110,67 @@ const request = () =>
     LlmRole.SUBAGENT,
   );
 
+it.each(['generate', 'stream', 'tokens', 'capacity'] as const)(
+  'rejects an unavailable main provider prefix during %s without dispatch or spending the saved budget',
+  async (operation) => {
+    const record = createAgentWorkflow(
+      root,
+      'boost',
+      'Keep invalid main routes local',
+      'default',
+    );
+    const file = path.join(root, 'agent-workflows', `${record.id}.budget.json`);
+    const before = fs.readFileSync(file);
+    const providerBefore = fs.readFileSync(providersFile);
+    const routed = new UniversalContentGenerator(fallback, {
+      storage: { getProjectTempDir: () => root },
+    } as unknown as Config);
+    const request = {
+      model: 'missing-provider:fixture-model',
+      contents: 'Keep this request local',
+    };
+    const run = async (): Promise<unknown> =>
+      operation === 'generate'
+        ? routed.generateContent(request, 'fixture', LlmRole.MAIN)
+        : operation === 'stream'
+          ? routed.generateContentStream(request, 'fixture', LlmRole.MAIN)
+          : operation === 'tokens'
+            ? routed.countTokens(request)
+            : routed.getModelContextWindow(request.model);
+    await expect(run()).rejects.toMatchObject({
+      name: 'ProviderRouteError',
+      message: expect.stringContaining('/provider list'),
+    });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(fallback.generateContent).not.toHaveBeenCalled();
+    expect(fallback.generateContentStream).not.toHaveBeenCalled();
+    expect(fallback.countTokens).not.toHaveBeenCalled();
+    expect(fallback.getModelContextWindow).not.toHaveBeenCalled();
+    expect(fs.readFileSync(file)).toEqual(before);
+    expect(fs.readFileSync(providersFile)).toEqual(providerBefore);
+  },
+);
+
+it('still dispatches a configured bare model containing a colon through its registered provider', async () => {
+  const manager = ProviderManager.getInstance();
+  manager.upsertProvider({
+    ...manager.getProvider('primary')!,
+    models: ['main-model', 'local-model:latest'],
+  });
+  await generator.generateContent(
+    { model: 'local-model:latest', contents: 'Registered bare model' },
+    'fixture',
+    LlmRole.MAIN,
+  );
+  expect(vi.mocked(fetch).mock.calls[0][0]).toBe(
+    'https://primary.invalid/v1/chat/completions',
+  );
+  expect(
+    JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body)).model,
+  ).toBe('local-model:latest');
+  expect(fallback.generateContent).not.toHaveBeenCalled();
+});
+
 it('keeps a saved member provider ID on its configured endpoint after another provider takes that display name', async () => {
   const manager = ProviderManager.getInstance();
   const primary = manager.getProvider('primary')!;

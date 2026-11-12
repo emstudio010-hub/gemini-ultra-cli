@@ -19,6 +19,8 @@ import type { ContentGenerator } from '../core/contentGenerator.js';
 import type { Config } from '../config/config.js';
 import { LlmRole } from '../telemetry/llmRole.js';
 import { ProviderManager } from './providerManager.js';
+import { ProviderRouteError } from './providerRouteError.js';
+import { I18nManager } from '../i18n/i18nManager.js';
 import type { ExternalProviderProfile } from './providerTypes.js';
 import { withUltraPrompt } from './ultraPromptConfig.js';
 import { LoggingContentGenerator } from '../core/loggingContentGenerator.js';
@@ -123,6 +125,13 @@ export class UniversalContentGenerator implements ContentGenerator {
     const mgr = ProviderManager.getInstance();
     const hit = mgr.resolveProviderForModel(model);
     if (hit) return hit;
+    if (model.trim().indexOf(':') > 0)
+      throw new ProviderRouteError(
+        I18nManager.getInstance().t(
+          '模型供应商路由不可用。请用 /provider list 查看有效ID，再用 /model 重新选择模型；没有发起模型请求。',
+          'The model provider route is unavailable. Inspect valid IDs with /provider list, then choose a model with /model. No model request was sent.',
+        ),
+      );
     const active = mgr.getActiveProvider();
     const activeModel = mgr.getActiveModel();
     if (active && activeModel && /^(auto|gemini-)/i.test(model.trim())) {
@@ -180,11 +189,11 @@ export class UniversalContentGenerator implements ContentGenerator {
         ...request,
         model: selected.startsWith('native:') ? selected.slice(7) : selected,
       };
+    const resolution = this.resolve(request.model);
     consumeSwarmRequest(this.gcConfig?.storage?.getProjectTempDir());
     consumeWorkflowRequest(this.gcConfig?.storage?.getProjectTempDir());
     if (role === LlmRole.MAIN || role === LlmRole.SUBAGENT)
       request = withUltraPrompt(request);
-    const resolution = this.resolve(request.model);
 
     if (!resolution) {
       observeAgentModel(`native:${request.model}`);
@@ -224,11 +233,11 @@ export class UniversalContentGenerator implements ContentGenerator {
         ...request,
         model: selected.startsWith('native:') ? selected.slice(7) : selected,
       };
+    const resolution = this.resolve(request.model);
     consumeSwarmRequest(this.gcConfig?.storage?.getProjectTempDir());
     consumeWorkflowRequest(this.gcConfig?.storage?.getProjectTempDir());
     if (role === LlmRole.MAIN || role === LlmRole.SUBAGENT)
       request = withUltraPrompt(request);
-    const resolution = this.resolve(request.model);
 
     if (!resolution) {
       observeAgentModel(`native:${request.model}`);

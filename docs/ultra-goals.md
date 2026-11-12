@@ -1392,3 +1392,6 @@ WI-135/E-324至325/F-094：供应商删除后，保存成员路由/旧编辑仍�
 ## 2026-11-13 供应商旧界面ID失效保护
 
 WI-136/E-326至327/F-095：配置窗口旧删除确认/模型清单保存刷新及演练台旧ID仍按名称回退，3旧组件复现失败；旧实际HTTP目录200且1错误请求，保存500。新增严格removeProviderById，界面/演练台持久化目标使用精确ID，失效保留页面/草稿，目录不调用，HTTP404。5项组件+4核心相关检查通过，core/CLI严格源码编译和5文件lint退出0；首次mock带多余imageModels类型错误已修正，日志保留。Windows实际HTTP修后5条件通过、5815ms/退出0，两404/0目录请求/配置保持；旧失败观察器退出另有libuv断言，未据此改产品。无ConPTY/浏览器视觉/跨进程热刷新/真实供应商新验收，无打包重装新版本CI付费请求，个人配置及安装83保持，goal active。详见docs/ultra-provider-stale-ui-handoff.md。
+## 2026-11-13 主模型失效前缀本地拒绝
+
+WI-137/E-328至329/F-096：未知主provider:model前缀原来走原生fallback且先记请求预算，Turn误报API；旧4路由+1Turn复现失败。新增ProviderRouteError，解析前缀失败时在记账/调用前拒绝，token/容量也不回退；Turn本地报错，已登记冒号裸模型和native成员保持。8项必要检查、strict core源码编译及5文件lint通过；首测试联合返回类型修正后编译0。Windows实际非交互源码CLI9419ms/预期退出1/0请求，stderr本地类型与选模提示，预算/供应商字节保持，无API故障报告。首入口提前读取旧编译产物结果失败已保留，确认编译终态后重验通过。无交互终端/真实供应商新验收，不改未知无前缀裸模型fallback。未打包重装新版本CI付费请求，个人配置及安装83保持，goal active。详见docs/ultra-invalid-main-route-handoff.md。

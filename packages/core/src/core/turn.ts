@@ -34,6 +34,7 @@ import { LlmRole } from '../telemetry/types.js';
 import { populateToolDisplay } from '../agent/tool-display-utils.js';
 import { SwarmBudgetError } from '../agents/swarmBudgetError.js';
 import { WorkflowBudgetError } from '../agents/workflowBudgetError.js';
+import { ProviderRouteError } from '../providers/providerRouteError.js';
 
 import {
   type ToolCallRequestInfo,
@@ -442,7 +443,11 @@ export class Turn {
         return;
       }
 
-      if (e instanceof SwarmBudgetError || e instanceof WorkflowBudgetError) {
+      if (
+        e instanceof SwarmBudgetError ||
+        e instanceof WorkflowBudgetError ||
+        e instanceof ProviderRouteError
+      ) {
         yield {
           type: GeminiEventType.Error,
           value: { error: { message: e.message } },
