@@ -14,6 +14,7 @@ import {
   readSwarmBoard,
   swarmModelSnapshot,
   swarmSnapshot,
+  cancelSavedSwarm,
 } from './swarm.js';
 import {
   readSwarmResultText,
@@ -29,6 +30,107 @@ beforeEach(() => {
 });
 afterEach(() => {
   fs.rmSync(root, { recursive: true, force: true });
+});
+
+it.each(['cancel', 'remove', 'stop-members'] as const)(
+  'preserves accepted evidence when a completed result arrives after %s',
+  async (stop) => {
+    const swarm = createSwarm(root, 'Do not accept a late stopped follow-up');
+    const original = 'Accepted evidence from the earlier turn\n'.repeat(600);
+    const late = 'Late cancelled output\n'.repeat(800) + 'LATE-END';
+    let started!: () => void;
+    const start = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let turns = 0;
+    const engine = getSwarmEngine(root, swarm.id, async () => {
+      if (++turns === 1) return { completed: true, text: original };
+      started();
+      await gate;
+      return { completed: true, text: late };
+    });
+    engine.add('reader', 'researcher', 'Keep previously accepted evidence');
+    await engine.wait(signal());
+    const prior = readSwarm(root, swarm.id).members[0];
+    engine.post('coordinator', '@reader inspect one remaining question');
+    await start;
+    if (stop === 'cancel') cancelSavedSwarm(root, swarm.id);
+    else if (stop === 'remove') engine.remove('reader');
+    else engine.stopMembers();
+    release();
+    await engine.wait(signal());
+    const saved = readSwarm(root, swarm.id);
+    const member = saved.members[0];
+    expect(readSwarmResultText(root, swarm.id, member)).toBe(original);
+    expect(member.fullResult).toEqual(prior.fullResult);
+    expect(member.modelsUsed).toEqual(prior.modelsUsed);
+    expect(member.state).toBe(stop === 'remove' ? 'killed' : 'paused');
+    expect(member.lastError).toContain('late output was not accepted');
+    const partial = member.lastError!.match(
+      /Partial output archived: ([^\n]+)/,
+    )?.[1];
+    expect(partial).toBeDefined();
+    expect(fs.readFileSync(partial!, 'utf8')).toContain(late);
+    expect(readSwarmBoard(root, swarm.id).at(-1)?.text).toContain(
+      member.lastError,
+    );
+    expect(saved.budget).toMatchObject({ turns: 2, failedTurns: 0 });
+    const exported = exportSwarmReports(root, swarm.id);
+    const manifest = JSON.parse(fs.readFileSync(exported.manifestPath, 'utf8'));
+    expect(
+      fs.readFileSync(
+        path.join(
+          path.dirname(exported.manifestPath),
+          manifest.reports[0].file,
+        ),
+        'utf8',
+      ),
+    ).toBe(original);
+  },
+);
+
+it('labels an initial late completed result as unaccepted when its member was cancelled', async () => {
+  const swarm = createSwarm(
+    root,
+    'Retain cancelled output without accepting completion',
+  );
+  let started!: () => void;
+  const start = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const engine = getSwarmEngine(root, swarm.id, async () => {
+    started();
+    await gate;
+    return { completed: true, text: 'Late initial finding' };
+  });
+  engine.add(
+    'reader',
+    'researcher',
+    'Keep cancellation distinct from completion',
+  );
+  await start;
+  engine.cancel();
+  release();
+  await engine.wait(signal());
+  const saved = readSwarm(root, swarm.id);
+  expect(saved.phase).toBe('cancelled');
+  expect(saved.members[0]).toMatchObject({
+    state: 'paused',
+    lastError: expect.stringContaining('late output was not accepted'),
+  });
+  expect(readSwarmResultText(root, swarm.id, saved.members[0])).toContain(
+    'late output was not accepted',
+  );
+  expect(saved.members[0].lastError).toContain('Late initial finding');
+  expect(saved.budget.failedTurns).toBe(0);
 });
 
 it.each([false, true])(

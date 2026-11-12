@@ -900,21 +900,27 @@ export class SwarmEngine {
       );
       swarm = readSwarm(this.root, this.id);
       member = swarm.members.find((entry) => entry.name === name)!;
-      if (!result.completed && (member.result || member.fullResult)) {
-        // Incomplete returns are failures too, not replacements for earlier
-        // evidence. Keep a long partial attempt separately so it remains useful
-        // when the member is explicitly resumed.
+      const stopped =
+        signal.aborted || swarm.phase !== 'active' || member.state === 'killed';
+      const hadResult = !!member.result || !!member.fullResult;
+      if (stopped || (!result.completed && hadResult)) {
+        // A runner may return completion after cancellation. Retain that output
+        // as an unaccepted attempt rather than replacing earlier evidence.
+        const diagnostic = stopped
+          ? 'Member turn was stopped; late output was not accepted.'
+          : 'Member turn did not complete.';
         const partial = saveSwarmResultText(
           this.root,
           this.id,
-          `Member turn did not complete.\n${result.text}`,
+          `${diagnostic}\n${result.text}`,
         );
         recordMemberFailure(
           member,
           partial.fullResult
-            ? `Member turn did not complete.\nPartial output archived: ${swarmResultArchivePath(this.root, this.id, partial.fullResult)}\n${partial.result}`
+            ? `${diagnostic}\nPartial output archived: ${swarmResultArchivePath(this.root, this.id, partial.fullResult)}\n${partial.result}`
             : partial.result,
         );
+        if (!hadResult) member.modelsUsed = modelsUsed;
       } else {
         const saved = saveSwarmResultText(this.root, this.id, result.text);
         member.result = saved.result;
