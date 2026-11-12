@@ -4,9 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  deepWebFetch,
-} from '@google/gemini-cli-core';
+import { deepWebFetch } from '@google/gemini-cli-core';
 import {
   type CommandContext,
   CommandKind,
@@ -17,7 +15,8 @@ import { MessageType } from '../types.js';
 export const fetchCommand: SlashCommand = {
   name: 'fetch',
   altNames: ['抓取', '链接', 'url'],
-  description: '深度抓取与分析外部网页链接/技术文档/GitHub。用法: /fetch <URL> [--depth=1|2]',
+  description:
+    '深度抓取与分析外部网页链接/技术文档/GitHub。用法: /fetch <URL> [--depth=1|2]',
   kind: CommandKind.BUILT_IN,
   autoExecute: false,
   action: async (context: CommandContext, args: string) => {
@@ -43,7 +42,7 @@ export const fetchCommand: SlashCommand = {
       depth,
     });
 
-    if (res.error) {
+    if (res.error && !res.partial) {
       context.ui.addItem({
         type: MessageType.ERROR,
         text: `抓取失败: ${res.error}`,
@@ -52,7 +51,10 @@ export const fetchCommand: SlashCommand = {
     }
 
     let text = `=== 网页深度抓取结果: ${res.title} ===\n来源: ${res.url}\n\n`;
-    text += `${res.content.slice(0, 1500)}${res.content.length > 1500 ? '\n\n... (正文过长已截断，已放入上下文)' : ''}\n`;
+    text += `${res.content.slice(0, 1500)}${res.content.length > 1500 ? '\n\n... (正文过长已截断)' : ''}\n`;
+    if (res.error) text += `\n部分抓取：${res.error}\n`;
+    if (res.subPageErrors?.length)
+      text += `\n未完成的子页面：\n${res.subPageErrors.map((page) => `${page.url}: ${page.error}`).join('\n')}\n`;
 
     if (res.subPages && res.subPages.length > 0) {
       text += `\n--- 关联深度子页面 (共 ${res.subPages.length} 页) ---\n`;
