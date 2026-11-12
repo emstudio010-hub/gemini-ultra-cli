@@ -20,6 +20,8 @@ import {
   swarmResultArchivePath,
 } from './swarmResultText.js';
 import { swarmContextSnapshot, swarmMemberContext } from './swarmContext.js';
+import { SwarmBudgetError } from './swarmBudgetError.js';
+import { I18nManager } from '../i18n/i18nManager.js';
 import {
   inAgentWorktree,
   readAgentWorktree,
@@ -432,6 +434,60 @@ function blockSwarm(root: string, swarm: Swarm, limit: string): void {
   appendPost(root, swarm.id, 'monitor', swarm.stopReason);
 }
 
+function swarmBudgetHandoff(root: string, swarm: Swarm): SwarmBudgetError {
+  const i18n = I18nManager.getInstance();
+  const lines = [
+    `${i18n.t('蜂群已在本地受阻', 'Swarm blocked locally')}: ${swarm.id}`,
+    swarm.stopReason,
+    `${i18n.t('保留状态与成员结果', 'Saved state and member results')}: ${path.join(directory(root, swarm.id), 'members.json')}`,
+    `${i18n.t('公开留言', 'Shared board')}: ${path.join(directory(root, swarm.id), 'board.jsonl')}`,
+  ];
+  const reviewer = swarm.members.findLast(
+    (member) => member.agent === 'workflow-auditor' && !!member.result,
+  );
+  if (reviewer) {
+    try {
+      const verdict = z
+        .object({
+          passed: z.boolean(),
+          summary: z.string(),
+          evidence: z.array(z.string()).optional(),
+        })
+        .safeParse(JSON.parse(readSwarmResultText(root, swarm.id, reviewer)));
+      if (verdict.success) {
+        lines.push(
+          `${i18n.t('已保存的复核', 'Saved review')} @${reviewer.name}: ${verdict.data.passed ? i18n.t('通过（不代表任务完成）', 'passed (not task completion)') : i18n.t('未通过', 'failed')}`,
+          verdict.data.summary.slice(0, 2000),
+          ...(verdict.data.evidence ?? [])
+            .slice(0, 5)
+            .map((item) => item.slice(0, 500)),
+        );
+      } else {
+        lines.push(
+          i18n.t(
+            '复核结果格式无效，请查看保留状态。',
+            'Saved review is not a valid verdict; inspect the retained state.',
+          ),
+        );
+      }
+    } catch {
+      lines.push(
+        i18n.t(
+          '复核全文不可读取，请保留现场并查看状态文件。',
+          'Saved review text is unavailable; preserve the evidence and inspect the state file.',
+        ),
+      );
+    }
+  }
+  for (const member of swarm.members) {
+    if (member.fullResult)
+      lines.push(
+        `@${member.name}: ${swarmResultArchivePath(root, swarm.id, member.fullResult)}`,
+      );
+  }
+  return new SwarmBudgetError(lines.join('\n'));
+}
+
 /** Reserve a model dispatch before delegating to any provider. SDK-internal HTTP
  * retries are not observable here; application-level retries reserve again. */
 export function consumeSwarmRequest(root: string | undefined): void {
@@ -440,7 +496,7 @@ export function consumeSwarmRequest(root: string | undefined): void {
   const stateRoot = actor?.root ?? root!;
   const swarm = actor ? readSwarm(stateRoot, actor.id) : latestSwarm(stateRoot);
   if (!swarm || swarm.ownerPid !== process.pid) return;
-  if (swarm.phase === 'blocked') throw new Error(swarm.stopReason);
+  if (swarm.phase === 'blocked') throw swarmBudgetHandoff(stateRoot, swarm);
   if (swarm.phase !== 'active') {
     if (actor)
       throw new Error(`Swarm is ${swarm.phase}; member calls are stopped.`);
@@ -455,7 +511,7 @@ export function consumeSwarmRequest(root: string | undefined): void {
         : undefined;
   if (limit) {
     blockSwarm(stateRoot, swarm, limit);
-    throw new Error(swarm.stopReason);
+    throw swarmBudgetHandoff(stateRoot, swarm);
   }
   swarm.budget.requests++;
   saveSwarm(stateRoot, swarm);

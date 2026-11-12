@@ -13,6 +13,7 @@ import {
 } from './turn.js';
 import type { GenerateContentResponse, Part, Content } from '@google/genai';
 import { reportError } from '../utils/errorReporting.js';
+import { SwarmBudgetError } from '../agents/swarmBudgetError.js';
 import {
   InvalidStreamError,
   StreamEventType,
@@ -265,6 +266,28 @@ describe('Turn', () => {
       ]);
       expect(turn.getDebugResponses().length).toBe(0);
       expect(reportError).not.toHaveBeenCalled(); // Should not report as error
+    });
+
+    it('returns a local Swarm budget handoff without reporting a provider API error', async () => {
+      const error = new SwarmBudgetError(
+        'Swarm blocked locally: fixture-task\nSaved review: CALL mismatch\nState: members.json',
+      );
+      mockSendMessageStream.mockRejectedValue(error);
+      const events = [];
+      for await (const event of turn.run(
+        { model: 'gemini' },
+        [{ text: 'Continue the saved task' }],
+        new AbortController().signal,
+      ))
+        events.push(event);
+      expect(events).toEqual([
+        {
+          type: GeminiEventType.Error,
+          value: { error: { message: error.message } },
+        },
+      ]);
+      expect(reportError).not.toHaveBeenCalled();
+      expect(mockMaybeIncludeSchemaDepthContext).not.toHaveBeenCalled();
     });
 
     it('should yield Error event and report if sendMessageStream throws', async () => {

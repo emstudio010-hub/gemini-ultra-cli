@@ -32,6 +32,7 @@ import type { ModelConfigKey } from '../services/modelConfigService.js';
 import { getCitations } from '../utils/generateContentResponseUtilities.js';
 import { LlmRole } from '../telemetry/types.js';
 import { populateToolDisplay } from '../agent/tool-display-utils.js';
+import { SwarmBudgetError } from '../agents/swarmBudgetError.js';
 
 import {
   type ToolCallRequestInfo,
@@ -436,6 +437,14 @@ export class Turn {
             type: e.type,
             message: e.message,
           },
+        };
+        return;
+      }
+
+      if (e instanceof SwarmBudgetError) {
+        yield {
+          type: GeminiEventType.Error,
+          value: { error: { message: e.message } },
         };
         return;
       }
