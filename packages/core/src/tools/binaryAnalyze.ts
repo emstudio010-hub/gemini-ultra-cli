@@ -48,6 +48,45 @@ export interface BinaryAnalyzeParams {
   maxItems?: number;
 }
 
+/** Copy-ready formats for the returned native address fields, never a rewrite
+ * of the native JSON. In particular, CALL sites and caller entries differ. */
+function analysisAddressFormats(rows: Array<Record<string, unknown>>) {
+  const fields = [
+    'addr',
+    'offset',
+    'from',
+    'to',
+    'jump',
+    'fail',
+    'ptr',
+    'fcn_addr',
+    'minaddr',
+    'maxaddr',
+  ];
+  return rows.flatMap((row, itemIndex) => {
+    const hex: Record<string, string> = {};
+    for (const field of fields) {
+      const value = row[field];
+      if (
+        !(
+          typeof value === 'number' &&
+          Number.isSafeInteger(value) &&
+          value >= 0
+        ) &&
+        !(
+          typeof value === 'string' &&
+          /^(?:0x[0-9a-fA-F]{1,16}|[0-9]{1,20})$/.test(value)
+        )
+      )
+        continue;
+      const address = BigInt(value);
+      if (address <= 0xffffffffffffffffn)
+        hex[field] = `0x${address.toString(16)}`;
+    }
+    return Object.keys(hex).length ? [{ itemIndex, hex }] : [];
+  });
+}
+
 export async function analyzeBinary(
   params: BinaryAnalyzeParams,
   baseDirectory: string,
@@ -188,6 +227,7 @@ export async function analyzeBinary(
           ? 'aaa;axtj'
           : 'pdj',
     data,
+    addressFormats: analysisAddressFormats(data),
     returnedItems: data.length,
     truncated: list.data.length > input.maxItems,
     ...(input.view === 'instructions'
@@ -254,7 +294,7 @@ export class BinaryAnalyzeTool extends BaseDeclarativeTool<
     super(
       BinaryAnalyzeTool.Name,
       'Static Binary Analysis',
-      'Read local binary functions, instruction windows or incoming cross-references using native radare2/r2. Does not execute or modify the sample. Use binary_triage/binary_inspect first to identify format and architecture. Numeric addresses only, no commands or expressions. Output integers outside the exact JavaScript range are strings; pass address strings unchanged to preserve 64-bit precision. functions uses aa, xrefs uses aaa and requires an address, instructions defaults to the entrypoint. Bounded to 30 seconds, 4 MiB output and 64 MiB samples. Requires r2 in PATH or GEMINI_ULTRA_TOOL_R2. Empty results do not prove absence. This is static disassembly, not decompilation or runtime verification.',
+      'Read local binary functions, instruction windows or incoming cross-references using native radare2/r2. Does not execute or modify the sample. Use binary_triage/binary_inspect first to identify format and architecture. Numeric addresses only, no commands or expressions. Output integers outside the exact JavaScript range are strings; pass address strings unchanged to preserve 64-bit precision. addressFormats maps each returned data row by itemIndex to exact hexadecimal fields; copy these rather than mentally converting decimal addresses. from/addr is the reference/instruction location; fcn_addr is the containing function entry, not the CALL site. functions uses aa, xrefs uses aaa and requires an address, instructions defaults to the entrypoint. Bounded to 30 seconds, 4 MiB output and 64 MiB samples. Requires r2 in PATH or GEMINI_ULTRA_TOOL_R2. Empty results do not prove absence. This is static disassembly, not decompilation or runtime verification.',
       Kind.Read,
       {
         type: 'object',

@@ -262,7 +262,7 @@ jobs:
         shell: pwsh
         run: |
           $entry = Join-Path $env:RUNNER_TEMP 'ultra-install/node_modules/gemini-ultra-cli/bundle/gemini.js'
-          node scripts/verify-ultra-native-address-precision.mjs $entry artifacts/ultra-release/native-address-precision-verification.json
+          node scripts/verify-ultra-analysis-address-formats.mjs $entry artifacts/ultra-release/analysis-address-formats-verification.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Verify provider configuration save conflicts
         if: inputs.verification_scope == 'provider-save-conflict' || inputs.verification_scope == 'full' || inputs.verification_scope == ''
@@ -413,6 +413,7 @@ jobs:
             artifacts/ultra-release/swarm-full-results-verification.json
             artifacts/ultra-release/swarm-full-results-verification-output.txt
             artifacts/ultra-release/native-address-precision-verification.json
+            artifacts/ultra-release/analysis-address-formats-verification.json
             artifacts/ultra-release/swarm-redteam-verification.json
             artifacts/ultra-release/swarm-result-recovery-verification.json
             artifacts/ultra-release/swarm-incomplete-verification.json

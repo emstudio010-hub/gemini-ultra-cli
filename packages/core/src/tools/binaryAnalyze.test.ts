@@ -42,6 +42,76 @@ describe('bounded static binary analysis', () => {
       ) => callback(error, output, ''),
     );
 
+  it('provides exact hexadecimal addresses for returned rows without rewriting native evidence or including omitted rows', async () => {
+    const rows = [
+      {
+        from: 4198537,
+        type: 'CALL',
+        fcn_addr: 4198528,
+        to: '4198464',
+        size: 5,
+      },
+      {
+        from: '18446603336221196417',
+        type: 'CALL',
+        jump: '0xffffffffffffffff',
+        ptr: -1,
+        size: 16,
+      },
+      { from: 16, type: 'CALL' },
+    ];
+    respond(JSON.stringify(rows));
+    const result = await analyzeBinary(
+      { filePath: sample, view: 'xrefs', address: '0x401040', maxItems: 2 },
+      directory,
+      new AbortController().signal,
+    );
+    expect(result.data).toEqual(rows.slice(0, 2));
+    expect(result).toHaveProperty('addressFormats', [
+      {
+        itemIndex: 0,
+        hex: { from: '0x401089', fcn_addr: '0x401080', to: '0x401040' },
+      },
+      {
+        itemIndex: 1,
+        hex: { from: '0xffff800000000081', jump: '0xffffffffffffffff' },
+      },
+    ]);
+    expect(result.truncated).toBe(true);
+  });
+
+  it('maps function and instruction locations and targets while leaving counts and non-address text untouched', async () => {
+    respond(
+      '[{"addr":4198468,"opcode":"call target","jump":4198400,"fail":4198473,"ptr":"not an address","size":5,"minaddr":4198464,"maxaddr":4198479}]',
+    );
+    const result = await analyzeBinary(
+      { filePath: sample, view: 'instructions', maxItems: 1 },
+      directory,
+      new AbortController().signal,
+    );
+    expect(result).toHaveProperty('addressFormats', [
+      {
+        itemIndex: 0,
+        hex: {
+          addr: '0x401044',
+          jump: '0x401000',
+          fail: '0x401049',
+          minaddr: '0x401040',
+          maxaddr: '0x40104f',
+        },
+      },
+    ]);
+    respond('[{"offset":"0","name":"entry"}]');
+    const functions = await analyzeBinary(
+      { filePath: sample },
+      directory,
+      new AbortController().signal,
+    );
+    expect(functions).toHaveProperty('addressFormats', [
+      { itemIndex: 0, hex: { offset: '0x0' } },
+    ]);
+  });
+
   it.each(['functions', 'instructions', 'xrefs'] as const)(
     'preserves unsigned 64-bit %s addresses from native JSON without rounding',
     async (view) => {

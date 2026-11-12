@@ -201,6 +201,12 @@ MCP 服务可用仍不足以建立连接，需要用户通过 `/mcp` 配置自�
 `binary_analyze`
 保留为精确字符串；普通地址、位数和数量仍是数字。64 位高地址可直接把返回的地址字符串用于下一次查询，不要先转换成 Number，以免舍入。
 
+`binary_analyze` 额外返回 `addressFormats`：`itemIndex` 对应返回的 `data`
+行，`hex` 给出该行已识别地址字段的精确十六进制形式。写报告或传给
+`binary_decompile` 时直接复制，避免手算地址。`from`
+是引用/CALL指令位置，`fcn_addr` 是其所在函数入口，二者不可混用。原始 `data`
+保持不变；该表仅覆盖已返回行的常见顶层地址字段，不代表省略行、嵌套引用或全部元数据。
+
 模型可调用 `binary_inspect`
 读取实际文件信息、导入表、节区、依赖库与符号，使用本机 radare2 中的 rabin2，不执行或改写样本。把 rabin2 加入 PATH 或设置
 `GEMINI_ULTRA_TOOL_RABIN2`，然后运行 `/drill setup`。Windows请指向原生
