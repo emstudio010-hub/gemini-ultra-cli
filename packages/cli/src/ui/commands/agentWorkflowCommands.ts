@@ -345,17 +345,20 @@ function workflowCommand(
               ),
             );
           record.approved = true;
-          if (mode !== 'grill-me') activateWorkflowBudget(root, record);
-          restoreApproval(record);
           if (mode === 'grill-me') {
+            // Close first: a rejected close must not persist false completion.
+            // If the record save fails, the ready draft can retry this local finish.
+            closeWorkflowBudget(root, record);
             record.phase = 'completed';
             saveAgentWorkflow(root, record);
-            closeWorkflowBudget(root, record);
+            restoreApproval(record);
             return {
               type: 'submit_prompt',
               content: `Requirements interview complete. Continue the agreed task under the current permissions and user constraints.\n${record.brief}\nAcceptance:\n${record.milestones.map((item) => `${item.title}: ${item.acceptance}`).join('\n')}`,
             };
           }
+          activateWorkflowBudget(root, record);
+          restoreApproval(record);
         } else if (operation === 'resume') {
           activateWorkflowBudget(root, record);
           if (!record.approved) {

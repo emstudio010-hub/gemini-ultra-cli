@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import * as fs from 'node:fs';
+import fsNative from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -28,6 +30,8 @@ beforeEach(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'ultra-workflow-command-'));
 });
 afterEach(() => {
+  vi.restoreAllMocks();
+  syncBuiltinESMExports();
   fs.rmSync(root, { recursive: true, force: true });
 });
 function commandContext() {
@@ -44,6 +48,118 @@ function commandContext() {
   });
   return { config, context };
 }
+
+it.each(['live-owner', 'missing-ledger', 'damaged-ledger', 'close-failure'])(
+  'keeps grill-me finish unchanged on %s without restoring permissions or submitting work',
+  async (failure) => {
+    const { config, context } = commandContext();
+    await grillMeCommand.action!(context, 'Preserve the agreed interview');
+    const record = latestAgentWorkflow(root, 'grill-me')!;
+    record.phase = 'ready';
+    saveAgentWorkflow(root, record);
+    const directory = path.join(root, 'agent-workflows');
+    const ledger = path.join(directory, `${record.id}.budget.json`);
+    if (failure === 'live-owner') {
+      fs.writeFileSync(
+        ledger,
+        JSON.stringify({
+          ...workflowBudget(root, record),
+          ownerPid: process.pid + 10000,
+        }),
+      );
+      vi.spyOn(process, 'kill').mockReturnValue(true);
+    } else if (failure === 'missing-ledger') {
+      fs.rmSync(ledger);
+    } else if (failure === 'damaged-ledger') {
+      fs.writeFileSync(ledger, '{original unavailable ledger');
+    } else {
+      const rename = fs.renameSync;
+      vi.spyOn(fsNative, 'renameSync').mockImplementation((from, to) => {
+        if (to === ledger) throw new Error('Ledger close failed');
+        return rename(from, to);
+      });
+      syncBuiltinESMExports();
+    }
+    const before = Object.fromEntries(
+      fs
+        .readdirSync(directory)
+        .map((file) => [file, fs.readFileSync(path.join(directory, file))]),
+    );
+    vi.mocked(context.ui.addItem).mockClear();
+    vi.mocked(config.setApprovalMode).mockClear();
+    const finish = grillMeCommand.subCommands!.find(
+      (item) => item.name === 'finish',
+    )!;
+    expect(await finish.action!(context, '')).toBeUndefined();
+    expect(context.ui.addItem).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'error' }),
+    );
+    expect(config.getApprovalMode()).toBe(ApprovalMode.PLAN);
+    expect(config.setApprovalMode).not.toHaveBeenCalled();
+    expect(fs.readdirSync(directory).sort()).toEqual(
+      Object.keys(before).sort(),
+    );
+    for (const [file, bytes] of Object.entries(before))
+      expect(fs.readFileSync(path.join(directory, file))).toEqual(bytes);
+  },
+);
+
+it('retries grill-me finish after a record save failure without submitting work or restoring permissions early', async () => {
+  const { config, context } = commandContext();
+  await grillMeCommand.action!(context, 'Keep the scoped acceptance');
+  const record = latestAgentWorkflow(root, 'grill-me')!;
+  record.phase = 'ready';
+  record.brief = 'Agreed handoff';
+  record.milestones = [
+    {
+      title: 'Deliver the feature',
+      acceptance: 'Required behavior',
+      completed: false,
+    },
+  ];
+  saveAgentWorkflow(root, record);
+  consumeWorkflowRequest(root);
+  const file = path.join(root, 'agent-workflows', `${record.id}.json`);
+  const before = fs.readFileSync(file);
+  const rename = fs.renameSync;
+  const failure = vi
+    .spyOn(fsNative, 'renameSync')
+    .mockImplementation((from, to) => {
+      if (to === file) throw new Error('Record save failed');
+      return rename(from, to);
+    });
+  syncBuiltinESMExports();
+  const finish = grillMeCommand.subCommands!.find(
+    (item) => item.name === 'finish',
+  )!;
+  vi.mocked(config.setApprovalMode).mockClear();
+  expect(await finish.action!(context, '')).toBeUndefined();
+  expect(fs.readFileSync(file)).toEqual(before);
+  expect(config.getApprovalMode()).toBe(ApprovalMode.PLAN);
+  expect(config.setApprovalMode).not.toHaveBeenCalled();
+  expect(workflowBudget(root, record)).toMatchObject({
+    state: 'closed',
+    requests: 1,
+  });
+  failure.mockRestore();
+  syncBuiltinESMExports();
+  expect(await finish.action!(context, '')).toMatchObject({
+    type: 'submit_prompt',
+    content: expect.stringContaining('Agreed handoff'),
+  });
+  expect(latestAgentWorkflow(root, 'grill-me')).toMatchObject({
+    phase: 'completed',
+    approved: true,
+    brief: 'Agreed handoff',
+    milestones: record.milestones,
+  });
+  expect(workflowBudget(root, record)).toMatchObject({
+    state: 'closed',
+    requests: 1,
+  });
+  expect(config.getApprovalMode()).toBe(ApprovalMode.DEFAULT);
+  expect(await finish.action!(context, '')).toBeUndefined();
+});
 
 it('inspects the requested historical workflow without changing the current task or creating its missing ledger', async () => {
   const { context } = commandContext();

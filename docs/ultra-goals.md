@@ -1352,3 +1352,7 @@ core
 types/lint通过；仅tsc编译core，Windows源码CLI暂停Teamwork代表9900ms/退出1/0请求，记录预算报告字节保持。Boost/Grill
 me由核心接口检查覆盖，不称三终端均重验。未打包/全局重装/版本变更/三平台CI/付费调用；当前安装83与源码修复分列，goal
 active。详见ultra-workflow-local-handoff.md。
+
+## 2026-11-12 Grill me 完成落盘修复
+
+WI-123/E-302至303/F-083：/grill-me finish先校验并关闭预算、保存完成记录，两者成功后才恢复权限并提交原范围。外部活跃所有者、缺失/损坏账本及关闭失败保留草案/Plan；完成记录保存失败保留closed预算与ready草案，可显式重试。5个旧实际复现失败，修后含2个相关对照共7项通过；strict CLI源码编译与修改文件lint退出0。Windows真实双Node进程处理器验证10807ms/退出0，活跃所有者拒绝且全部文件保持，退出后原范围完成、累计1保持、重复finish不再提交。不是完整终端UI或真实模型验收，初观察器spy/import错误保留。不打包/重装/新版本/CI/付费调用，个人配置保持，goal active。详见docs/ultra-grill-finish-handoff.md。
