@@ -376,7 +376,6 @@ function workflowCommand(
             };
           }
           activateWorkflowBudget(root, record);
-          restoreApproval(record);
         } else if (operation === 'resume') {
           activateWorkflowBudget(root, record);
           if (!record.approved) {
@@ -385,10 +384,10 @@ function workflowCommand(
             config.setApprovalMode(ApprovalMode.PLAN);
             return { type: 'submit_prompt', content: interviewPrompt(record) };
           }
-          restoreApproval(record);
           record.phase = 'ready';
         }
         saveAgentWorkflow(root, record);
+        restoreApproval(record);
         return { type: 'submit_prompt', content: executionPrompt(record) };
       }
       if (isAgentWorkflowRunning(root))

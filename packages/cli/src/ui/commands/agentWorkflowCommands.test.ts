@@ -50,6 +50,64 @@ function commandContext() {
   return { config, context };
 }
 
+it.each([
+  { command: teamworkCommand, operation: 'approve' },
+  { command: teamworkCommand, operation: 'resume' },
+  { command: boostCommand, operation: 'resume' },
+])(
+  'keeps Plan permissions until $command.name $operation saves the executable record',
+  async ({ command, operation }) => {
+    const { config, context } = commandContext();
+    await command.action!(context, 'Preserve execution state on save failure');
+    const record = latestAgentWorkflow(
+      root,
+      command.name as 'teamwork' | 'boost',
+    )!;
+    record.phase = operation === 'approve' ? 'ready' : 'blocked';
+    record.approved = operation === 'resume';
+    saveAgentWorkflow(root, record);
+    consumeWorkflowRequest(root);
+    config.setApprovalMode(ApprovalMode.PLAN);
+    vi.mocked(config.setApprovalMode).mockClear();
+    const file = path.join(root, 'agent-workflows', `${record.id}.json`);
+    const before = fs.readFileSync(file);
+    const rename = fs.renameSync;
+    const failure = vi
+      .spyOn(fsNative, 'renameSync')
+      .mockImplementation((from, to) => {
+        if (to === file) throw new Error('Executable record save failed');
+        return rename(from, to);
+      });
+    syncBuiltinESMExports();
+    const action = command.subCommands!.find(
+      (item) => item.name === operation,
+    )!;
+    expect(await action.action!(context, '')).toBeUndefined();
+    expect(context.ui.addItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'error',
+        text: 'Executable record save failed',
+      }),
+    );
+    expect(fs.readFileSync(file)).toEqual(before);
+    expect(config.getApprovalMode()).toBe(ApprovalMode.PLAN);
+    expect(config.setApprovalMode).not.toHaveBeenCalled();
+    expect(workflowBudget(root, record).requests).toBe(1);
+    failure.mockRestore();
+    syncBuiltinESMExports();
+    expect(await action.action!(context, '')).toMatchObject({
+      type: 'submit_prompt',
+      content: expect.stringContaining('run_agent_workflow'),
+    });
+    expect(readAgentWorkflow(root, record.id)).toMatchObject({
+      phase: 'ready',
+      approved: true,
+    });
+    expect(config.getApprovalMode()).toBe(ApprovalMode.DEFAULT);
+    expect(workflowBudget(root, record).requests).toBe(1);
+  },
+);
+
 it.each([boostCommand, teamworkCommand, grillMeCommand])(
   'keeps current interview permissions when cancelling a historical $name task',
   async (command) => {
