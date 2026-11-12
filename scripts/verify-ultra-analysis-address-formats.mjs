@@ -57,8 +57,8 @@ try {
   config = new core.Config({
     sessionId: 'address-format-verification',
     model: 'fixture',
-    targetDir: workspace,
-    cwd: workspace,
+    targetDir: nativeSample ? path.dirname(sample) : workspace,
+    cwd: nativeSample ? path.dirname(sample) : workspace,
     debugMode: false,
     usageStatisticsEnabled: false,
   });
