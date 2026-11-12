@@ -109,6 +109,7 @@ export function stripReferenceContent(text: string): string {
 export const formatResetTime = (
   resetTime: string | undefined,
   format: 'terse' | 'column' | 'full' = 'full',
+  locale: 'zh' | 'en' = 'en',
 ): string => {
   if (!resetTime) return '';
   const resetDate = new Date(resetTime);
@@ -123,19 +124,21 @@ export const formatResetTime = (
 
   const isTerse = format === 'terse';
   const isColumn = format === 'column';
+  const isZh = locale === 'zh';
 
   if (isTerse || isColumn) {
-    const hoursStr = hours > 0 ? `${hours}h` : '';
-    const minutesStr = minutes > 0 ? `${minutes}m` : '';
+    const hoursStr = hours > 0 ? `${hours}${isZh ? '小时' : 'h'}` : '';
+    const minutesStr = minutes > 0 ? `${minutes}${isZh ? '分钟' : 'm'}` : '';
     const duration =
       hoursStr && minutesStr
         ? `${hoursStr} ${minutesStr}`
         : hoursStr || minutesStr;
 
     if (isColumn) {
-      const timeStr = new Intl.DateTimeFormat('en-US', {
+      const timeStr = new Intl.DateTimeFormat(isZh ? 'zh-CN' : 'en-US', {
         hour: 'numeric',
         minute: 'numeric',
+        ...(isZh ? { hour12: false } : {}),
       }).format(resetDate);
       return duration ? `${timeStr} (${duration})` : timeStr;
     }
@@ -145,19 +148,24 @@ export const formatResetTime = (
 
   let duration = '';
   if (hours > 0) {
-    duration = `${hours} hour${hours > 1 ? 's' : ''}`;
+    duration = isZh ? `${hours}小时` : `${hours} hour${hours > 1 ? 's' : ''}`;
     if (minutes > 0) {
-      duration += ` ${minutes} minute${minutes > 1 ? 's' : ''}`;
+      duration += isZh
+        ? ` ${minutes}分钟`
+        : ` ${minutes} minute${minutes > 1 ? 's' : ''}`;
     }
   } else {
-    duration = `${minutes} minute${minutes > 1 ? 's' : ''}`;
+    duration = isZh
+      ? `${minutes}分钟`
+      : `${minutes} minute${minutes > 1 ? 's' : ''}`;
   }
 
-  const timeStr = new Intl.DateTimeFormat('en-US', {
+  const timeStr = new Intl.DateTimeFormat(isZh ? 'zh-CN' : 'en-US', {
     hour: 'numeric',
     minute: 'numeric',
     timeZoneName: 'short',
+    ...(isZh ? { hour12: false } : {}),
   }).format(resetDate);
 
-  return `${duration} at ${timeStr}`;
+  return isZh ? `${duration}后（${timeStr}）` : `${duration} at ${timeStr}`;
 };

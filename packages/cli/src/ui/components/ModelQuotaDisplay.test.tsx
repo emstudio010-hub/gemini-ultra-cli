@@ -7,14 +7,24 @@
 import { renderWithProviders } from '../../test-utils/render.js';
 import { describe, it, expect, vi } from 'vitest';
 import { ModelQuotaDisplay } from './ModelQuotaDisplay.js';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { I18nManager } from '@google/gemini-cli-core';
 
 describe('<ModelQuotaDisplay />', () => {
+  let root: string;
   beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'ultra-quota-control-'));
+    vi.stubEnv('GEMINI_ULTRA_LOCALE_FILE', path.join(root, 'locale.json'));
+    I18nManager.getInstance().setLocale('en');
     vi.stubEnv('TZ', 'UTC');
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllEnvs();
+    fs.rmSync(root, { recursive: true, force: true });
   });
 
   it('renders quota information when buckets are provided', async () => {

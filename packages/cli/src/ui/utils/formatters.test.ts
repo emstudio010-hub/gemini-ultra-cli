@@ -32,6 +32,19 @@ describe('formatters', () => {
       expect(result).toMatch(/1 hour 30 minutes at \d{1,2}:\d{2} [AP]M/);
     });
 
+    it('formats Chinese reset durations and clock labels without changing the English default', () => {
+      const resetTime = new Date(NOW.getTime() + 90 * 60 * 1000).toISOString();
+      expect(formatResetTime(resetTime, 'terse', 'zh')).toBe('1小时 30分钟');
+      expect(formatResetTime(resetTime, 'column', 'zh')).toContain(
+        '(1小时 30分钟)',
+      );
+      expect(formatResetTime(resetTime, 'column', 'zh')).not.toMatch(/[AP]M/);
+      expect(formatResetTime(resetTime, 'full', 'zh')).toContain(
+        '1小时 30分钟后',
+      );
+      expect(formatResetTime(resetTime, 'terse')).toBe('1h 30m');
+    });
+
     it('should format terse time correctly', () => {
       const resetTime = new Date(NOW.getTime() + 90 * 60 * 1000).toISOString(); // 1h 30m
       expect(formatResetTime(resetTime, 'terse')).toBe('1h 30m');

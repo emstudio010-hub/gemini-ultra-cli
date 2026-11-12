@@ -7,7 +7,8 @@
 import type React from 'react';
 import { Box, Text } from 'ink';
 import { theme } from '../semantic-colors.js';
-import { formatResetTime } from '../utils/formatters.js';
+import { useLocale } from '../hooks/useLocale.js';
+import { getQuotaUsage, quotaSummary } from '../utils/quotaDisplay.js';
 import {
   getUsedStatusColor,
   QUOTA_USED_WARNING_THRESHOLD,
@@ -27,11 +28,14 @@ export const QuotaStatsInfo: React.FC<QuotaStatsInfoProps> = ({
   resetTime,
   showDetails = true,
 }) => {
-  if (remaining === undefined || limit === undefined || limit === 0) {
+  const locale = useLocale();
+  const zh = locale === 'zh';
+  const usage = getQuotaUsage(remaining, limit);
+  if (!usage) {
     return null;
   }
 
-  const usedPercentage = 100 - (remaining / limit) * 100;
+  const { usedPercentage } = usage;
   const color = getUsedStatusColor(usedPercentage, {
     warning: QUOTA_USED_WARNING_THRESHOLD,
     critical: QUOTA_USED_CRITICAL_THRESHOLD,
@@ -39,30 +43,23 @@ export const QuotaStatsInfo: React.FC<QuotaStatsInfoProps> = ({
 
   return (
     <Box flexDirection="column" marginTop={0} marginBottom={0}>
-      <Text color={color}>
-        {remaining === 0
-          ? `Limit reached${
-              resetTime
-                ? `, resets in ${formatResetTime(resetTime, 'terse')}`
-                : ''
-            }`
-          : `${usedPercentage.toFixed(0)}% used${
-              resetTime
-                ? ` (Limit resets in ${formatResetTime(resetTime, 'terse')})`
-                : ''
-            }`}
-      </Text>
+      <Text color={color}>{quotaSummary(usage, resetTime, locale)}</Text>
       {showDetails && (
         <>
           <Text color={theme.text.primary}>
-            Usage limit: {limit.toLocaleString()}
+            {zh ? '用量上限：' : 'Usage limit: '}
+            {usage.limit.toLocaleString(zh ? 'zh-CN' : 'en-US')}
           </Text>
           <Text color={theme.text.primary}>
-            Usage limits span all sessions and reset daily.
+            {zh
+              ? '用量上限和重置时间以供应商返回的信息为准。'
+              : 'Usage limits and reset times are reported by your provider.'}
           </Text>
           {remaining === 0 && (
             <Text color={theme.text.primary}>
-              Please /auth to upgrade or switch to an API key to continue.
+              {zh
+                ? '可用 /auth 检查登录状态或切换可用的账户与 API Key。'
+                : 'Use /auth to review authentication or choose another available account or API key.'}
             </Text>
           )}
         </>

@@ -12,6 +12,8 @@ import { formatResetTime } from '../utils/formatters.js';
 import { getDisplayString } from '@google/gemini-cli-core';
 import { useConfig } from '../contexts/ConfigContext.js';
 import { useUIState } from '../contexts/UIStateContext.js';
+import { useLocale } from '../hooks/useLocale.js';
+import { validQuotaFraction } from '../utils/quotaDisplay.js';
 
 interface LocalBucket {
   modelId?: string;
@@ -39,6 +41,7 @@ interface ModelUsageRowProps {
 
 const ModelUsageRow = ({ row, availableWidth }: ModelUsageRowProps) => {
   const { terminalWidth } = useUIState();
+  const locale = useLocale();
 
   const nameColumnWidth = 12;
   const percentageWidth = 4;
@@ -50,7 +53,7 @@ const ModelUsageRow = ({ row, availableWidth }: ModelUsageRowProps) => {
     percentageWidth,
   );
   const resetLabel = row.resetTime
-    ? formatResetTime(row.resetTime, 'column')
+    ? formatResetTime(row.resetTime, 'column', locale)
         .slice(0, resetColumnWidth)
         .padEnd(resetColumnWidth)
     : ''.padEnd(resetColumnWidth);
@@ -98,7 +101,9 @@ const ModelUsageRow = ({ row, availableWidth }: ModelUsageRowProps) => {
 
       <Box width={resetColumnWidth} marginLeft={1}>
         <Text color={theme.text.secondary}>
-          {resetLabel.trim() ? `Resets: ${resetLabel}` : ''}
+          {resetLabel.trim()
+            ? `${locale === 'zh' ? '重置：' : 'Resets: '}${resetLabel}`
+            : ''}
         </Text>
       </Box>
     </Box>
@@ -109,15 +114,16 @@ export const ModelQuotaDisplay = ({
   buckets,
   availableWidth,
   modelsToShow = ['all'],
-  title = 'Model usage',
+  title,
 }: ModelQuotaDisplayProps) => {
   const config = useConfig();
+  const locale = useLocale();
 
   const modelsWithQuotas = useMemo(() => {
     if (!buckets) return [];
 
     let filteredBuckets = buckets.filter(
-      (b) => b.modelId && b.remainingFraction != null,
+      (b) => b.modelId && validQuotaFraction(b.remainingFraction),
     );
 
     if (modelsToShow.includes('current')) {
@@ -202,7 +208,7 @@ export const ModelQuotaDisplay = ({
       <Box flexDirection="column">
         <Box marginBottom={1}>
           <Text bold color={theme.text.primary}>
-            {title}
+            {title ?? (locale === 'zh' ? '模型用量' : 'Model usage')}
           </Text>
         </Box>
 

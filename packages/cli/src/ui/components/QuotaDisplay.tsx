@@ -11,7 +11,8 @@ import {
   QUOTA_USED_WARNING_THRESHOLD,
   QUOTA_USED_CRITICAL_THRESHOLD,
 } from '../utils/displayUtils.js';
-import { formatResetTime } from '../utils/formatters.js';
+import { useLocale } from '../hooks/useLocale.js';
+import { getQuotaUsage, quotaSummary } from '../utils/quotaDisplay.js';
 
 interface QuotaDisplayProps {
   remaining: number | undefined;
@@ -30,11 +31,13 @@ export const QuotaDisplay: React.FC<QuotaDisplayProps> = ({
   forceShow = false,
   lowercase = false,
 }) => {
-  if (remaining === undefined || limit === undefined || limit === 0) {
+  const locale = useLocale();
+  const usage = getQuotaUsage(remaining, limit);
+  if (!usage) {
     return null;
   }
 
-  const usedPercentage = 100 - (remaining / limit) * 100;
+  const { usedPercentage } = usage;
 
   if (!forceShow && usedPercentage < QUOTA_USED_WARNING_THRESHOLD) {
     return null;
@@ -45,21 +48,7 @@ export const QuotaDisplay: React.FC<QuotaDisplayProps> = ({
     critical: QUOTA_USED_CRITICAL_THRESHOLD,
   });
 
-  let text: string;
-  if (remaining === 0) {
-    const resetMsg = resetTime
-      ? `, resets in ${formatResetTime(resetTime, 'terse')}`
-      : '';
-    text = terse ? 'Limit reached' : `Limit reached${resetMsg}`;
-  } else {
-    text = terse
-      ? `${usedPercentage.toFixed(0)}%`
-      : `${usedPercentage.toFixed(0)}% used${
-          resetTime
-            ? ` (Limit resets in ${formatResetTime(resetTime, 'terse')})`
-            : ''
-        }`;
-  }
+  let text = quotaSummary(usage, resetTime, locale, terse);
 
   if (lowercase) {
     text = text.toLowerCase();

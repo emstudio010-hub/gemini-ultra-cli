@@ -7,9 +7,17 @@
 import { render } from '../../test-utils/render.js';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { QuotaDisplay } from './QuotaDisplay.js';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { I18nManager } from '@google/gemini-cli-core';
 
 describe('QuotaDisplay', () => {
+  let root: string;
   beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'ultra-quota-text-'));
+    vi.stubEnv('GEMINI_ULTRA_LOCALE_FILE', path.join(root, 'locale.json'));
+    I18nManager.getInstance().setLocale('en');
     vi.stubEnv('TZ', 'America/Los_Angeles');
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-03-02T20:29:00.000Z'));
@@ -18,6 +26,7 @@ describe('QuotaDisplay', () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllEnvs();
+    fs.rmSync(root, { recursive: true, force: true });
   });
   it('should not render when remaining is undefined', async () => {
     const { lastFrame, unmount } = await render(
