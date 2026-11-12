@@ -231,6 +231,8 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
     baseUrl: string,
     apiKey: string,
     protocol: ProviderProtocol,
+    preserveSelection = false,
+    customHeaders?: Record<string, string>,
   ) => {
     catalogRequest.current?.abort();
     const controller = new AbortController();
@@ -244,19 +246,30 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
         baseUrl,
         apiKey,
         protocol,
+        customHeaders,
         timeoutMs: 7000,
         signal: controller.signal,
       });
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted || catalogRequest.current !== controller)
+        return;
       if (res.models && res.models.length > 0) {
         const unique = Array.from(new Set(res.models));
-        setModelPool(unique);
-        setSelectedModelsSet(new Set(unique));
+        if (preserveSelection) {
+          setModelPool((previous) => [...new Set([...previous, ...unique])]);
+        } else {
+          setModelPool(unique);
+          setSelectedModelsSet(new Set(unique));
+        }
         setStatusMessage(
-          t(
-            `已加载 ${unique.length} 个模型。空格勾选，Ctrl+A 全选。`,
-            `Loaded ${unique.length} models. Space to toggle, Ctrl+A for all.`,
-          ),
+          preserveSelection
+            ? t(
+                '目录已刷新；保留原选择，新模型可手动勾选。',
+                'Catalog refreshed; choices retained. Select new models manually.',
+              )
+            : t(
+                `已加载 ${unique.length} 个模型。空格勾选，Ctrl+A 全选。`,
+                `Loaded ${unique.length} models. Space to toggle, Ctrl+A for all.`,
+              ),
         );
       } else {
         setStatusMessage(
@@ -531,6 +544,21 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
         // 5. MODEL CHECKLIST (Multi-select, Select All, Custom)
         // ------------------------------------------------------------------
         if (page === 'select-models-checklist') {
+          if (key.ctrl && key.name === 'r') {
+            if (!catalogRequest.current?.signal.aborted && isFetching)
+              return true;
+            const provider = editingProviderId
+              ? mgr.getProvider(editingProviderId)
+              : undefined;
+            void handleFetchModels(
+              provider?.baseUrl ?? formUrl,
+              provider?.apiKey ?? formKey,
+              provider?.protocol ?? PROTOCOLS[protocolCursor].id,
+              true,
+              provider?.customHeaders,
+            );
+            return true;
+          }
           if (key.name === 'up') {
             setModelCursor((p) =>
               p > 0 ? p - 1 : Math.max(0, modelPool.length - 1),
@@ -585,6 +613,8 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
               );
               return true;
             }
+            catalogRequest.current?.abort();
+            setIsFetching(false);
             const targetProv = editingProviderId
               ? mgr.getProvider(editingProviderId)
               : undefined;
@@ -1166,6 +1196,7 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
             </Text>
             <Text color={theme.text.accent}>
               [Ctrl+A] {t('全选 / 清空', 'Select all / Clear')}
+              {'  '}[Ctrl+R] {t('刷新目录', 'Refresh Catalog')}
             </Text>
             <Text color={theme.text.accent}>
               [Enter] {t('完成并保存模型', 'Save Models')}
