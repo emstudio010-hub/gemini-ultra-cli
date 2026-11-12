@@ -45,6 +45,7 @@ try {
   const sample = nativeSample || path.join(workspace, 'fixture.bin');
   if (!nativeSample)
     fs.writeFileSync(sample, 'controlled native output fixture');
+  const canonicalSample = fs.realpathSync.native(sample);
   const module = fs
     .readdirSync(path.dirname(entry))
     .filter((name) => /^chunk-.+\.js$/.test(name))
@@ -67,9 +68,14 @@ try {
   if (!nativeSample) {
     process.env.GEMINI_ULTRA_TOOL_R2 = process.execPath;
     childProcess.execFile = (file, args, options, callback) => {
-      assert.equal(file, process.execPath);
-      assert.equal(options.shell, false);
-      assert.equal(args.at(-1), fs.realpathSync(sample));
+      try {
+        assert.equal(file, process.execPath);
+        assert.equal(options.shell, false);
+        assert.equal(args.at(-1), canonicalSample);
+      } catch (error) {
+        console.error(error);
+        throw error;
+      }
       const command = args[args.indexOf('-c') + 1];
       commands.push(command);
       callback(
