@@ -13,6 +13,10 @@ import { I18nManager } from '../i18n/i18nManager.js';
 import { z } from 'zod';
 import { readLocalJsonConfig } from '../utils/localJsonConfig.js';
 import {
+  readProviderCatalog,
+  ProviderCatalogSizeError,
+} from './providerCatalog.js';
+import {
   type ExternalProviderProfile,
   type ProviderProtocol,
   type ProvidersConfigFile,
@@ -686,6 +690,7 @@ export class ProviderManager {
     );
 
     try {
+      controller.signal.throwIfAborted();
       const response = await fetch(modelsUrl, {
         method: 'GET',
         headers,
@@ -693,6 +698,7 @@ export class ProviderManager {
       });
 
       if (!response.ok) {
+        void response.body?.cancel().catch(() => {});
         return {
           models: [],
           error: `HTTP ${response.status}: ${response.statusText}`,
@@ -704,7 +710,7 @@ export class ProviderManager {
           data: z.array(z.unknown()).optional(),
           models: z.array(z.unknown()).optional(),
         })
-        .safeParse(await response.json());
+        .safeParse(await readProviderCatalog(response, controller.signal));
       if (!body.success)
         return { models: [], error: 'Invalid model catalog response.' };
 
@@ -733,11 +739,14 @@ export class ProviderManager {
     } catch (err) {
       return {
         models: [],
-        error: controller.signal.aborted
-          ? params.signal?.aborted
-            ? 'Model discovery cancelled.'
-            : 'Model discovery timed out.'
-          : `Model discovery failed (${err instanceof Error ? err.name : 'network error'}). Check the endpoint, headers and network.`,
+        error:
+          err instanceof ProviderCatalogSizeError
+            ? err.message
+            : controller.signal.aborted
+              ? params.signal?.aborted
+                ? 'Model discovery cancelled.'
+                : 'Model discovery timed out.'
+              : `Model discovery failed (${err instanceof Error ? err.name : 'network error'}). Check the endpoint, headers and network.`,
       };
     } finally {
       clearTimeout(timer);
