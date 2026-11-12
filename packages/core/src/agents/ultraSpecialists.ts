@@ -11,6 +11,8 @@ import { AGENT_TOOL_NAME } from '../tools/tool-names.js';
 import { currentSwarmActor } from './swarm.js';
 
 const resultSchema = z.object({ response: z.string() });
+const binaryEvidenceGuidance =
+  '\nWhen interpreting binary evidence, preserve exact row addresses and use addressFormats rather than mental decimal/hex conversion. A CALL site differs from its containing function entry. Quote the recorded opcode before stating a separate inference. Recovered prototypes (including void) and compiler selections are analyzer assumptions, not original interfaces or build provenance. Check the target architecture and ABI: on x86-64 a write to eax/edi zero-extends rax/rdi, while ret need not explicitly read a return register for its value to reach a caller. Do not infer discarded returns or absent callers from an instruction window. Keep unobserved runtime behavior and incomplete coverage unresolved.';
 const roleDefinitions = [
   {
     name: 'researcher',
@@ -120,7 +122,7 @@ export function ultraSpecialists(
       get promptConfig() {
         return {
           ...base.promptConfig,
-          systemPrompt: `${base.promptConfig.systemPrompt}\n\nRole: ${role.name}\n${role.directive}${role.readOnly ? '\nLimit conclusions to the inspected evidence. A caller or dependency missing from a bounded snapshot is unverified, not proof that it is absent from the product. Return evidence paths, outcomes and concrete unresolved gaps so the parent can integrate the result without repeating the investigation.' : ''}`,
+          systemPrompt: `${base.promptConfig.systemPrompt}\n\nRole: ${role.name}\n${role.directive}${role.readOnly ? '\nLimit conclusions to the inspected evidence. A caller or dependency missing from a bounded snapshot is unverified, not proof that it is absent from the product. Return evidence paths, outcomes and concrete unresolved gaps so the parent can integrate the result without repeating the investigation.' + binaryEvidenceGuidance : ''}`,
         };
       },
     };
@@ -164,7 +166,7 @@ export function workflowAuditor(context: AgentLoopContext) {
     get promptConfig() {
       return {
         ...base.promptConfig,
-        systemPrompt: `${base.promptConfig.systemPrompt}\nIndependently inspect actual files against the assigned acceptance criteria. Read only. Never infer that a required check passed from a writer's assertion alone. Distinguish fixture, static, live, and unavailable evidence. Unmet or unverified explicit requirements must return passed=false. Return passed, summary and concrete evidence paths through complete_task.`,
+        systemPrompt: `${base.promptConfig.systemPrompt}\nIndependently inspect actual files against the assigned acceptance criteria. Read only. Never infer that a required check passed from a writer's assertion alone. Distinguish fixture, static, live, and unavailable evidence. Unmet or unverified explicit requirements must return passed=false. Return passed, summary and concrete evidence paths through complete_task.${binaryEvidenceGuidance}`,
       };
     },
   };

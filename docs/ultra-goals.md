@@ -1416,3 +1416,6 @@ WI-143/E-340至341/F-102：三协作model命令新增角色/当前Swarm成员/�
 ## 2026-11-13 红队角色入口授权一致性
 
 WI-144/E-342至343/F-103：原只有Swarm检查红队grant，直接/批量AgentTool及排队后撤销可进入子执行器。提取共享检查，确认/排队前/获槽后三处核对，当前语言提示；普通本地角色和远端不改，预取消优先原reason，恢复后显式重试。修正registry夹具后5旧行为失败；修后8相关通过，测试lint修正后受影响队列1项重验通过，strict core源码编译及4文件lint退出0。Windows实际Config注册/角色工具集/AgentTool/批量/单槽调度，受控legacy/session适配器12条件通过、5147ms/退出0/0网络，拒绝不启动、预算字节保持、普通researcher不受影响。首夹具及lint失败保留，不承诺在途强制撤销或真实模型/最终平台验收。无打包重装版本CI付费调用，个人配置及安装83保持，goal active。详见docs/ultra-redteam-entry-handoff.md。
+## 2026-11-13 逆向报告推断指引
+
+WI-145/E-344：只读复核E-294失败，地址手算及返回值/edi宽度推断失真仍保留，不宣称工具缺陷或真实任务已修复。为四只读角色实际prompt直接增加精确地址/引用与推断分列/ABI宽度/ret返回流及原型compiler局限规则，local-reverse源技能补调用链证据章节及现有红队授权入口说明。strict core源码编译/lint/格式通过，无新单测或全量冒烟。Windows实际Config角色prompt、源SkillLoader→公开addSkills注入→ActivateSkillTool完整送达及旧15输入SHA/失败状态保持，10条件通过、5891ms/退出0/0网络/模型/原生分析器。仅证明指引送达，非模型质量或最终包发现验收。无打包重装版本CI付费调用，个人配置及安装83保持，goal active。详见docs/ultra-binary-evidence-guidance-handoff.md。
