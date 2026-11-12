@@ -23,6 +23,7 @@ import {
   type SlashCommand,
 } from './types.js';
 import { MessageType } from '../types.js';
+import { modelSaveError } from '../utils/modelSaveError.js';
 
 function getValidModelNames(context: CommandContext): Set<string> {
   const validModels = new Set<string>([
@@ -65,14 +66,17 @@ function getValidModelNames(context: CommandContext): Set<string> {
       validModels.add(item.modelId);
       validModels.add(item.qualifiedId);
     }
-  } catch {}
+  } catch {
+    // Native and configured aliases remain available if provider loading fails.
+  }
 
   return validModels;
 }
 
 const setModelCommand: SlashCommand = {
   name: 'set',
-  description: '切换当前激活的生成模型（支持 Gemini 及全部已配置的外接供应商模型）',
+  description:
+    '切换当前激活的生成模型（支持 Gemini 及全部已配置的外接供应商模型）',
   kind: CommandKind.BUILT_IN,
   autoExecute: false,
   action: async (context: CommandContext, args: string) => {
@@ -99,7 +103,12 @@ const setModelCommand: SlashCommand = {
     }
 
     if (context.services.agentContext?.config) {
-      context.services.agentContext.config.setModel(modelName, !persist);
+      try {
+        context.services.agentContext.config.setModel(modelName, !persist);
+      } catch {
+        context.ui.addItem({ type: MessageType.ERROR, text: modelSaveError() });
+        return;
+      }
       const event = new ModelSlashCommandEvent(modelName);
       logModelSlashCommand(context.services.agentContext.config, event);
 

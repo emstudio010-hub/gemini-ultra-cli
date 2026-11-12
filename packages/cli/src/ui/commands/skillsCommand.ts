@@ -24,6 +24,7 @@ import {
   classifySkill,
 } from '@google/gemini-cli-core';
 import { SkillSpecialSessionDialog } from '../components/SkillSpecialSessionDialog.js';
+import { modelSaveError } from '../utils/modelSaveError.js';
 import {
   linkSkill,
   renderSkillActionFeedback,
@@ -442,11 +443,19 @@ export const skillsCommand: SlashCommand = {
           component: React.createElement(SkillSpecialSessionDialog, {
             skill,
             onConfirm: (selectedModel: string, effort) => {
-              context.ui.removeComponent();
               const config = context.services.agentContext?.config;
               if (config) {
-                config.setModel(selectedModel, false);
+                try {
+                  config.setModel(selectedModel, false);
+                } catch {
+                  context.ui.addItem({
+                    type: MessageType.ERROR,
+                    text: modelSaveError(),
+                  });
+                  return;
+                }
               }
+              context.ui.removeComponent();
               skillManager?.activateSkill(skill.name);
               const profile = classifySkill(skill);
 

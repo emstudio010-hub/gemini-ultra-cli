@@ -35,6 +35,7 @@ import { DescriptiveRadioButtonSelect } from './shared/DescriptiveRadioButtonSel
 import { ConfigContext } from '../contexts/ConfigContext.js';
 import { useSettings } from '../contexts/SettingsContext.js';
 import { useLocale } from '../hooks/useLocale.js';
+import { modelSaveError } from '../utils/modelSaveError.js';
 
 interface ModelDialogProps {
   onClose: () => void;
@@ -53,6 +54,7 @@ export function ModelDialog({ onClose }: ModelDialogProps): React.JSX.Element {
     config?.getProModelNoAccessSync() ? 'manual' : 'main',
   );
   const [persistMode, setPersistMode] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
 
   useEffect(() => {
     async function checkAccess() {
@@ -119,6 +121,7 @@ export function ModelDialog({ onClose }: ModelDialogProps): React.JSX.Element {
       }
       if (key.name === 'tab') {
         setPersistMode((prev) => !prev);
+        setSaveFailed(false);
         return true;
       }
       return false;
@@ -369,7 +372,12 @@ export function ModelDialog({ onClose }: ModelDialogProps): React.JSX.Element {
       if (config) {
         // Qualified model IDs route this session without rewriting provider
         // defaults. The existing model preference callback owns Remember.
-        config.setModel(model, persistMode ? false : true);
+        try {
+          config.setModel(model, !persistMode);
+        } catch {
+          setSaveFailed(true);
+          return;
+        }
         const event = new ModelSlashCommandEvent(model);
         logModelSlashCommand(config, event);
       }
@@ -387,6 +395,9 @@ export function ModelDialog({ onClose }: ModelDialogProps): React.JSX.Element {
       width="100%"
     >
       <Text bold>{isZh ? '选择模型' : 'Select Model'}</Text>
+      {saveFailed ? (
+        <Text color={theme.status.error}>{modelSaveError()}</Text>
+      ) : null}
 
       <Box marginTop={1}>
         <DescriptiveRadioButtonSelect

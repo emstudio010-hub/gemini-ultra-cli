@@ -2963,6 +2963,32 @@ describe('Config getHooks', () => {
       expect(config.getActiveModel()).toBe(originalModel);
     });
 
+    it('keeps live model and fallback state when preferred model saving fails, then permits retry', () => {
+      const failure = new Error('write failed');
+      const onModelChange = vi.fn().mockImplementationOnce(() => {
+        throw failure;
+      });
+      const config = new Config({
+        ...baseParams,
+        model: 'old-model',
+        onModelChange,
+      });
+      config.setActiveModel('fallback-model');
+      const reset = vi.spyOn(config.getModelAvailabilityService(), 'reset');
+      const modelEvents = mockCoreEvents.emitModelChanged.mock.calls.length;
+      expect(() => config.setModel('new-model', false)).toThrow(failure);
+      expect(config.getModel()).toBe('old-model');
+      expect(config.getActiveModel()).toBe('fallback-model');
+      expect(reset).not.toHaveBeenCalled();
+      expect(mockCoreEvents.emitModelChanged.mock.calls.length).toBe(
+        modelEvents,
+      );
+      config.setModel('new-model', false);
+      expect(config.getModel()).toBe('new-model');
+      expect(config.getActiveModel()).toBe('new-model');
+      expect(reset).toHaveBeenCalledOnce();
+    });
+
     it('should call onModelChange when a new model is set and should persist', () => {
       const onModelChange = vi.fn();
       const config = new Config({

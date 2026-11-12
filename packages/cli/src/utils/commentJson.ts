@@ -51,6 +51,7 @@ function writeAtomicSync(filePath: string, content: string): void {
 export function updateSettingsFilePreservingFormat(
   filePath: string,
   updates: Record<string, unknown>,
+  throwOnInvalidFile = false,
 ): void {
   const dirPath = path.dirname(filePath);
   if (!fs.existsSync(dirPath)) {
@@ -74,6 +75,9 @@ export function updateSettingsFilePreservingFormat(
         rawParsed === null ||
         Array.isArray(rawParsed)
       ) {
+        if (throwOnInvalidFile) {
+          throw new Error('Settings file must contain an object.');
+        }
         parsed = {};
       } else {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
@@ -90,6 +94,7 @@ export function updateSettingsFilePreservingFormat(
       writeAtomicSync(filePath, JSON.stringify(updates, null, 2));
       return;
     }
+    if (throwOnInvalidFile) throw error;
     coreEvents.emitFeedback(
       'error',
       'Error parsing settings file. Please check the JSON syntax.',

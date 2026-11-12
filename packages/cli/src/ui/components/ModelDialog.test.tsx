@@ -226,6 +226,49 @@ describe('<ModelDialog />', () => {
     },
   );
 
+  it.each(['zh', 'en'] as const)(
+    'keeps the model dialog open on save failure and permits retry (%s)',
+    async (locale) => {
+      I18nManager.getInstance().setLocale(locale);
+      mockSetModel.mockImplementationOnce(() => {
+        throw new Error('PRIVATE_WRITE_DETAIL');
+      });
+      const rendered = await renderComponent();
+      try {
+        await act(async () => {
+          rendered.stdin.write('\t');
+          await rendered.waitUntilReady();
+        });
+        await act(async () => {
+          rendered.stdin.write('\r');
+          await rendered.waitUntilReady();
+        });
+        await waitFor(() =>
+          expect(rendered.lastFrame()).toContain(
+            locale === 'zh'
+              ? '模型偏好未保存'
+              : 'Model preference was not saved',
+          ),
+        );
+        expect(rendered.lastFrame()).not.toContain('PRIVATE_WRITE_DETAIL');
+        expect(mockOnClose).not.toHaveBeenCalled();
+        expect(mockLogModelSlashCommand).not.toHaveBeenCalled();
+        await act(async () => {
+          rendered.stdin.write('\r');
+          await rendered.waitUntilReady();
+        });
+        await waitFor(() => expect(mockOnClose).toHaveBeenCalledOnce());
+        expect(mockSetModel).toHaveBeenNthCalledWith(
+          2,
+          GEMINI_MODEL_ALIAS_AUTO,
+          false,
+        );
+      } finally {
+        rendered.unmount();
+      }
+    },
+  );
+
   it('renders the initial "main" view correctly', async () => {
     const { lastFrame, unmount } = await renderComponent();
     expect(lastFrame()).toContain('Select Model');

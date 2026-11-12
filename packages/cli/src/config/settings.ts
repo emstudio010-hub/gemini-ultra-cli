@@ -495,8 +495,12 @@ export class LoadedSettings {
     key: string,
     value: unknown,
     originalValue: unknown = value,
+    requirePersistence = false,
   ): void {
     const settingsFile = this.forScope(scope);
+    if (requirePersistence && !this.isPersistable(settingsFile)) {
+      throw new Error('Cannot persist a value in read-only settings.');
+    }
 
     if (scope === SettingScope.Workspace && !this.isPersistable(settingsFile)) {
       if (settingsFile.path === '' || settingsFile.path === this.user.path) {
@@ -513,7 +517,16 @@ export class LoadedSettings {
         ? structuredClone(value)
         : value;
 
-    setNestedProperty(settingsFile.settings, key, valueToSet);
+    // Strict callers publish changes only after the write succeeds. Keep the
+    // existing best-effort behavior for other settings callers.
+    const pendingFile = requirePersistence
+      ? {
+          ...settingsFile,
+          settings: structuredClone(settingsFile.settings),
+          originalSettings: structuredClone(settingsFile.originalSettings),
+        }
+      : settingsFile;
+    setNestedProperty(pendingFile.settings, key, valueToSet);
 
     if (this.isPersistable(settingsFile)) {
       // Use a fresh clone for originalSettings to ensure total independence
@@ -521,8 +534,12 @@ export class LoadedSettings {
         typeof originalValue === 'object' && originalValue !== null
           ? structuredClone(originalValue)
           : originalValue;
-      setNestedProperty(settingsFile.originalSettings, key, originalValueToSet);
-      saveSettings(settingsFile);
+      setNestedProperty(pendingFile.originalSettings, key, originalValueToSet);
+      saveSettings(pendingFile, requirePersistence);
+    }
+    if (requirePersistence) {
+      settingsFile.settings = pendingFile.settings;
+      settingsFile.originalSettings = pendingFile.originalSettings;
     }
 
     this._merged = this.computeMergedSettings();
@@ -1451,7 +1468,10 @@ export function migrateDeprecatedSettings(
   return anyModified;
 }
 
-export function saveSettings(settingsFile: SettingsFile): void {
+export function saveSettings(
+  settingsFile: SettingsFile,
+  throwOnError = false,
+): void {
   // Clear the entire cache on any save.
   settingsCache.clear();
 
@@ -1465,11 +1485,20 @@ export function saveSettings(settingsFile: SettingsFile): void {
     const settingsToSave = settingsFile.originalSettings;
 
     // Use the format-preserving update function
-    updateSettingsFilePreservingFormat(
-      settingsFile.path,
-      settingsToSave as Record<string, unknown>,
-    );
+    if (throwOnError) {
+      updateSettingsFilePreservingFormat(
+        settingsFile.path,
+        settingsToSave as Record<string, unknown>,
+        true,
+      );
+    } else {
+      updateSettingsFilePreservingFormat(
+        settingsFile.path,
+        settingsToSave as Record<string, unknown>,
+      );
+    }
   } catch (error) {
+    if (throwOnError) throw error;
     const detailedErrorMessage = getFsErrorMessage(error);
     coreEvents.emitFeedback(
       'error',
@@ -1483,16 +1512,7 @@ export function saveModelChange(
   loadedSettings: LoadedSettings,
   model: string,
 ): void {
-  try {
-    loadedSettings.setValue(SettingScope.User, 'model.name', model);
-  } catch (error) {
-    const detailedErrorMessage = getFsErrorMessage(error);
-    coreEvents.emitFeedback(
-      'error',
-      `Failed to save preferred model: ${detailedErrorMessage}`,
-      error,
-    );
-  }
+  loadedSettings.setValue(SettingScope.User, 'model.name', model, model, true);
 }
 
 function migrateExperimentalSettings(

@@ -69,6 +69,7 @@ import {
   type Settings,
   type SettingsFile,
   saveSettings,
+  saveModelChange,
   getDefaultsFromSchema,
   loadEnvironment,
   migrateDeprecatedSettings,
@@ -3514,6 +3515,41 @@ describe('Settings Loading and Merging', () => {
           autoMemory: '${TEST_AUTO_MEMORY:-false}',
         },
       });
+    });
+  });
+
+  describe('preferred model persistence failure', () => {
+    it('throws on model save failure without publishing settings, then allows an explicit retry', () => {
+      const settings = createMockSettings({ model: { name: 'old-model' } });
+      const before = structuredClone(settings.user);
+      const snapshot = settings.getSnapshot();
+      const failure = new Error('read only file');
+      vi.mocked(updateSettingsFilePreservingFormat).mockImplementationOnce(
+        () => {
+          throw failure;
+        },
+      );
+      expect(() => saveModelChange(settings, 'new-model')).toThrow(failure);
+      expect(settings.user).toEqual(before);
+      expect(settings.getSnapshot()).toBe(snapshot);
+      expect(settings.merged.model.name).toBe('old-model');
+      saveModelChange(settings, 'new-model');
+      expect(settings.merged.model.name).toBe('new-model');
+      expect(settings.user.originalSettings.model?.name).toBe('new-model');
+      expect(updateSettingsFilePreservingFormat).toHaveBeenLastCalledWith(
+        settings.user.path,
+        settings.user.originalSettings,
+        true,
+      );
+    });
+
+    it('rejects read-only preferred model storage without changing memory or writing', () => {
+      const settings = createMockSettings({ model: { name: 'old-model' } });
+      settings.user.readOnly = true;
+      const before = structuredClone(settings.user);
+      expect(() => saveModelChange(settings, 'new-model')).toThrow();
+      expect(settings.user).toEqual(before);
+      expect(updateSettingsFilePreservingFormat).not.toHaveBeenCalled();
     });
   });
 

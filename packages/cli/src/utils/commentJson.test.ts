@@ -35,6 +35,22 @@ describe('commentJson', () => {
   });
 
   describe('updateSettingsFilePreservingFormat', () => {
+    it.each(['{invalid', '[]', 'null'])(
+      'rejects invalid preferred-model storage without overwriting it: %s',
+      (content) => {
+        fs.writeFileSync(testFilePath, content);
+        expect(() =>
+          updateSettingsFilePreservingFormat(
+            testFilePath,
+            { model: { name: 'new-model' } },
+            true,
+          ),
+        ).toThrow();
+        expect(fs.readFileSync(testFilePath, 'utf8')).toBe(content);
+        expect(fs.readdirSync(tempDir)).toEqual(['settings.json']);
+      },
+    );
+
     it('should preserve comments when updating settings', () => {
       const originalContent = `{
         // Model configuration

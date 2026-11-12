@@ -83,6 +83,30 @@ describe('modelCommand', () => {
   });
 
   describe('set subcommand', () => {
+    it('reports a preferred model save failure without claiming persistence', async () => {
+      const setCommand = modelCommand.subCommands!.find(
+        (command) => command.name === 'set',
+      )!;
+      mockContext.services.agentContext = {
+        setModel: () => {
+          throw new Error('PRIVATE_WRITE_DETAIL');
+        },
+        get config() {
+          return this;
+        },
+      } as unknown as Config;
+      await expect(
+        setCommand.action!(mockContext, 'gemini-2.5-pro --persist'),
+      ).resolves.toBeUndefined();
+      expect(mockContext.ui.addItem).toHaveBeenCalledOnce();
+      expect(mockContext.ui.addItem).toHaveBeenCalledWith(
+        expect.objectContaining({ type: MessageType.ERROR }),
+      );
+      expect(
+        JSON.stringify(vi.mocked(mockContext.ui.addItem).mock.calls),
+      ).not.toContain('PRIVATE_WRITE_DETAIL');
+    });
+
     it('should set the model and log the command', async () => {
       const setCommand = modelCommand.subCommands?.find(
         (c) => c.name === 'set',

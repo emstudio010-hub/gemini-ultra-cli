@@ -1974,6 +1974,11 @@ export class Config implements McpContext, AgentLoopContext {
   }
 
   setModel(newModel: string, isTemporary: boolean = true): void {
+    // A remembered choice must reach storage before publishing the live model.
+    // Callers can show the failure and retry without losing fallback state.
+    if (this.onModelChange && !isTemporary) {
+      this.onModelChange(newModel);
+    }
     if (this.model !== newModel || this._activeModel !== newModel) {
       this.model = newModel;
       // When the user explicitly sets a model, that becomes the active model.
@@ -1982,9 +1987,6 @@ export class Config implements McpContext, AgentLoopContext {
       this.lastEmittedQuotaRemaining = undefined;
       this.lastEmittedQuotaLimit = undefined;
       this.emitQuotaChangedEvent();
-    }
-    if (this.onModelChange && !isTemporary) {
-      this.onModelChange(newModel);
     }
     this.modelAvailabilityService.reset();
   }
