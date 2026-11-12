@@ -15,4 +15,4 @@ Swarm此前仅在抛异常时保留旧成果；WorkflowAgentResult正常返回co
 core
 typecheck与相关eslint退出0。新随包检查使用两个依次退出的独立进程：第一进程生成已接收报告、未完成续接及独立部分档案，第二进程明确resume并核对原模型/报告/累计预算后重试与独立验证；执行器受控、0模型/网络。不会用此fixture证明真实供应商或长时间压力验收。
 
-工程证据：swarm-incomplete-before-junit.xml/-before.log、swarm-incomplete-junit.xml/-log、swarm-incomplete-types.log、swarm-incomplete-lint.log、swarm-incomplete-script-lint.log。新脚本首lint因全局AbortSignal引用失败，改用globalThis后复核；原日志保留。候选preview.80待swarm-result-recovery范围三平台分发与本机安装；其他链跳过，不全量/冒烟，不重跑既有付费任务。不合并master、不正式Release。
+工程证据：swarm-incomplete-before-junit.xml/-before.log、swarm-incomplete-junit.xml/-log、swarm-incomplete-types.log、swarm-incomplete-lint.log、swarm-incomplete-script-lint.log。新脚本首lint因全局AbortSignal引用失败，改用globalThis后复核；首次本地包检查误将详情面板的1200字符错误预览与完整错误比较，按既有预览契约修正观察器，原失败保留，产品未因此改变。候选preview.80待swarm-result-recovery范围三平台分发与本机安装；其他链跳过，不全量/冒烟，不重跑既有付费任务。不合并master、不正式Release。

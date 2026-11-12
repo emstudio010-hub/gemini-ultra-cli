@@ -172,7 +172,7 @@ if (!phase) {
       assert.equal(
         core.readAgentTaskDetails(root, { mode: 'swarm', id: swarm.id })
           .members[0].lastError,
-        member.lastError,
+        member.lastError.slice(0, 1200),
       );
       assert.equal(
         core.swarmSnapshot(root, swarm.id).members[0].fullResult.sha256,
