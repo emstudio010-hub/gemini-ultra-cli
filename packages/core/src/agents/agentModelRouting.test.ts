@@ -13,6 +13,7 @@ import type { Config } from '../config/config.js';
 import { BaseLlmClient } from '../core/baseLlmClient.js';
 import { handleFallback } from '../fallback/handler.js';
 import { UniversalContentGenerator } from '../providers/universalContentGenerator.js';
+import { ExternalFallbackGenerator } from '../providers/externalFallbackGenerator.js';
 import { ProviderManager } from '../providers/providerManager.js';
 import { LlmRole } from '../telemetry/llmRole.js';
 import {
@@ -110,6 +111,70 @@ const request = () =>
     'fixture',
     LlmRole.SUBAGENT,
   );
+
+it.each(['native-generate', 'native-stream', 'unresolved-main'] as const)(
+  'rejects unsupported external-only %s locally before spending dispatch budget',
+  async (operation) => {
+    const record = createAgentWorkflow(
+      root,
+      'boost',
+      'Keep authentication mismatch local',
+      'default',
+    );
+    const file = path.join(root, 'agent-workflows', `${record.id}.budget.json`);
+    const before = fs.readFileSync(file);
+    const providerBefore = fs.readFileSync(providersFile);
+    const routed = new UniversalContentGenerator(
+      new ExternalFallbackGenerator(),
+      { storage: { getProjectTempDir: () => root } } as unknown as Config,
+    );
+    const execute = async (): Promise<unknown> =>
+      operation === 'native-stream'
+        ? routed.generateContentStream(
+            {
+              model: 'main-model',
+              contents: 'No native credentials in this session',
+            },
+            'fixture',
+            LlmRole.SUBAGENT,
+          )
+        : routed.generateContent(
+            {
+              model:
+                operation === 'unresolved-main'
+                  ? 'unregistered-bare-model'
+                  : 'main-model',
+              contents: 'No native credentials in this session',
+            },
+            'fixture',
+            LlmRole.MAIN,
+          );
+    const run = () =>
+      operation === 'unresolved-main'
+        ? execute()
+        : withAgentModel('native:gemini-fixture', execute, () => {});
+    await expect(run()).rejects.toMatchObject({
+      name: 'ProviderRouteError',
+      message: expect.stringContaining('/auth'),
+    });
+    expect(fs.readFileSync(file)).toEqual(before);
+    expect(fs.readFileSync(providersFile)).toEqual(providerBefore);
+    expect(fetch).not.toHaveBeenCalled();
+  },
+);
+
+it('keeps offline token estimates available for an external-only native selection', async () => {
+  const routed = new UniversalContentGenerator(new ExternalFallbackGenerator());
+  const contents = 'Offline metadata does not require native authentication';
+  const counted = await withAgentModel(
+    'native:gemini-fixture',
+    () => routed.countTokens({ model: 'main-model', contents }),
+    () => {},
+  );
+  expect(counted.totalTokens).toBeGreaterThan(0);
+  expect(Number.isInteger(counted.totalTokens)).toBe(true);
+  expect(fetch).not.toHaveBeenCalled();
+});
 
 it('counts tokens for parallel native member models through the utility client without using the parent model', async () => {
   const before = fs.readFileSync(providersFile);

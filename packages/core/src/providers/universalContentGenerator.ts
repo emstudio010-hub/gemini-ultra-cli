@@ -20,6 +20,7 @@ import type { Config } from '../config/config.js';
 import { LlmRole } from '../telemetry/llmRole.js';
 import { ProviderManager } from './providerManager.js';
 import { ProviderRouteError } from './providerRouteError.js';
+import { ExternalFallbackGenerator } from './externalFallbackGenerator.js';
 import { I18nManager } from '../i18n/i18nManager.js';
 import type { ExternalProviderProfile } from './providerTypes.js';
 import { withUltraPrompt } from './ultraPromptConfig.js';
@@ -145,6 +146,21 @@ export class UniversalContentGenerator implements ContentGenerator {
     return Math.ceil(text.length / 3);
   }
 
+  private resolveGeneration(model: string) {
+    const resolution = this.resolve(model);
+    if (
+      !resolution &&
+      this.fallbackGenerator instanceof ExternalFallbackGenerator
+    )
+      throw new ProviderRouteError(
+        I18nManager.getInstance().t(
+          '当前仅外部网关认证，无法执行该模型。请用 /provider list 和 /model 选择已配置的供应商模型；原生 Google 模型需要先通过 /auth 配置原生认证。没有发起模型请求。',
+          'This external-only session cannot dispatch this model. Select a configured provider with /provider list and /model; native Google models require native authentication through /auth first. No model request was sent.',
+        ),
+      );
+    return resolution;
+  }
+
   getModelContextWindow(model: string): number | undefined {
     const resolution = this.resolve(model);
     return resolution
@@ -166,7 +182,9 @@ export class UniversalContentGenerator implements ContentGenerator {
     try {
       return await this.fallbackGenerator.countTokens({
         ...request,
-        model: selected?.startsWith('native:') ? selected.slice(7) : request.model,
+        model: selected?.startsWith('native:')
+          ? selected.slice(7)
+          : request.model,
         contents: stripProviderReasoning(providerContents(request.contents)),
       });
     } catch {
@@ -191,7 +209,7 @@ export class UniversalContentGenerator implements ContentGenerator {
         ...request,
         model: selected.startsWith('native:') ? selected.slice(7) : selected,
       };
-    const resolution = this.resolve(request.model);
+    const resolution = this.resolveGeneration(request.model);
     consumeSwarmRequest(this.gcConfig?.storage?.getProjectTempDir());
     consumeWorkflowRequest(this.gcConfig?.storage?.getProjectTempDir());
     if (role === LlmRole.MAIN || role === LlmRole.SUBAGENT)
@@ -235,7 +253,7 @@ export class UniversalContentGenerator implements ContentGenerator {
         ...request,
         model: selected.startsWith('native:') ? selected.slice(7) : selected,
       };
-    const resolution = this.resolve(request.model);
+    const resolution = this.resolveGeneration(request.model);
     consumeSwarmRequest(this.gcConfig?.storage?.getProjectTempDir());
     consumeWorkflowRequest(this.gcConfig?.storage?.getProjectTempDir());
     if (role === LlmRole.MAIN || role === LlmRole.SUBAGENT)

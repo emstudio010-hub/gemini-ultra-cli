@@ -1398,3 +1398,6 @@ WI-137/E-328至329/F-096：未知主provider:model前缀原来走原生fallback�
 ## 2026-11-13 原生成员token计算模型一致性
 
 WI-138/E-330至331/F-097：原countTokens路由识别native但未替换传出model，工具客户端普通/校准计数使用主模型；旧并行场景失败，本地估算对照通过。现在同原生生成使用成员ID、原信号与上下文保持；4项必要检查、strict core源码编译及相关lint通过。Windows编译源码BaseLlmClient/成员作用域/通用生成器与受控计数器并发屏障，10条件通过、5084ms/退出0，成员计数/容量匹配，故障本地估算保持、配置预算字节保持，无网络/生成/观察记录。数字为夹具，不是Google真实token精度或长会话验收；gateway认证不会因此获得原生能力。未打包重装新版本CI付费请求，个人配置及安装83保持，goal active。详见docs/ultra-native-member-tokens-handoff.md。
+## 2026-11-13 外部网关原生认证本地拒绝
+
+WI-139/E-332至333/F-098：仅gateway认证的ExternalFallbackGenerator原先在native生成/流式及未登记主模型失败前扣预算且抛普通API错误，3旧复现失败。现在生成路由在记账前本地ProviderRouteError，提示/provider list、/model及/auth；真正原生生成器/可解析外部路由和离线估算保持。最终6项必要检查、strict core源码编译及两个文件lint退出0；离线估算初精确数字断言错误已按实际正整数契约纠正，旧日志保留。Windows实际Config/storage/createContentGenerator网关构造链11条件通过、4905ms/退出0，三拒绝路径零HTTP且预算字节保持，正常外部对照唯一loopback请求成功且累计1。0真实模型/Google调用，不是完整终端/供应商质量/最终平台验收。无打包重装新版本CI付费请求，个人配置及全局83保持，goal active。详见docs/ultra-native-gateway-auth-handoff.md。
