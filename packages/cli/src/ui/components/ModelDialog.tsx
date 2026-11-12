@@ -5,7 +5,6 @@
  */
 
 import type React from 'react';
-import { ProviderManager } from '@google/gemini-cli-core';
 import { useCallback, useContext, useMemo, useState, useEffect } from 'react';
 import { Box, Text } from 'ink';
 import { ModelQuotaDisplay } from './ModelQuotaDisplay.js';
@@ -16,6 +15,7 @@ import {
   PREVIEW_GEMINI_FLASH_MODEL,
   PREVIEW_GEMINI_FLASH_LITE_MODEL,
   DEFAULT_GEMINI_MODEL,
+  ProviderManager,
   DEFAULT_GEMINI_FLASH_MODEL,
   DEFAULT_GEMINI_FLASH_LITE_MODEL,
   GEMINI_MODEL_ALIAS_AUTO,
@@ -354,15 +354,9 @@ export function ModelDialog({ onClose }: ModelDialogProps): React.JSX.Element {
         return;
       }
 
-      const resolved = ProviderManager.getInstance().resolveProviderForModel(model);
-      if (resolved && model.includes(':')) {
-        ProviderManager.getInstance().setActiveSelection(
-          resolved.provider.id,
-          resolved.modelId,
-        );
-      }
-
       if (config) {
+        // Qualified model IDs route this session without rewriting provider
+        // defaults. The existing model preference callback owns Remember.
         config.setModel(model, persistMode ? false : true);
         const event = new ModelSlashCommandEvent(model);
         logModelSlashCommand(config, event);

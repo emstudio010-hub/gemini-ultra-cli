@@ -5,6 +5,9 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { act } from 'react';
 import { ModelDialog } from './ModelDialog.js';
 import { renderWithProviders } from '../../test-utils/render.js';
@@ -23,6 +26,7 @@ import {
   AuthType,
   ModelConfigService,
   DEFAULT_MODEL_CONFIGS,
+  ProviderManager,
 } from '@google/gemini-cli-core';
 import type { Config, ModelSlashCommandEvent } from '@google/gemini-cli-core';
 
@@ -314,6 +318,53 @@ describe('<ModelDialog />', () => {
     });
     unmount();
   });
+
+  it.each([false, true])(
+    'keeps provider defaults unchanged when selecting an external model (remember=%s)',
+    async (remember) => {
+      const root = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'ultra-dialog-model-scope-'),
+      );
+      const file = path.join(root, 'providers.json');
+      vi.stubEnv('GEMINI_ULTRA_PROVIDERS_FILE', file);
+      ProviderManager.resetInstance();
+      const manager = ProviderManager.getInstance();
+      for (const name of ['first', 'second'])
+        manager.upsertProvider({
+          name,
+          baseUrl: `https://${name}.invalid/v1`,
+          apiKey: '',
+          models: ['shared'],
+          setActive: name === 'first',
+        });
+      const before = fs.readFileSync(file);
+      mockGetModel.mockReturnValue('second:shared');
+      const rendered = await renderComponent();
+      try {
+        if (remember) {
+          await act(async () => {
+            rendered.stdin.write('\t');
+            await rendered.waitUntilReady();
+          });
+        }
+        await act(async () => {
+          rendered.stdin.write('\r');
+          await rendered.waitUntilReady();
+        });
+        await waitFor(() =>
+          expect(mockSetModel).toHaveBeenCalledWith('second:shared', !remember),
+        );
+        expect(fs.readFileSync(file).equals(before)).toBe(true);
+        expect(manager.getActiveProvider()?.id).toBe('first');
+        expect(mockOnClose).toHaveBeenCalled();
+      } finally {
+        rendered.unmount();
+        ProviderManager.resetInstance();
+        vi.unstubAllEnvs();
+        fs.rmSync(root, { recursive: true, force: true });
+      }
+    },
+  );
 
   it('closes dialog on escape in "main" view', async () => {
     const { stdin, waitUntilReady, unmount } = await renderComponent();

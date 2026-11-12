@@ -1422,3 +1422,8 @@ WI-145/E-344：只读复核E-294失败，地址手算及返回值/edi宽度推�
 ## 2026-11-13 深度网页抓取有界加载
 
 WI-146/E-345至346/F-104：原deep_web_fetch忽略调用方取消、子页无signal、正文全量下载再截断且吞子页错误。现根/子共享默认12秒总时限/取消、每页2MiB流式上限、深度1/2/子页0-10/链接50，精确origin和相对链接，失败可见且超时保留根正文；工具部分结果带失败，/fetch保留正文/失败提示并去无依据上下文声明。初旧4有效复现及2 Content-Type夹具失败保留，修后6通过，core/CLI严格源码编译及3文件lint通过。Windows实际工具/斜杠处理器/HTTP流9条件通过、4893ms/退出0，受控120ms实际126ms子超时、取消/超限连接关闭，11loopback/0模型/外部请求。初观察器未隔离profile已补并最终核对，个人配置保持；不承诺斜杠新增取消键/重定向限制/完整终端或最终包验收。无打包重装版本CI付费调用，安装83保持，goal active。详见docs/ultra-deep-fetch-bounds-handoff.md。
+
+## 2026-11-13 模型选择保存范围
+
+WI-147/E-347至348/F-105：模型窗口原Remember=false仍改供应商默认；移除共享默认写入，限定ID保持精确会话路由，Remember沿用settings.model.name。两项旧复现失败，修后加选择/Tab对照共4通过，strict CLI源码编译及两文件lint退出0。Windows真实三ConPTY临时/记住/新进程恢复9条件通过、37415ms/退出0/0请求，provider字节始终保持。祖先可信.gemini/.env覆盖与误用未注册参数属观察器问题，隔离空文件后通过，旧失败保留。保存失败处理仍待，不声称供应商质量或最终包验收。无打包重装版本CI，个人配置及安装83保持，goal active。详见docs/ultra-model-selection-scope-handoff.md。
+
