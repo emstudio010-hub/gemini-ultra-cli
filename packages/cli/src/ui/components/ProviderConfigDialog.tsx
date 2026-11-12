@@ -261,7 +261,7 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
       } else {
         setStatusMessage(
           res.error
-            ? `提示: ${res.error}`
+            ? t(`提示：${res.error}`, `Notice: ${res.error}`)
             : t(
                 '端点未返回模型，请在下方手动输入模型名称',
                 'No models returned, please type manually below',
@@ -597,7 +597,11 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
                 apiKey: targetProv.apiKey,
                 protocol: targetProv.protocol,
                 models: cleanModels,
-                defaultModel: cleanModels[0],
+                defaultModel:
+                  targetProv.defaultModel &&
+                  cleanModels.includes(targetProv.defaultModel)
+                    ? targetProv.defaultModel
+                    : cleanModels[0],
                 imageModels: targetProv.imageModels,
                 defaultImageModel: targetProv.defaultImageModel,
                 setActive: activeProvider?.id === targetProv.id,
