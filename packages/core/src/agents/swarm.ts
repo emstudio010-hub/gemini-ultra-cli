@@ -11,7 +11,7 @@ import { lock, lockSync } from 'proper-lockfile';
 import { z } from 'zod';
 import type { WorkflowAgentResult } from './agentWorkflows.js';
 import { hasOpenWorkflowBudget } from './workflowBudget.js';
-import { readDrillGrant } from '../drill/drillGrant.js';
+import { assertAgentAuthorization } from './agentAuthorization.js';
 import { withAgentTaskLock } from './agentTaskLock.js';
 import {
   swarmResultArchiveSchema,
@@ -642,7 +642,7 @@ export class SwarmEngine {
   }
   add(name: string, agent: SwarmMember['agent'], brief: string): void {
     const swarm = this.activeState();
-    assertMemberAuthorization(agent);
+    assertAgentAuthorization(agent);
     const member = memberSchema.parse({
       name,
       agent,
@@ -865,7 +865,7 @@ export class SwarmEngine {
       signal.throwIfAborted();
       swarm = this.activeState();
       member = swarm.members.find((entry) => entry.name === name)!;
-      assertMemberAuthorization(member.agent);
+      assertAgentAuthorization(member.agent);
       const board = readSwarmBoard(this.root, this.id);
       member.lastRead = board.at(-1)?.seq || 0;
       member.state = 'working';
@@ -1024,12 +1024,6 @@ export class SwarmEngine {
       }
     }
   }
-}
-function assertMemberAuthorization(agent: SwarmMember['agent']): void {
-  if (agent === 'redteam-analyst' && !readDrillGrant().granted)
-    throw new Error(
-      '红队成员需要演练授权；请在 /drill 中记录授权后重试。Red-team member requires drill authorization; record it in /drill before retrying.',
-    );
 }
 export function getSwarmEngine(
   root: string,

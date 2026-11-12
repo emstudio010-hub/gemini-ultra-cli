@@ -33,6 +33,7 @@ import {
 } from '../telemetry/constants.js';
 import { AGENT_TOOL_NAME } from '../tools/tool-names.js';
 import { scheduleSubagent } from './subagentScheduler.js';
+import { assertAgentAuthorization } from './agentAuthorization.js';
 
 /**
  * A unified tool for invoking subagents.
@@ -213,6 +214,9 @@ class DelegateInvocation extends BaseToolInvocation<
   override async shouldConfirmExecute(
     abortSignal: AbortSignal,
   ): Promise<ToolCallConfirmationDetails | false> {
+    abortSignal.throwIfAborted();
+    if (this.definition.kind === 'local')
+      assertAgentAuthorization(this.definition.name);
     const hintedParams = this.withUserHints(this.mappedInputs);
     const invocation = this.buildChildInvocation(hintedParams);
     return invocation.shouldConfirmExecute(abortSignal);
@@ -220,9 +224,15 @@ class DelegateInvocation extends BaseToolInvocation<
 
   async execute(options: ExecuteOptions): Promise<ToolResult> {
     const { abortSignal: signal, updateOutput } = options;
+    signal.throwIfAborted();
+    if (this.definition.kind === 'local')
+      assertAgentAuthorization(this.definition.name);
     const hintedParams = this.withUserHints(this.mappedInputs);
-    const execute = () =>
-      runInDevTraceSpan(
+    const execute = () => {
+      signal.throwIfAborted();
+      if (this.definition.kind === 'local')
+        assertAgentAuthorization(this.definition.name);
+      return runInDevTraceSpan(
         {
           operation: GeminiCliOperation.AgentCall,
           logPrompts: this.context.config.getTelemetryLogPromptsEnabled(),
@@ -245,6 +255,7 @@ class DelegateInvocation extends BaseToolInvocation<
           return result;
         },
       );
+    };
     return this.definition.kind === 'remote'
       ? execute()
       : scheduleSubagent(this.context.config.getSessionId(), signal, execute);
