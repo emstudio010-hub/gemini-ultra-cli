@@ -1380,3 +1380,6 @@ WI-131/E-317至318/F-091：原resume先await引擎wait，运行/取消清理期�
 ## 2026-11-12 Swarm留言异常先拒绝恢复
 
 WI-132/E-319至320/F-092：原恢复先保存active再检查恢复留言，满500/追加超4MiB/损坏JSONL会报错却改状态；3旧拒绝复现失败、正常499边界通过。现在提取共享preparePost在恢复写入前检查，实际append仍锁内复检；不丢旧留言/放宽容量。5项必要检查、strict core源码编译及相关lint退出0；旧失败大Buffer输出37.17秒自然结束，改为逐文件字节等值避免展开巨量内容，原日志保留。Windows源码slash四场景24条件通过、9042ms/退出0，拒绝时全部状态/旧任务/当前绑定/预算/权限保持，499正常追加唯一第500条。不是后续磁盘写入原子事务/完整终端/真实模型验收。无打包/重装/新版本/CI/付费请求，全局83和个人配置保持，goal active。详见docs/ultra-swarm-resume-board-handoff.md。
+## 2026-11-12 Swarm源码真实Windows终端验收
+
+WI-133/E-321：实际Windows ConPTY启动当前编译源码CLI/core，preload隔离Config.storage任务/受控运行器；真实输入运行中resume拒绝、cancel显示停止、清理未释放resume再拒绝，释放后status见paused、reports实际导出原接受全文、quit自然退出0。11条件通过、23834ms/0模型请求，原成果/归档/累计两唤醒失败0保持，迟到completed=true未接受。PTY文本独立核对关键提示均存在。此为英文源码终端跨层证据，受控执行器不是供应商自主任务，preload不是正常任务创建，不冒称完整功能/启动基准/分发包验收。本轮纯验证资料与文档，无业务源码改动或重复类型lint/全量冒烟，未打包/重装/版本/CI/付费请求；个人配置与安装83保持，goal active。详见docs/ultra-swarm-source-terminal-handoff.md。
