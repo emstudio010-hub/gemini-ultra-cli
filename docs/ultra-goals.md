@@ -1427,3 +1427,8 @@ WI-146/E-345至346/F-104：原deep_web_fetch忽略调用方取消、子页无sig
 
 WI-147/E-347至348/F-105：模型窗口原Remember=false仍改供应商默认；移除共享默认写入，限定ID保持精确会话路由，Remember沿用settings.model.name。两项旧复现失败，修后加选择/Tab对照共4通过，strict CLI源码编译及两文件lint退出0。Windows真实三ConPTY临时/记住/新进程恢复9条件通过、37415ms/退出0/0请求，provider字节始终保持。祖先可信.gemini/.env覆盖与误用未注册参数属观察器问题，隔离空文件后通过，旧失败保留。保存失败处理仍待，不声称供应商质量或最终包验收。无打包重装版本CI，个人配置及安装83保持，goal active。详见docs/ultra-model-selection-scope-handoff.md。
 
+
+## 2026-11-13 模型窗口中英文统一
+
+WI-148/E-349至350/F-106：原模型窗口中文控制项仍英文、英文外接说明仍中文；现useLocale订阅同步静态/动态列表标题、自动/手动、外接说明、Remember及Tab/Esc/启动提示，ID不变。两旧复现失败，修后加4相关对照共6通过，strict CLI源码编译及两文件lint退出0。Windows无preload真实ConPTY英文→中文→英文8步骤/10条件通过、17409ms/退出0/零请求，provider/settings字节保持。共享配额日期/Resets与服务元信息未扩张翻译，保存失败边界继续处理。无打包重装版本CI，个人配置及安装83保持，goal active。详见docs/ultra-model-dialog-locale-handoff.md。
+

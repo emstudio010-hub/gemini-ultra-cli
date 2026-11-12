@@ -34,6 +34,7 @@ import { theme } from '../semantic-colors.js';
 import { DescriptiveRadioButtonSelect } from './shared/DescriptiveRadioButtonSelect.js';
 import { ConfigContext } from '../contexts/ConfigContext.js';
 import { useSettings } from '../contexts/SettingsContext.js';
+import { useLocale } from '../hooks/useLocale.js';
 
 interface ModelDialogProps {
   onClose: () => void;
@@ -42,6 +43,8 @@ interface ModelDialogProps {
 export function ModelDialog({ onClose }: ModelDialogProps): React.JSX.Element {
   const config = useContext(ConfigContext);
   const settings = useSettings();
+  const locale = useLocale();
+  const isZh = locale === 'zh';
   const { terminalWidth } = useUIState();
   const [hasAccessToProModel, setHasAccessToProModel] = useState<boolean>(
     () => !(config?.getProModelNoAccessSync() ?? false),
@@ -143,17 +146,21 @@ export function ModelDialog({ onClose }: ModelDialogProps): React.JSX.Element {
         .filter((o) => o.tier === 'auto')
         .map((o) => ({
           value: o.modelId,
-          title: o.name,
-          description: o.description,
+          title: isZh ? '自动选择' : o.name,
+          description: isZh
+            ? '根据任务自动选择可用的 Gemini 模型'
+            : o.description,
           key: o.modelId,
         }));
 
       list.push({
         value: 'Manual',
         title: manualModelSelected
-          ? `Manual (${getDisplayString(manualModelSelected, config ?? undefined)})`
-          : 'Manual',
-        description: 'Manually select a model',
+          ? `${isZh ? '手动选择' : 'Manual'} (${getDisplayString(manualModelSelected, config ?? undefined)})`
+          : isZh
+            ? '手动选择'
+            : 'Manual',
+        description: isZh ? '从模型列表中选择' : 'Manually select a model',
         key: 'Manual',
       });
       return list;
@@ -163,20 +170,24 @@ export function ModelDialog({ onClose }: ModelDialogProps): React.JSX.Element {
     const list = [
       {
         value: GEMINI_MODEL_ALIAS_AUTO,
-        title: getDisplayString(GEMINI_MODEL_ALIAS_AUTO),
-        description: getAutoModelDescription(
-          shouldShowPreviewModels,
-          useGemini31,
-          useLatestFlash,
-        ),
+        title: isZh ? '自动选择' : getDisplayString(GEMINI_MODEL_ALIAS_AUTO),
+        description: isZh
+          ? '根据任务自动选择可用的 Gemini 模型'
+          : getAutoModelDescription(
+              shouldShowPreviewModels,
+              useGemini31,
+              useLatestFlash,
+            ),
         key: GEMINI_MODEL_ALIAS_AUTO,
       },
       {
         value: 'Manual',
         title: manualModelSelected
-          ? `Manual (${getDisplayString(manualModelSelected)})`
-          : 'Manual',
-        description: 'Manually select a model',
+          ? `${isZh ? '手动选择' : 'Manual'} (${getDisplayString(manualModelSelected)})`
+          : isZh
+            ? '手动选择'
+            : 'Manual',
+        description: isZh ? '从模型列表中选择' : 'Manually select a model',
         key: 'Manual',
       },
     ];
@@ -191,6 +202,7 @@ export function ModelDialog({ onClose }: ModelDialogProps): React.JSX.Element {
     useLatestFlashLite,
     useCustomToolModel,
     hasAccessToProModel,
+    isZh,
   ]);
 
   const manualOptions = useMemo(() => {
@@ -311,7 +323,7 @@ export function ModelDialog({ onClose }: ModelDialogProps): React.JSX.Element {
       .map((item) => ({
         value: item.qualifiedId,
         title: `${item.providerName} · ${item.modelId}`,
-        description: `外接供应商 (${item.protocol})`,
+        description: `${isZh ? '外接供应商' : 'External provider'} (${item.protocol})`,
         key: `ext-${item.qualifiedId}`,
       }));
     // External provider models are shown first in the main list and also in manual view.
@@ -331,7 +343,7 @@ export function ModelDialog({ onClose }: ModelDialogProps): React.JSX.Element {
       seen.add(option.value);
       return true;
     });
-  }, [view, mainOptions, manualOptions]);
+  }, [view, mainOptions, manualOptions, isZh]);
 
   // Calculate the initial index based on the preferred model.
   const initialIndex = useMemo(() => {
@@ -374,7 +386,7 @@ export function ModelDialog({ onClose }: ModelDialogProps): React.JSX.Element {
       padding={1}
       width="100%"
     >
-      <Text bold>Select Model</Text>
+      <Text bold>{isZh ? '选择模型' : 'Select Model'}</Text>
 
       <Box marginTop={1}>
         <DescriptiveRadioButtonSelect
@@ -387,25 +399,46 @@ export function ModelDialog({ onClose }: ModelDialogProps): React.JSX.Element {
       <Box marginTop={1} flexDirection="column">
         <Box>
           <Text bold color={theme.text.primary}>
-            Remember model for future sessions:{' '}
+            {isZh
+              ? '记住模型供后续会话使用：'
+              : 'Remember model for future sessions: '}
           </Text>
           <Text color={theme.status.success}>
-            {persistMode ? 'true' : 'false'}
+            {isZh
+              ? persistMode
+                ? '开启'
+                : '关闭'
+              : persistMode
+                ? 'true'
+                : 'false'}
           </Text>
-          <Text color={theme.text.secondary}> (Press Tab to toggle)</Text>
+          <Text color={theme.text.secondary}>
+            {isZh ? '（按 Tab 切换）' : ' (Press Tab to toggle)'}
+          </Text>
         </Box>
       </Box>
       <Box flexDirection="column">
         <Text color={theme.text.secondary}>
-          {'> To use a specific Gemini model on startup, use the --model flag.'}
+          {isZh
+            ? '> 启动时用 --model 指定模型；外接模型使用 供应商ID:模型ID。'
+            : '> Use --model on startup; external models use provider-id:model-id.'}
         </Text>
       </Box>
       <ModelQuotaDisplay
+        title={isZh ? '模型用量' : 'Model usage'}
         buckets={config?.getLastRetrievedQuota()?.buckets}
         availableWidth={terminalWidth - 2}
       />
       <Box marginTop={1} flexDirection="column">
-        <Text color={theme.text.secondary}>(Press Esc to close)</Text>
+        <Text color={theme.text.secondary}>
+          {view === 'manual' && hasAccessToProModel
+            ? isZh
+              ? '（按 Esc 返回）'
+              : '(Press Esc to go back)'
+            : isZh
+              ? '（按 Esc 关闭）'
+              : '(Press Esc to close)'}
+        </Text>
       </Box>
     </Box>
   );

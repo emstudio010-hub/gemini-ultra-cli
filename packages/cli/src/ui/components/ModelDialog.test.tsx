@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -27,6 +27,7 @@ import {
   ModelConfigService,
   DEFAULT_MODEL_CONFIGS,
   ProviderManager,
+  I18nManager,
 } from '@google/gemini-cli-core';
 import type { Config, ModelSlashCommandEvent } from '@google/gemini-cli-core';
 
@@ -58,6 +59,7 @@ vi.mock('@google/gemini-cli-core', async (importOriginal) => {
 });
 
 describe('<ModelDialog />', () => {
+  let localeRoot: string;
   const mockSetModel = vi.fn();
   const mockGetModel = vi.fn();
   const mockOnClose = vi.fn();
@@ -102,6 +104,17 @@ describe('<ModelDialog />', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    localeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ultra-model-locale-'));
+    vi.stubEnv(
+      'GEMINI_ULTRA_LOCALE_FILE',
+      path.join(localeRoot, 'locale.json'),
+    );
+    vi.stubEnv(
+      'GEMINI_ULTRA_PROVIDERS_FILE',
+      path.join(localeRoot, 'providers.json'),
+    );
+    ProviderManager.resetInstance();
+    I18nManager.getInstance().setLocale('en');
     mockGetModel.mockReturnValue(GEMINI_MODEL_ALIAS_AUTO);
     mockGetHasAccessToPreviewModel.mockReturnValue(false);
     mockGetGemini31LaunchedSync.mockReturnValue(false);
@@ -113,6 +126,12 @@ describe('<ModelDialog />', () => {
       if (val === 'auto') return 'Auto';
       return val;
     });
+  });
+
+  afterEach(() => {
+    ProviderManager.resetInstance();
+    vi.unstubAllEnvs();
+    fs.rmSync(localeRoot, { recursive: true, force: true });
   });
 
   const renderComponent = async (
@@ -136,6 +155,76 @@ describe('<ModelDialog />', () => {
     );
     return result;
   };
+
+  it.each([false, true])(
+    'updates model dialog language without losing Remember or route (dynamic=%s)',
+    async (dynamic) => {
+      const manager = ProviderManager.getInstance();
+      manager.upsertProvider({
+        name: 'route',
+        baseUrl: 'https://route.invalid/v1',
+        apiKey: '',
+        models: ['shared'],
+        setActive: true,
+      });
+      const providersBefore = fs.readFileSync(
+        path.join(localeRoot, 'providers.json'),
+      );
+      mockGetModel.mockReturnValue('route:shared');
+      const config = dynamic
+        ? ({
+            ...mockConfig,
+            getExperimentalDynamicModelConfiguration: () => true,
+            getModelConfigService: () =>
+              new ModelConfigService(DEFAULT_MODEL_CONFIGS),
+          } as unknown as Config)
+        : (mockConfig as Config);
+      const rendered = await renderComponent(config);
+      try {
+        expect(rendered.lastFrame()).toContain(
+          'External provider (openai-chat)',
+        );
+        expect(rendered.lastFrame()).not.toContain('外接供应商');
+        await act(async () => {
+          rendered.stdin.write('\t');
+          await rendered.waitUntilReady();
+        });
+        await act(async () => {
+          I18nManager.getInstance().setLocale('zh');
+        });
+        await waitFor(() => expect(rendered.lastFrame()).toContain('选择模型'));
+        expect(rendered.lastFrame()).toContain('记住模型供后续会话使用：开启');
+        expect(rendered.lastFrame()).toContain('外接供应商 (openai-chat)');
+        expect(rendered.lastFrame()).toContain('手动选择');
+        expect(rendered.lastFrame()).toContain('按 Tab 切换');
+        expect(rendered.lastFrame()).not.toContain('Remember model');
+        expect(rendered.lastFrame()).not.toContain('Manually select a model');
+        await act(async () => {
+          I18nManager.getInstance().setLocale('en');
+        });
+        await waitFor(() =>
+          expect(rendered.lastFrame()).toContain(
+            'Remember model for future sessions: true',
+          ),
+        );
+        expect(mockSetModel).not.toHaveBeenCalled();
+        expect(
+          fs
+            .readFileSync(path.join(localeRoot, 'providers.json'))
+            .equals(providersBefore),
+        ).toBe(true);
+        await act(async () => {
+          rendered.stdin.write('\r');
+          await rendered.waitUntilReady();
+        });
+        await waitFor(() =>
+          expect(mockSetModel).toHaveBeenCalledWith('route:shared', false),
+        );
+      } finally {
+        rendered.unmount();
+      }
+    },
+  );
 
   it('renders the initial "main" view correctly', async () => {
     const { lastFrame, unmount } = await renderComponent();
