@@ -4,18 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import { useState, type FC } from 'react';
 import { Box, Text } from 'ink';
 import { ProviderManager, getEffortOptions } from '@google/gemini-cli-core';
 import { useKeypress } from '../hooks/useKeypress.js';
 import { theme } from '../semantic-colors.js';
 import { useLocale } from '../hooks/useLocale.js';
+import { effortSaveError } from '../utils/effortSaveError.js';
 
 interface EffortDialogProps {
   onClose: () => void;
 }
 
-export const EffortDialog: React.FC<EffortDialogProps> = ({ onClose }) => {
+export const EffortDialog: FC<EffortDialogProps> = ({ onClose }) => {
   const locale = useLocale();
   const EFFORT_OPTIONS = getEffortOptions(locale);
   const mgr = ProviderManager.getInstance();
@@ -26,6 +27,7 @@ export const EffortDialog: React.FC<EffortDialogProps> = ({ onClose }) => {
     EFFORT_OPTIONS.findIndex((o) => o.level === currentLevel),
   );
   const [selectedIdx, setSelectedIdx] = useState(initialIdx);
+  const [saveError, setSaveError] = useState('');
 
   useKeypress(
     (key) => {
@@ -45,10 +47,13 @@ export const EffortDialog: React.FC<EffortDialogProps> = ({ onClose }) => {
         );
         return true;
       }
-      if (key.name === 'return') {
+      if (key.name === 'enter' || key.name === 'return') {
         const chosen = EFFORT_OPTIONS[selectedIdx];
-        if (chosen) {
-          mgr.setReasoningEffort(chosen.level);
+        try {
+          if (chosen) mgr.setReasoningEffort(chosen.level);
+        } catch (error) {
+          setSaveError(effortSaveError(error));
+          return true;
         }
         onClose();
         return true;
@@ -76,6 +81,12 @@ export const EffortDialog: React.FC<EffortDialogProps> = ({ onClose }) => {
             : '↑↓ Select · Enter Confirm · Esc Back'}
         </Text>
       </Box>
+
+      {saveError ? (
+        <Box marginTop={1}>
+          <Text color={theme.status.error}>{saveError}</Text>
+        </Box>
+      ) : null}
 
       <Box marginTop={1} flexDirection="column">
         {EFFORT_OPTIONS.map((opt, idx) => {

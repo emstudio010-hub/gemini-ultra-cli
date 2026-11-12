@@ -19,6 +19,7 @@ import {
 } from './types.js';
 import { MessageType } from '../types.js';
 import { EffortDialog } from '../components/EffortDialog.js';
+import { effortSaveError } from '../utils/effortSaveError.js';
 
 export const effortCommand: SlashCommand = {
   name: 'effort',
@@ -60,7 +61,15 @@ export const effortCommand: SlashCommand = {
       return;
     }
 
-    mgr.setReasoningEffort(chosen);
+    try {
+      mgr.setReasoningEffort(chosen);
+    } catch (error) {
+      context.ui.addItem({
+        type: MessageType.ERROR,
+        text: effortSaveError(error),
+      });
+      return;
+    }
     context.ui.addItem({
       type: MessageType.INFO,
       text: i18n.t(
