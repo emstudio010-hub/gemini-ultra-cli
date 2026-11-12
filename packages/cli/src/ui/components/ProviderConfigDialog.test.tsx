@@ -28,6 +28,74 @@ afterEach(() => {
   fs.rmSync(root, { recursive: true, force: true });
 });
 
+it.each(['delete', 'save-models', 'refresh-models'] as const)(
+  'keeps a same-name provider intact when the open %s target ID has been deleted',
+  async (operation) => {
+    const manager = ProviderManager.getInstance();
+    const other = manager.upsertProvider({
+      name: 'Alpha',
+      baseUrl: 'https://other.invalid/v1',
+      apiKey: 'FAKE_OTHER',
+      models: ['other-model'],
+    });
+    const target = manager.upsertProvider({
+      name: 'Research',
+      baseUrl: 'https://target.invalid/v1',
+      apiKey: 'FAKE_TARGET',
+      models: ['target-model'],
+    });
+    manager.upsertProvider({
+      ...target,
+      name: 'Research Gateway',
+      setActive: true,
+    });
+    manager.upsertProvider({ ...other, name: 'Research', setActive: false });
+    const fetch = vi
+      .spyOn(manager, 'fetchModelsFromEndpoint')
+      .mockResolvedValue({ models: ['unexpected-model'] });
+    const rendered = await renderWithProviders(
+      <ProviderConfigDialog onClose={vi.fn()} />,
+    );
+    const key = async (sequence: string) =>
+      act(async () => {
+        rendered.stdin.write(sequence);
+        await rendered.waitUntilReady();
+      });
+    try {
+      for (let index = 0; index < (operation === 'delete' ? 6 : 2); index++)
+        await key('\u001b[B');
+      await key('\r');
+      await waitFor(() =>
+        expect(rendered.lastFrame()).toContain(
+          operation === 'delete'
+            ? 'Warning: Delete provider'
+            : 'Model Checklist',
+        ),
+      );
+      manager.removeProvider(target.id);
+      const before = fs.readFileSync(path.join(root, 'providers.json'));
+      await key(operation === 'refresh-models' ? '\u0012' : '\r');
+      await waitFor(() =>
+        expect(rendered.lastFrame()).toContain('Provider no longer exists'),
+      );
+      expect(fs.readFileSync(path.join(root, 'providers.json'))).toEqual(
+        before,
+      );
+      expect(manager.listProviders()).toHaveLength(1);
+      expect(manager.listProviders()[0]).toMatchObject({
+        id: other.id,
+        models: ['other-model'],
+      });
+      expect(fetch).not.toHaveBeenCalled();
+      expect(rendered.lastFrame()).toContain(
+        operation === 'delete' ? 'Warning: Delete provider' : 'Model Checklist',
+      );
+    } finally {
+      rendered.unmount();
+    }
+  },
+);
+
 it.each([false, true])(
   'preserves a retained non-first default when saving the checklist, active=%s',
   async (active) => {

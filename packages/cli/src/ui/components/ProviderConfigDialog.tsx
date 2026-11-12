@@ -548,8 +548,15 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
             if (!catalogRequest.current?.signal.aborted && isFetching)
               return true;
             const provider = editingProviderId
-              ? mgr.getProvider(editingProviderId)
+              ? mgr.getProviderById(editingProviderId)
               : undefined;
+            if (editingProviderId && !provider)
+              throw new Error(
+                t(
+                  '供应商已不存在，请返回并重新选择。',
+                  'Provider no longer exists. Return and select a provider again.',
+                ),
+              );
             void handleFetchModels(
               provider?.baseUrl ?? formUrl,
               provider?.apiKey ?? formKey,
@@ -616,8 +623,15 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
             catalogRequest.current?.abort();
             setIsFetching(false);
             const targetProv = editingProviderId
-              ? mgr.getProvider(editingProviderId)
+              ? mgr.getProviderById(editingProviderId)
               : undefined;
+            if (editingProviderId && !targetProv)
+              throw new Error(
+                t(
+                  '供应商已不存在，请返回并重新选择。',
+                  'Provider no longer exists. Return and select a provider again.',
+                ),
+              );
 
             if (targetProv) {
               mgr.upsertProvider({
@@ -810,7 +824,13 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
         if (page === 'confirm-delete') {
           if (isEnter(key)) {
             if (focusedProvider) {
-              mgr.removeProvider(focusedProvider.id);
+              if (!mgr.removeProviderById(focusedProvider.id))
+                throw new Error(
+                  t(
+                    '供应商已不存在，请返回并重新选择。',
+                    'Provider no longer exists. Return and select a provider again.',
+                  ),
+                );
               const updated = mgr.listProviders();
               setProviders(updated);
               setFocusedProviderId(updated[0]?.id || null);

@@ -172,6 +172,37 @@ describe('ProviderManager', () => {
     },
   );
 
+  it('refuses stale ID-only deletion without changing a provider with that display name', () => {
+    const mgr = new ProviderManager(tmpFile);
+    const first = mgr.upsertProvider({
+      name: 'Alpha',
+      baseUrl: 'https://alpha.invalid/v1',
+      apiKey: '',
+      models: ['alpha-model'],
+    });
+    const second = mgr.upsertProvider({
+      name: 'Research',
+      baseUrl: 'https://research.invalid/v1',
+      apiKey: '',
+      models: ['research-model'],
+      setActive: false,
+    });
+    mgr.upsertProvider({
+      ...second,
+      name: 'Research Gateway',
+      setActive: false,
+    });
+    mgr.upsertProvider({ ...first, name: 'Research', setActive: false });
+    const remove = (id: string) => mgr.removeProviderById(id);
+    expect(remove(second.id)).toBe(true);
+    const before = fs.readFileSync(tmpFile);
+    expect(remove(second.id)).toBe(false);
+    expect(fs.readFileSync(tmpFile)).toEqual(before);
+    expect(mgr.getProvider('Research')?.id).toBe(first.id);
+    expect(mgr.removeProvider('Research')).toBe(true);
+    expect(mgr.listProviders()).toHaveLength(0);
+  });
+
   it('persists, preserves and explicitly clears the optional output limit', () => {
     const mgr = new ProviderManager(tmpFile);
     const input = {

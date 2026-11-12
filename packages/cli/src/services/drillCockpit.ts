@@ -376,7 +376,7 @@ async function handleRequest(
         '请检查名称、端点和模型。 / Check the name, endpoint and model fields.',
       );
     const input = parsed.data;
-    const existing = input.id ? mgr.getProvider(input.id) : undefined;
+    const existing = input.id ? mgr.getProviderById(input.id) : undefined;
     if (input.id && !existing)
       throw new RequestError(404, 'Provider no longer exists.');
     if (!input.id && mgr.getProvider(input.name))

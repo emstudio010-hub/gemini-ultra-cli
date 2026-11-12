@@ -1389,3 +1389,6 @@ WI-134/E-322至323/F-093：显示名称与另一供应商ID冲突时，原find�
 ## 2026-11-13 已删除供应商ID不回退名称
 
 WI-135/E-324至325/F-094：供应商删除后，保存成员路由/旧编辑仍可能按同名别名选错剩余记录；4旧复现失败。新增getProviderById用于编辑input.id、活动身份、显式路由及成员正规化，通用getProvider仍先ID后别名。6项必要检查、strict core源码编译及相关lint退出0。Windows实际core隔离两场景：成员启动前删除则runner不进入、paused/旧角色保持、请求0/失败1；作用域建立后删除则调用前拒绝。17条件通过、5495ms/退出0，0HTTP/native请求，旧编辑拒绝且剩余/主选择保持。只覆盖本进程明确删除，不声称跨进程热刷新或所有主模型fallback处理。无打包/重装/新版本/CI/真实模型请求，个人配置及安装83保持，goal active。详见docs/ultra-provider-deleted-id-handoff.md。
+## 2026-11-13 供应商旧界面ID失效保护
+
+WI-136/E-326至327/F-095：配置窗口旧删除确认/模型清单保存刷新及演练台旧ID仍按名称回退，3旧组件复现失败；旧实际HTTP目录200且1错误请求，保存500。新增严格removeProviderById，界面/演练台持久化目标使用精确ID，失效保留页面/草稿，目录不调用，HTTP404。5项组件+4核心相关检查通过，core/CLI严格源码编译和5文件lint退出0；首次mock带多余imageModels类型错误已修正，日志保留。Windows实际HTTP修后5条件通过、5815ms/退出0，两404/0目录请求/配置保持；旧失败观察器退出另有libuv断言，未据此改产品。无ConPTY/浏览器视觉/跨进程热刷新/真实供应商新验收，无打包重装新版本CI付费请求，个人配置及安装83保持，goal active。详见docs/ultra-provider-stale-ui-handoff.md。

@@ -491,6 +491,11 @@ export class ProviderManager {
 
   removeProvider(idOrName: string): boolean {
     const existing = this.getProvider(idOrName);
+    return existing ? this.removeProviderById(existing.id) : false;
+  }
+
+  removeProviderById(id: string): boolean {
+    const existing = this.getProviderById(id);
     if (!existing) {
       return false;
     }
