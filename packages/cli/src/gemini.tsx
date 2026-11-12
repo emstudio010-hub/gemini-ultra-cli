@@ -49,7 +49,6 @@ import os from 'node:os';
 import dns from 'node:dns';
 import * as path from 'node:path';
 import * as fsPromises from 'node:fs/promises';
-import { start_sandbox } from './utils/sandbox.js';
 import {
   loadSettings,
   SettingScope,
@@ -82,7 +81,6 @@ import {
   type InitializationResult,
 } from './core/initializer.js';
 import { validateAuthMethod } from './config/auth.js';
-import { runAcpClient } from './acp/acpStdioTransport.js';
 import { validateNonInteractiveAuth } from './validateNonInterActiveAuth.js';
 import { appEvents, AppEvent } from './utils/events.js';
 import {
@@ -748,6 +746,7 @@ export async function main() {
 
       const sandboxArgs = injectStdinIntoArgs(process.argv, stdinData);
 
+      const { start_sandbox } = await import('./utils/sandbox.js');
       await relaunchOnExitCode(() =>
         start_sandbox(sandboxConfig, memoryArgs, partialConfig, sandboxArgs),
       );
@@ -892,6 +891,7 @@ export async function main() {
     }
 
     if (config.getAcpMode()) {
+      const { runAcpClient } = await import('./acp/acpStdioTransport.js');
       return runAcpClient(config, settings, argv);
     }
 
