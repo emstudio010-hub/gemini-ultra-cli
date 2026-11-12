@@ -17,6 +17,7 @@ import {
   type FileFilteringOptions,
 } from '../config/constants.js';
 import { debugLogger } from './debugLogger.js';
+import { withAbortSignal } from './withAbortSignal.js';
 
 const MAX_ITEMS = 200;
 const TRUNCATION_INDICATOR = '...';
@@ -31,6 +32,9 @@ const DEFAULT_IGNORED_FOLDERS = new Set([
 
 /** Options for customizing folder structure retrieval. */
 interface FolderStructureOptions {
+  signal?: AbortSignal;
+  /** Reject root read failures instead of returning a display diagnostic. */
+  throwOnError?: boolean;
   /** Maximum number of files and folders combined to display. Defaults to 200. */
   maxItems?: number;
   /** Set of folder names to ignore completely. Case-sensitive. */
@@ -44,11 +48,12 @@ interface FolderStructureOptions {
 }
 // Define a type for the merged options where fileIncludePattern remains optional
 type MergedFolderStructureOptions = Required<
-  Omit<FolderStructureOptions, 'fileIncludePattern' | 'fileService'>
+  Omit<FolderStructureOptions, 'fileIncludePattern' | 'fileService' | 'signal'>
 > & {
   fileIncludePattern?: RegExp;
   fileService?: FileDiscoveryService;
   fileFilteringOptions?: FileFilteringOptions;
+  signal?: AbortSignal;
 };
 
 /** Represents the full, unfiltered information about a folder and its contents. */
@@ -91,6 +96,7 @@ async function readFullStructure(
   const processedPaths = new Set<string>(); // To avoid processing same path if symlinks create loops
 
   while (queue.length > 0) {
+    options.signal?.throwIfAborted();
     const { folderInfo, currentPath } = queue.shift()!;
 
     if (processedPaths.has(currentPath)) {
@@ -107,10 +113,14 @@ async function readFullStructure(
 
     let entries: Dirent[];
     try {
-      const rawEntries = await fs.readdir(currentPath, { withFileTypes: true });
+      const rawEntries = await withAbortSignal(options.signal, () =>
+        fs.readdir(currentPath, { withFileTypes: true }),
+      );
       // Sort entries alphabetically by name for consistent processing order
       entries = rawEntries.sort((a, b) => a.name.localeCompare(b.name));
     } catch (error: unknown) {
+      options.signal?.throwIfAborted();
+      if (options.throwOnError && currentPath === rootPath) throw error;
       if (
         isNodeError(error) &&
         (error.code === 'EACCES' ||
@@ -307,12 +317,15 @@ export async function getFolderStructure(
   directory: string,
   options?: FolderStructureOptions,
 ): Promise<string> {
+  options?.signal?.throwIfAborted();
   const resolvedPath = path.resolve(directory);
   const mergedOptions: MergedFolderStructureOptions = {
     maxItems: options?.maxItems ?? MAX_ITEMS,
     ignoredFolders: options?.ignoredFolders ?? DEFAULT_IGNORED_FOLDERS,
     fileIncludePattern: options?.fileIncludePattern,
     fileService: options?.fileService,
+    signal: options?.signal,
+    throwOnError: options?.throwOnError ?? false,
     fileFilteringOptions:
       options?.fileFilteringOptions ?? DEFAULT_FILE_FILTERING_OPTIONS,
   };
@@ -320,6 +333,7 @@ export async function getFolderStructure(
   try {
     // 1. Read the structure using BFS, respecting maxItems
     const structureRoot = await readFullStructure(resolvedPath, mergedOptions);
+    options?.signal?.throwIfAborted();
 
     if (!structureRoot) {
       return `Error: Could not read directory "${resolvedPath}". Check path and permissions.`;
@@ -351,6 +365,8 @@ export async function getFolderStructure(
 
     return `${summary}\n\n${resolvedPath}${path.sep}\n${structureLines.join('\n')}`;
   } catch (error: unknown) {
+    options?.signal?.throwIfAborted();
+    if (options?.throwOnError) throw error;
     debugLogger.warn(
       `Error getting folder structure for ${resolvedPath}:`,
       error,

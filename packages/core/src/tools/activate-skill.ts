@@ -31,6 +31,7 @@ import {
 } from '../skills/skillOrchestrator.js';
 import type { SkillDefinition } from '../skills/skillLoader.js';
 import { I18nManager } from '../i18n/i18nManager.js';
+import { withAbortSignal } from '../utils/withAbortSignal.js';
 
 /**
  * Parameters for the ActivateSkill tool
@@ -47,6 +48,8 @@ class ActivateSkillToolInvocation extends BaseToolInvocation<
   ToolResult
 > {
   private cachedFolderStructure: string | undefined;
+  private cachedFolderLocation: string | undefined;
+  private confirmedSkill: SkillDefinition | undefined;
   private libraryState(skillName: string) {
     try {
       return { entry: getSkillLibraryEntry(skillName), warning: '' };
@@ -73,11 +76,19 @@ class ActivateSkillToolInvocation extends BaseToolInvocation<
 
   private async resolveSkillDefinition(
     skillName: string,
+    signal: AbortSignal,
   ): Promise<SkillDefinition | undefined> {
-    const existing = this.config.getSkillManager().getSkill(skillName);
-    if (existing) return existing;
-    const multi = await discoverAllMultiSourceSkills();
-    return multi.find((s) => s.name.toLowerCase() === skillName.toLowerCase());
+    signal.throwIfAborted();
+    const manager = this.config.getSkillManager();
+    if (manager.isAdminEnabled?.() === false) return undefined;
+    const existing = manager.getSkill(skillName);
+    if (existing) return existing.disabled ? undefined : { ...existing };
+    const multi = await discoverAllMultiSourceSkills(signal);
+    signal.throwIfAborted();
+    const selected = multi.find(
+      (s) => !s.disabled && s.name.toLowerCase() === skillName.toLowerCase(),
+    );
+    return selected ? { ...selected } : undefined;
   }
 
   getDescription(): string {
@@ -92,24 +103,37 @@ class ActivateSkillToolInvocation extends BaseToolInvocation<
 
   private async getOrFetchFolderStructure(
     skillLocation: string,
+    signal: AbortSignal,
   ): Promise<string> {
-    if (this.cachedFolderStructure === undefined) {
-      this.cachedFolderStructure = await getFolderStructure(
-        path.dirname(skillLocation),
+    signal.throwIfAborted();
+    if (
+      this.cachedFolderStructure === undefined ||
+      this.cachedFolderLocation !== skillLocation
+    ) {
+      const structure = await withAbortSignal(signal, () =>
+        getFolderStructure(path.dirname(skillLocation), {
+          signal,
+          throwOnError: true,
+        }),
       );
+      signal.throwIfAborted();
+      this.cachedFolderStructure = structure;
+      this.cachedFolderLocation = skillLocation;
     }
     return this.cachedFolderStructure;
   }
 
   protected override async getConfirmationDetails(
-    _abortSignal: AbortSignal,
+    abortSignal: AbortSignal,
   ): Promise<ToolCallConfirmationDetails | false> {
+    abortSignal.throwIfAborted();
     if (!this.messageBus) {
       return false;
     }
 
     const skillName = this.params.name;
-    const skill = await this.resolveSkillDefinition(skillName);
+    const skill = await this.resolveSkillDefinition(skillName, abortSignal);
+    abortSignal.throwIfAborted();
 
     if (!skill) {
       return false;
@@ -121,6 +145,7 @@ class ActivateSkillToolInvocation extends BaseToolInvocation<
 
     const folderStructure = await this.getOrFetchFolderStructure(
       skill.location,
+      abortSignal,
     );
     const { entry: libEntry, warning } = this.libraryState(skillName);
     const { tags, domainProfile } = suggestSkillTags(skill.name, skill.body);
@@ -143,6 +168,25 @@ ${skill.description}${onboardingSection}${warning ? `\n\n${warning}` : ''}
 **Resources to be shared with the model:**
 ${folderStructure}`,
       onConfirm: async (outcome: ToolConfirmationOutcome) => {
+        if (outcome === ToolConfirmationOutcome.Cancel) return;
+        abortSignal.throwIfAborted();
+        const current = await this.resolveSkillDefinition(
+          skillName,
+          abortSignal,
+        );
+        if (
+          !current ||
+          current.location !== skill.location ||
+          current.body !== skill.body
+        ) {
+          throw new Error(
+            I18nManager.getInstance().t(
+              '技能已变更或停用，请重新发起激活。',
+              'The skill changed or was disabled. Request activation again.',
+            ),
+          );
+        }
+        abortSignal.throwIfAborted();
         if (isUntagged) {
           if (
             outcome === ToolConfirmationOutcome.ProceedAlways ||
@@ -158,15 +202,18 @@ ${folderStructure}`,
           }
         }
         await this.publishPolicyUpdate(outcome);
+        this.confirmedSkill = { ...current };
       },
     };
     return confirmationDetails;
   }
 
-  async execute({ abortSignal: _signal }: ExecuteOptions): Promise<ToolResult> {
+  async execute({ abortSignal }: ExecuteOptions): Promise<ToolResult> {
+    abortSignal.throwIfAborted();
     const skillName = this.params.name;
     const skillManager = this.config.getSkillManager();
-    const skill = await this.resolveSkillDefinition(skillName);
+    const skill = await this.resolveSkillDefinition(skillName, abortSignal);
+    abortSignal.throwIfAborted();
 
     if (!skill) {
       const skills = skillManager.getSkills();
@@ -181,24 +228,51 @@ ${folderStructure}`,
         },
       };
     }
-
-    skillManager.activateSkill(skillName);
-
-    // Add the skill's directory to the workspace context so the agent has permission
-    // to read its bundled resources.
-    this.config
-      .getWorkspaceContext()
-      .addDirectory(path.dirname(skill.location));
+    if (
+      this.confirmedSkill &&
+      (this.confirmedSkill.location !== skill.location ||
+        this.confirmedSkill.body !== skill.body)
+    ) {
+      throw new Error(
+        I18nManager.getInstance().t(
+          '技能已变更，请重新发起激活。',
+          'The skill changed. Request activation again.',
+        ),
+      );
+    }
 
     const folderStructure = await this.getOrFetchFolderStructure(
       skill.location,
+      abortSignal,
     );
+    abortSignal.throwIfAborted();
+    const current = await this.resolveSkillDefinition(skillName, abortSignal);
+    abortSignal.throwIfAborted();
+    if (
+      !current ||
+      current.location !== skill.location ||
+      current.body !== skill.body
+    ) {
+      throw new Error(
+        I18nManager.getInstance().t(
+          '技能已变更或停用，请重新发起激活。',
+          'The skill changed or was disabled. Request activation again.',
+        ),
+      );
+    }
     const profile = classifySkill(skill);
     const { entry: libEntry, warning } = this.libraryState(skillName);
     const tagDisplay =
       libEntry && libEntry.tags.length > 0
         ? ` | 标签: ${libEntry.tags.join(' ')}`
         : ' | 模式: 原生直通调用 (Native Pass-Through)';
+
+    abortSignal.throwIfAborted();
+    this.config
+      .getWorkspaceContext()
+      .addDirectory(path.dirname(skill.location));
+    abortSignal.throwIfAborted();
+    skillManager.activateSkill(skill.name);
 
     return {
       llmContent: `<activated_skill name="${skillName}" domain="${profile.domain}" badge="${profile.badge}">

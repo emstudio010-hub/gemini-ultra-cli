@@ -10,6 +10,7 @@ import * as os from 'node:os';
 import { type SkillDefinition, loadSkillsFromDir } from './skillLoader.js';
 import { checkBinaryAsync, runDrillPreflight } from '../tools/drillTools.js';
 import { I18nManager, type UiLocale } from '../i18n/i18nManager.js';
+import { withAbortSignal } from '../utils/withAbortSignal.js';
 
 export type UniversalSkillDomain =
   | 'design-ui'
@@ -49,14 +50,16 @@ export function getMultiSourceSkillDirs(): string[] {
   return dirs.filter((d) => fs.existsSync(d));
 }
 
-export async function discoverAllMultiSourceSkills(): Promise<SkillDefinition[]> {
+export async function discoverAllMultiSourceSkills(signal?: AbortSignal): Promise<SkillDefinition[]> {
+  signal?.throwIfAborted();
   const dirs = getMultiSourceSkillDirs();
   const all: SkillDefinition[] = [];
   const seen = new Set<string>();
 
   for (const dir of dirs) {
+    signal?.throwIfAborted();
     try {
-      const skills = await loadSkillsFromDir(dir);
+      const skills = await withAbortSignal(signal, () => loadSkillsFromDir(dir));
       for (const s of skills) {
         if (!seen.has(s.name.toLowerCase())) {
           seen.add(s.name.toLowerCase());
@@ -64,6 +67,7 @@ export async function discoverAllMultiSourceSkills(): Promise<SkillDefinition[]>
         }
       }
     } catch {
+      signal?.throwIfAborted();
       // Continue discovery in the remaining independent skill directories.
     }
   }
