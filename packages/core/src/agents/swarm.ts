@@ -447,6 +447,27 @@ function swarmBudgetHandoff(root: string, swarm: Swarm): SwarmBudgetError {
     `${i18n.t('保留状态与成员结果', 'Saved state and member results')}: ${path.join(directory(root, swarm.id), 'members.json')}`,
     `${i18n.t('公开留言', 'Shared board')}: ${path.join(directory(root, swarm.id), 'board.jsonl')}`,
   ];
+  const paused = swarm.members
+    .filter(
+      (member) =>
+        member.state === 'paused' && (member.lastError || member.result),
+    )
+    .slice(-3);
+  for (const member of paused) {
+    // These are bounded excerpts, potentially from an earlier accepted result.
+    // Keep them distinct from a current verdict and prefer the latest error.
+    lines.push(
+      `${i18n.t('暂停成员保留摘要（不代表本轮完成）', 'Retained paused-member excerpt (not turn completion)')} @${member.name}:`,
+      (member.lastError || member.result).slice(0, 1200),
+    );
+  }
+  if (paused.length)
+    lines.push(
+      i18n.t(
+        '先查看成员原因与完整结果；增加调度预算不会修复成员错误。仅按用户允许的范围处理与续跑。',
+        'Inspect the member cause and full result first. Increasing the dispatch budget does not fix a member error. Continue only within the user-authorized scope.',
+      ),
+    );
   const reviewer = swarm.members.findLast(
     (member) => member.agent === 'workflow-auditor' && !!member.result,
   );
