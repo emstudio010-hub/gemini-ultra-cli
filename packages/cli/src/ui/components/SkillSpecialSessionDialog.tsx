@@ -3,112 +3,147 @@
  * Copyright 2026 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Box, Text } from 'ink';
 import {
-  type SkillDefinition,
   classifySkill,
+  getEffortOptions,
   preflightSkillTools,
-  type SkillDomainProfile,
-  type SkillToolPreflightReport,
   ProviderManager,
+  type SkillDefinition,
   type ReasoningEffortLevel,
+  type SkillToolPreflightReport,
 } from '@google/gemini-cli-core';
 import { useKeypress } from '../hooks/useKeypress.js';
+import { useLocale } from '../hooks/useLocale.js';
+import { useConfig } from '../contexts/ConfigContext.js';
 import { theme } from '../semantic-colors.js';
+import {
+  getSkillSessionModels,
+  skillSessionError,
+} from '../../services/skillSession.js';
 
 interface SkillSpecialSessionDialogProps {
   skill: SkillDefinition;
-  onConfirm: (selectedModel: string, effort: ReasoningEffortLevel) => void;
+  onConfirm: (
+    selectedModel: string,
+    effort: ReasoningEffortLevel,
+  ) => void | Promise<void>;
   onCancel: () => void;
 }
 
-export const SkillSpecialSessionDialog: React.FC<SkillSpecialSessionDialogProps> = ({
+export function SkillSpecialSessionDialog({
   skill,
   onConfirm,
   onCancel,
-}) => {
+}: SkillSpecialSessionDialogProps) {
+  const locale = useLocale();
+  const config = useConfig();
+  const zh = locale === 'zh';
   const [step, setStep] = useState<1 | 2>(1);
-  const [selectedModelIdx, setSelectedModelIdx] = useState(0);
-
-  const mgr = ProviderManager.getInstance();
-  const [effort, setEffort] = useState<ReasoningEffortLevel>(() => mgr.getReasoningEffort());
-
-  const profile: SkillDomainProfile = classifySkill(skill);
-  const [preflightReport, setPreflightReport] = useState<SkillToolPreflightReport | null>(null);
+  const [effort, setEffort] = useState(() =>
+    ProviderManager.getInstance().getReasoningEffort(),
+  );
+  const models = getSkillSessionModels(config);
+  const [selectedModel, setSelectedModel] = useState(
+    () =>
+      models.find((item) => item.id === config.getModel())?.id ??
+      models[0]?.id ??
+      '',
+  );
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submitting = useRef(false);
+  const mounted = useRef(true);
+  const [inspect, setInspect] = useState(0);
+  const [preflight, setPreflight] = useState<SkillToolPreflightReport>();
+  const [preflightFailed, setPreflightFailed] = useState(false);
+  const domain = useMemo(() => classifySkill(skill).domain, [skill]);
+  const levels = getEffortOptions(locale);
+  const chosenEffort = levels.find((item) => item.level === effort)!;
 
   useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (!inspect) return;
     let active = true;
-    void preflightSkillTools(profile.domain).then((report) => {
-      if (active) setPreflightReport(report);
-    });
+    setPreflight(undefined);
+    setPreflightFailed(false);
+    void preflightSkillTools(domain)
+      .then((report) => {
+        if (active) setPreflight(report);
+      })
+      .catch(() => {
+        if (active) setPreflightFailed(true);
+      });
     return () => {
       active = false;
     };
-  }, [profile.domain]);
-
-  // Merge Gemini native models with external models
-  const externalItems = mgr.getAllExternalModelItems();
-  const availableModels: Array<{ id: string; name: string; tag: string }> = [
-    { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro (原生高阶)', tag: 'Native' },
-    { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash (原生极速)', tag: 'Native' },
-  ];
-
-  for (const item of externalItems) {
-    availableModels.push({
-      id: item.qualifiedId,
-      name: `${item.providerName}: ${item.modelId}`,
-      tag: item.protocol,
-    });
-  }
-
-  const effortLevels: ReasoningEffortLevel[] = ['low', 'medium', 'high', 'xhigh', 'max'];
+  }, [domain, inspect]);
 
   useKeypress(
     (key) => {
-      if (key.name === 'escape') {
+      if (submitting.current) return true;
+      if (key.name === 'escape' || (step === 1 && key.name === 'n')) {
         onCancel();
         return true;
       }
-
-      // Step 1: Confirm special session
-      if (step === 1) {
-        if (key.name === 'y' || key.name === 'return') {
-          setStep(2);
-          return true;
-        }
-        if (key.name === 'n') {
-          onCancel();
-          return true;
-        }
+      if (key.name === 'p') {
+        setInspect((value) => value + 1);
+        return true;
       }
-
-      // Step 2: Choose model and effort
-      if (step === 2) {
-        if (key.name === 'up') {
-          setSelectedModelIdx((prev) => (prev > 0 ? prev - 1 : availableModels.length - 1));
+      const enter = key.name === 'enter' || key.name === 'return';
+      if (step === 1 && (key.name === 'y' || enter)) {
+        setStep(2);
+        return true;
+      }
+      if (step !== 2) return false;
+      if (key.name === 'tab') {
+        setEffort(
+          (previous) =>
+            levels[
+              (levels.findIndex((item) => item.level === previous) + 1) %
+                levels.length
+            ].level,
+        );
+        setError('');
+        return true;
+      }
+      if (key.name === 'up' || key.name === 'down') {
+        const index = models.findIndex((item) => item.id === selectedModel);
+        const next = key.name === 'up' ? index - 1 : index + 1;
+        setSelectedModel(
+          models[(next + models.length) % models.length]?.id ?? '',
+        );
+        setError('');
+        return true;
+      }
+      if (enter) {
+        if (!models.some((item) => item.id === selectedModel)) {
+          setError(
+            zh
+              ? '没有可用模型。请先用 /provider 配置供应商。'
+              : 'No model is available. Configure a provider with /provider first.',
+          );
           return true;
         }
-        if (key.name === 'down') {
-          setSelectedModelIdx((prev) => (prev < availableModels.length - 1 ? prev + 1 : 0));
-          return true;
-        }
-        if (key.name === 'tab') {
-          setEffort((prev) => {
-            const nextIdx = (effortLevels.indexOf(prev) + 1) % effortLevels.length;
-            const chosen = effortLevels[nextIdx];
-            mgr.setReasoningEffort(chosen);
-            return chosen;
+        submitting.current = true;
+        setBusy(true);
+        setError('');
+        void Promise.resolve()
+          .then(() => onConfirm(selectedModel, effort))
+          .catch((failure) => {
+            if (mounted.current) setError(skillSessionError(failure));
+          })
+          .finally(() => {
+            submitting.current = false;
+            if (mounted.current) setBusy(false);
           });
-          return true;
-        }
-        if (key.name === 'return') {
-          const chosenModel = availableModels[selectedModelIdx] || availableModels[0];
-          mgr.setReasoningEffort(effort);
-          onConfirm(chosenModel.id, effort);
-          return true;
-        }
+        return true;
       }
       return false;
     },
@@ -123,134 +158,107 @@ export const SkillSpecialSessionDialog: React.FC<SkillSpecialSessionDialogProps>
       padding={1}
       width="100%"
     >
-      {/* --- STEP 1: SKILL INSIGHT & CLASSIFICATION --- */}
+      <Text bold color={theme.text.accent}>
+        {zh ? '技能会话' : 'Skill session'} · {skill.name} · {step}/2
+      </Text>
+      {error ? <Text color={theme.status.error}>{error}</Text> : null}
       {step === 1 ? (
-        <Box flexDirection="column">
-          <Box flexDirection="row" justifyContent="space-between">
-            <Text bold color={theme.text.accent}>
-              ✦ 全生态技能智能洞察 (Skill Insight & Orchestrator)
-            </Text>
-            <Text color={theme.text.secondary}>[按 Y 或 Enter 继续 / N 取消]</Text>
-          </Box>
-
-          <Box marginTop={1} flexDirection="column">
-            <Box>
-              <Text bold color={theme.text.primary}>
-                检测到技能:{' '}
-              </Text>
-              <Text bold color={theme.status.success}>
-                [{skill.name}]
-              </Text>
-              <Text color={theme.text.secondary}> - {profile.badge}</Text>
-            </Box>
-            <Box>
-              <Text color={theme.text.primary}>
-                领域画像: <Text bold color={theme.text.accent}>{profile.domainLabel}</Text>{' '}
-                <Text color={theme.ui.comment}>(置信度: {Math.round(profile.confidence * 100)}%)</Text>
-              </Text>
-            </Box>
-          </Box>
-
-          {/* Capabilities */}
-          <Box marginTop={1} flexDirection="column">
-            <Text bold color={theme.text.primary}>
-              智能提炼的核心能力与方法论矩阵:
-            </Text>
-            {profile.coreCapabilities.map((cap) => (
-              <Box key={cap} marginLeft={2}>
-                <Text color={theme.status.success}>• </Text>
-                <Text color={theme.text.primary}>{cap}</Text>
-              </Box>
-            ))}
-          </Box>
-
-          {/* Tools Preflight */}
-          {preflightReport && (
-            <Box marginTop={1} flexDirection="column">
-              <Text bold color={theme.text.primary}>
-                关联环境与本机工具就绪状态:
-              </Text>
-              <Box marginLeft={2} flexDirection="column">
-                {preflightReport.readyTools.map((t) => (
-                  <Text key={t.name} color={theme.status.success}>
-                    ✓ {t.name}: {t.detail}
-                  </Text>
-                ))}
-                {preflightReport.missingTools.map((t) => (
-                  <Text key={t.name} color={theme.status.warning}>
-                    ! {t.name} (缺席 - {t.hint})
-                  </Text>
-                ))}
-              </Box>
-            </Box>
-          )}
-
-          <Box marginTop={1} flexDirection="column" borderStyle="single" borderTop={true} borderBottom={false} borderLeft={false} borderRight={false} borderColor={theme.border.default}>
-            <Text bold color={theme.text.primary}>
-              是否以此技能为专项上下文，开启「专属特殊会话 (Special Session)」？
-            </Text>
-            <Box marginTop={1} flexDirection="column">
-              <Text color={theme.status.success}>
-                {'  ● [Y] 开启专属特殊会话并选择匹配的大模型 (Enter / Y)'}
-              </Text>
-              <Text color={theme.ui.comment}>
-                {'  ○ [N] 保持当前常规对话上下文 (Esc / N)'}
-              </Text>
-            </Box>
-          </Box>
+        <Box flexDirection="column" marginTop={1}>
+          <Text>{skill.description}</Text>
+          <Text color={theme.text.secondary}>
+            {zh
+              ? '将技能说明加入当前会话，保留现有任务和历史。'
+              : 'Add the skill instructions to this chat, keeping the current task and history.'}
+          </Text>
+          <Text>
+            {zh
+              ? 'Enter / Y 继续 · Esc / N 取消 · P 检查本机工具'
+              : 'Enter / Y Continue · Esc / N Cancel · P Inspect local tools'}
+          </Text>
         </Box>
       ) : (
-        /* --- STEP 2: MODEL & REASONING EFFORT SELECTION --- */
-        <Box flexDirection="column">
-          <Box flexDirection="row" justifyContent="space-between">
-            <Text bold color={theme.text.accent}>
-              ✦ 选择特殊会话主控大模型与思考强度 (Step 2/2)
+        <Box flexDirection="column" marginTop={1}>
+          <Text color={theme.text.secondary}>
+            {zh
+              ? '↑↓ 选择模型 · Tab 切换强度 · Enter 激活 · Esc 取消'
+              : '↑↓ Model · Tab Effort · Enter Activate · Esc Cancel'}
+          </Text>
+          {models.length ? (
+            models.map((item) => (
+              <Text
+                key={item.id}
+                color={
+                  item.id === selectedModel
+                    ? theme.status.success
+                    : theme.text.primary
+                }
+              >
+                {item.id === selectedModel ? ' ▶ ' : '   '}
+                {item.name}
+              </Text>
+            ))
+          ) : (
+            <Text color={theme.status.warning}>
+              {zh
+                ? '请先用 /provider 添加模型。'
+                : 'Add a model with /provider first.'}
             </Text>
-            <Text color={theme.text.secondary}>[上下键切模型，Tab 切换深度，Enter 启动]</Text>
-          </Box>
-
+          )}
           <Box marginTop={1} flexDirection="column">
+            <Text bold>
+              {zh ? '推理强度：' : 'Reasoning effort: '}
+              {chosenEffort.label}
+            </Text>
             <Text color={theme.text.secondary}>
-              领域推荐算力: {profile.recommendedModelTier}
+              {levels.map((item) => item.label).join(' → ')}
             </Text>
-          </Box>
-
-          <Box marginTop={1} flexDirection="column">
-            <Text bold color={theme.text.primary}>
-              可用模型列表 (原生与已配置的外接供应商):
-            </Text>
-            {availableModels.map((m, idx) => {
-              const isSelected = idx === selectedModelIdx;
-              return (
-                <Box key={m.id}>
-                  <Text color={isSelected ? theme.status.success : theme.text.primary}>
-                    {isSelected ? ' ▶ ' : '   '}
-                    <Text bold>{m.name}</Text> <Text color={theme.ui.comment}>[{m.tag}]</Text>
-                  </Text>
-                </Box>
-              );
-            })}
-          </Box>
-
-          <Box marginTop={1} flexDirection="column">
-            <Box>
-              <Text bold color={theme.text.primary}>
-                当前推理思考强度 (Reasoning Effort):{' '}
-              </Text>
-              <Text bold color={theme.status.success}>
-                [{effort.toUpperCase()}]
-              </Text>
-              <Text color={theme.text.secondary}> (按 Tab 键循环切换: low &gt; medium &gt; high &gt; xhigh &gt; max)</Text>
-            </Box>
-          </Box>
-
-          <Box marginTop={1} borderStyle="single" borderTop={true} borderBottom={false} borderLeft={false} borderRight={false} borderColor={theme.border.default}>
-            <Text color={theme.status.success} bold>
-              按 Enter 立即初始化特殊会话，挂载全套领域规范与工具链！
+            <Text color={theme.text.secondary}>{chosenEffort.description}</Text>
+            <Text color={theme.text.secondary}>
+              {zh
+                ? '确认后模型仅用于当前会话，推理强度保存为偏好；取消不写入。'
+                : 'On confirmation, the model applies to this chat and effort is saved as a preference. Cancelling writes nothing.'}
             </Text>
           </Box>
         </Box>
       )}
+      {busy ? (
+        <Text color={theme.text.secondary}>
+          {zh ? '正在激活…' : 'Activating…'}
+        </Text>
+      ) : null}
+      {inspect ? (
+        <Box marginTop={1} flexDirection="column">
+          <Text>
+            {preflightFailed
+              ? zh
+                ? '工具检查失败。按 P 重试。'
+                : 'Tool inspection failed. Press P to retry.'
+              : !preflight
+                ? zh
+                  ? '正在检查本机工具…'
+                  : 'Inspecting local tools…'
+                : zh
+                  ? '工具就绪 ' +
+                    preflight.readyTools.length +
+                    ' · 缺失 ' +
+                    preflight.missingTools.length
+                  : 'Tools ready ' +
+                    preflight.readyTools.length +
+                    ' · Missing ' +
+                    preflight.missingTools.length}
+          </Text>
+          {preflight?.readyTools.map((item) => (
+            <Text key={item.name} color={theme.status.success}>
+              ✓ {item.name}: {item.detail}
+            </Text>
+          ))}
+          {preflight?.missingTools.map((item) => (
+            <Text key={item.name} color={theme.status.warning}>
+              ! {item.name}: {item.hint}
+            </Text>
+          ))}
+        </Box>
+      ) : null}
     </Box>
   );
-};
+}

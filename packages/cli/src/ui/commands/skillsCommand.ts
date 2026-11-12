@@ -21,10 +21,11 @@ import { disableSkill, enableSkill } from '../../utils/skillSettings.js';
 import {
   getAdminErrorMessage,
   getErrorMessage,
-  classifySkill,
+  I18nManager,
+  getEffortOptions,
 } from '@google/gemini-cli-core';
 import { SkillSpecialSessionDialog } from '../components/SkillSpecialSessionDialog.js';
-import { modelSaveError } from '../utils/modelSaveError.js';
+import { startSkillSession } from '../../services/skillSession.js';
 import {
   linkSkill,
   renderSkillActionFeedback,
@@ -417,15 +418,28 @@ export const skillsCommand: SlashCommand = {
     {
       name: 'launch',
       altNames: ['启动', 'run'],
-      description: '针对指定技能开启专属特殊会话向导: /skills launch <技能名>',
+      get description() {
+        return I18nManager.getInstance().t(
+          '配置当前技能会话: /skills launch <技能名>',
+          'Configure a skill session: /skills launch <skill-name>',
+        );
+      },
       kind: CommandKind.BUILT_IN,
-      action: async (context: CommandContext, args: string): Promise<void | SlashCommandActionReturn> => {
+      action: async (
+        context: CommandContext,
+        args: string,
+      ): Promise<void | SlashCommandActionReturn> => {
         const skillName = args.trim();
-        const skillManager = context.services.agentContext?.config.getSkillManager();
+        const i18n = I18nManager.getInstance();
+        const skillManager =
+          context.services.agentContext?.config.getSkillManager();
         if (!skillName) {
           context.ui.addItem({
             type: MessageType.ERROR,
-            text: '用法: /skills launch <技能名> (例如: /skills launch design-taste-frontend)',
+            text: i18n.t(
+              '用法: /skills launch <技能名>',
+              'Usage: /skills launch <skill-name>',
+            ),
           });
           return;
         }
@@ -433,7 +447,10 @@ export const skillsCommand: SlashCommand = {
         if (!skill) {
           context.ui.addItem({
             type: MessageType.ERROR,
-            text: `未找到技能 "${skillName}"。可用 /skills list 查看全部技能。`,
+            text: i18n.t(
+              `未找到技能 "${skillName}"。可用 /skills list 查看全部技能。`,
+              `Skill "${skillName}" was not found. Use /skills list to view available skills.`,
+            ),
           });
           return;
         }
@@ -442,31 +459,27 @@ export const skillsCommand: SlashCommand = {
           type: 'custom_dialog',
           component: React.createElement(SkillSpecialSessionDialog, {
             skill,
-            onConfirm: (selectedModel: string, effort) => {
+            onConfirm: async (selectedModel: string, effort) => {
               const config = context.services.agentContext?.config;
-              if (config) {
-                try {
-                  config.setModel(selectedModel, false);
-                } catch {
-                  context.ui.addItem({
-                    type: MessageType.ERROR,
-                    text: modelSaveError(),
-                  });
-                  return;
-                }
-              }
+              if (!config) throw new Error('Session unavailable');
+              await startSkillSession(
+                config,
+                skill.name,
+                selectedModel,
+                effort,
+              );
               context.ui.removeComponent();
-              skillManager?.activateSkill(skill.name);
-              const profile = classifySkill(skill);
-
+              const i18n = I18nManager.getInstance();
+              const label =
+                getEffortOptions(i18n.getLocale()).find(
+                  (item) => item.level === effort,
+                )?.label ?? effort;
               context.ui.addItem({
                 type: MessageType.INFO,
-                text: `╭─ ✦ 「专属特殊会话」已成功激活 ────────────────────────────────────────╮\n` +
-                      `│ 激活技能 : [${skill.name}] ${profile.badge}\n` +
-                      `│ 领域定位 : ${profile.domainLabel}\n` +
-                      `│ 主控模型 : ${selectedModel} (思考强度: [${effort.toUpperCase()}])\n` +
-                      `│ 方法契约 : 已挂载 ${skill.name} 指令与领域工具链\n` +
-                      `╰────────────────────────────────────────────────────────────────────────╯`,
+                text: i18n.t(
+                  `技能 ${skill.name} 的说明已加入当前会话。模型：${selectedModel} · 推理强度：${label}`,
+                  `Instructions for ${skill.name} were added to this chat. Model: ${selectedModel} · Effort: ${label}`,
+                ),
               });
             },
             onCancel: () => {
