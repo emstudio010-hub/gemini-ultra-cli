@@ -701,13 +701,13 @@ export class SwarmEngine {
     );
   }
   cancel(): void {
+    this.stopMembers();
     const swarm = readSwarm(this.root, this.id);
     if (swarm.phase === 'completed') return;
     swarm.phase = 'cancelled';
     for (const member of swarm.members)
       if (member.state !== 'killed') member.state = 'paused';
     saveSwarm(this.root, swarm);
-    this.stopMembers();
   }
   stopMembers(): void {
     for (const run of this.running.values()) run.controller.abort();
@@ -1067,13 +1067,13 @@ export function cancelSwarm(root: string, id: string): Swarm {
     return recoverSwarm(root, id);
   }
   owns(swarm.ownerPid);
+  engine?.stopMembers();
   if (swarm.phase !== 'completed') {
     swarm.phase = 'cancelled';
     for (const member of swarm.members)
       if (member.state !== 'killed') member.state = 'paused';
   }
   saveSwarm(root, swarm);
-  engine?.stopMembers();
   repairPointer(root, swarm);
   return swarm;
 }
