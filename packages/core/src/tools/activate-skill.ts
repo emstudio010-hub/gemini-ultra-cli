@@ -30,6 +30,7 @@ import {
   suggestSkillTags,
 } from '../skills/skillOrchestrator.js';
 import type { SkillDefinition } from '../skills/skillLoader.js';
+import { I18nManager } from '../i18n/i18nManager.js';
 
 /**
  * Parameters for the ActivateSkill tool
@@ -46,6 +47,19 @@ class ActivateSkillToolInvocation extends BaseToolInvocation<
   ToolResult
 > {
   private cachedFolderStructure: string | undefined;
+  private libraryState(skillName: string) {
+    try {
+      return { entry: getSkillLibraryEntry(skillName), warning: '' };
+    } catch {
+      return {
+        entry: undefined,
+        warning: I18nManager.getInstance().t(
+          '技能标签库不可用，原文件已保留。仅允许本次可继续使用；永久保存前请恢复标签库。',
+          'Skill metadata is unavailable; the original file was retained. Allow once can continue; restore metadata before saving permanently.',
+        ),
+      };
+    }
+  }
 
   constructor(
     private config: Config,
@@ -108,7 +122,7 @@ class ActivateSkillToolInvocation extends BaseToolInvocation<
     const folderStructure = await this.getOrFetchFolderStructure(
       skill.location,
     );
-    const libEntry = getSkillLibraryEntry(skillName);
+    const { entry: libEntry, warning } = this.libraryState(skillName);
     const { tags, domainProfile } = suggestSkillTags(skill.name, skill.body);
 
     const isUntagged = !libEntry;
@@ -124,27 +138,22 @@ class ActivateSkillToolInvocation extends BaseToolInvocation<
       prompt: `即将启用专业技能 **${skillName}**.
 
 **Description:**
-${skill.description}${onboardingSection}
+${skill.description}${onboardingSection}${warning ? `\n\n${warning}` : ''}
 
 **Resources to be shared with the model:**
 ${folderStructure}`,
       onConfirm: async (outcome: ToolConfirmationOutcome) => {
         if (isUntagged) {
-          if (outcome === ToolConfirmationOutcome.ProceedAlways) {
+          if (
+            outcome === ToolConfirmationOutcome.ProceedAlways ||
+            outcome === ToolConfirmationOutcome.ProceedAlwaysAndSave
+          ) {
             registerSkillInLibrary({
               name: skill.name,
               domain: domainProfile.domain,
               badge: domainProfile.badge,
               tags,
               mode: 'tagged',
-            });
-          } else if (outcome === ToolConfirmationOutcome.ProceedOnce) {
-            registerSkillInLibrary({
-              name: skill.name,
-              domain: domainProfile.domain,
-              badge: domainProfile.badge,
-              tags: [],
-              mode: 'native-passthrough',
             });
           }
         }
@@ -185,7 +194,7 @@ ${folderStructure}`,
       skill.location,
     );
     const profile = classifySkill(skill);
-    const libEntry = getSkillLibraryEntry(skillName);
+    const { entry: libEntry, warning } = this.libraryState(skillName);
     const tagDisplay =
       libEntry && libEntry.tags.length > 0
         ? ` | 标签: ${libEntry.tags.join(' ')}`
@@ -205,7 +214,7 @@ ${folderStructure}`,
     ${folderStructure}
   </available_resources>
 </activated_skill>`,
-      returnDisplay: `${profile.badge} 技能 **${skillName}** 已激活 (${profile.domainLabel}${tagDisplay}).\n资源路径 \`${path.dirname(skill.location)}\`:\n\n${folderStructure}`,
+      returnDisplay: `${profile.badge} 技能 **${skillName}** 已激活 (${profile.domainLabel}${tagDisplay}).\n资源路径 \`${path.dirname(skill.location)}\`:\n\n${folderStructure}${warning ? `\n\n${warning}` : ''}`,
     };
   }
 }

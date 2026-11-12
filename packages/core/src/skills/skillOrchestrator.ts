@@ -421,50 +421,5 @@ export function saveSkillWithTags(params: {
   return targetFile;
 }
 
-export interface SkillLibraryEntry {
-  name: string;
-  domain: UniversalSkillDomain;
-  badge: string;
-  tags: string[];
-  mode: 'tagged' | 'native-passthrough';
-  preferredModel?: string;
-  preferredEffort?: string;
-  updatedAt: string;
-}
-
-function getSkillTagsRegistryPath(): string {
-  const dir = path.join(os.homedir(), '.gemini', 'config');
-  fs.mkdirSync(dir, { recursive: true });
-  return path.join(dir, 'skill-tags.json');
-}
-
-export function loadSkillLibraryRegistry(): Record<string, SkillLibraryEntry> {
-  const filePath = getSkillTagsRegistryPath();
-  if (!fs.existsSync(filePath)) return {};
-  try {
-    // Preserve the legacy registry read; its persistence schema is separate from inspection.
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
-    return JSON.parse(fs.readFileSync(filePath, 'utf8')) as Record<
-      string,
-      SkillLibraryEntry
-    >;
-  } catch {
-    return {};
-  }
-}
-
-export function getSkillLibraryEntry(skillName: string): SkillLibraryEntry | undefined {
-  const reg = loadSkillLibraryRegistry();
-  return reg[skillName.toLowerCase()];
-}
-
-export function registerSkillInLibrary(entry: Omit<SkillLibraryEntry, 'updatedAt'>): SkillLibraryEntry {
-  const reg = loadSkillLibraryRegistry();
-  const full: SkillLibraryEntry = {
-    ...entry,
-    updatedAt: new Date().toISOString(),
-  };
-  reg[entry.name.toLowerCase()] = full;
-  fs.writeFileSync(getSkillTagsRegistryPath(), JSON.stringify(reg, null, 2), 'utf8');
-  return full;
-}
+export { loadSkillLibraryRegistry, getSkillLibraryEntry, registerSkillInLibrary } from './skillLibrary.js';
+export type { SkillLibraryEntry } from './skillLibrary.js';
