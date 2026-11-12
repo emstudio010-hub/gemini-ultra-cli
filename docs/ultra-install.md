@@ -457,6 +457,11 @@ cwd在隔离目录。Git忽略的依赖/缓存不复制，当前不支持submodu
 
 ## Ghidra 单函数静态反编译
 
+随包内置 `local-reverse` 技能可通过 `activate_skill`
+激活，串联初筛、工具发现、函数/引用定位、Ghidra单函数反编译与证据记录。指引区分
+`binary_analyze` 的精确十进制/十六进制地址与 `binary_decompile`
+的纯十六进制地址，保留完整工件，并说明Swarm成员交接和独立复核。技能服从当前会话语言及实际开放的工具，不额外授予shell、写入或外部目标权限；同名用户或项目技能仍可按原优先级覆盖内置版本。
+
 preview.40 新增原生工具
 `binary_decompile`，研究及红队分析成员也可调用。先安装官方 Ghidra 和兼容 JDK；Ghidra
 12.1.4 需要 JDK21或更高的受支持版本。每台电脑设置自己的
