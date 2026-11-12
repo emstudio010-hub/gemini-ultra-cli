@@ -61,6 +61,9 @@ it.each([false, true])(
     expect(paused.fullResult).toEqual(previous.fullResult);
     expect(paused.state).toBe('paused');
     expect(paused.lastError).toContain('Member turn did not complete.');
+    expect(readSwarmBoard(root, swarm.id).at(-1)?.text).toContain(
+      paused.lastError,
+    );
     if (long) {
       const file = paused.lastError!.match(
         /Partial output archived: ([^\n]+)/,

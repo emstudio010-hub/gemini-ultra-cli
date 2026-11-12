@@ -141,6 +141,12 @@ if (!phase) {
       const state = core.readSwarm(root, swarm.id),
         member = state.members[0];
       assert.equal(calls, 2);
+      assert.ok(
+        core
+          .readSwarmBoard(root, swarm.id)
+          .at(-1)
+          .text.includes(member.lastError),
+      );
       assert.equal(member.state, 'paused');
       assert.equal(member.fullResult.sha256, sha(original));
       assert.deepEqual(member.modelsUsed, ['fixture:accepted']);

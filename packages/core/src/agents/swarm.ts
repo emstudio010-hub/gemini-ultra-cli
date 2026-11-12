@@ -904,7 +904,7 @@ export class SwarmEngine {
         this.root,
         this.id,
         name,
-        `${member.state}: ${member.result}`.slice(0, 4000),
+        `${member.state}: ${member.lastError ?? member.result}`.slice(0, 4000),
       );
       if (swarm.budget.failedTurns >= swarm.budget.maxFailedTurns)
         blockSwarm(this.root, swarm, 'failed-turn');
