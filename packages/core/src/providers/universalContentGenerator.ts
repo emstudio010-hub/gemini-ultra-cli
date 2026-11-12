@@ -162,9 +162,11 @@ export class UniversalContentGenerator implements ContentGenerator {
     if (this.resolve(request.model)) {
       return { totalTokens: this.estimateTokens(request) };
     }
+    const selected = currentAgentModel();
     try {
       return await this.fallbackGenerator.countTokens({
         ...request,
+        model: selected?.startsWith('native:') ? selected.slice(7) : request.model,
         contents: stripProviderReasoning(providerContents(request.contents)),
       });
     } catch {

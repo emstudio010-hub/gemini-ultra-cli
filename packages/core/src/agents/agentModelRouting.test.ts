@@ -10,6 +10,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { GenerateContentResponse } from '@google/genai';
 import type { ContentGenerator } from '../core/contentGenerator.js';
 import type { Config } from '../config/config.js';
+import { BaseLlmClient } from '../core/baseLlmClient.js';
 import { handleFallback } from '../fallback/handler.js';
 import { UniversalContentGenerator } from '../providers/universalContentGenerator.js';
 import { ProviderManager } from '../providers/providerManager.js';
@@ -109,6 +110,78 @@ const request = () =>
     'fixture',
     LlmRole.SUBAGENT,
   );
+
+it('counts tokens for parallel native member models through the utility client without using the parent model', async () => {
+  const before = fs.readFileSync(providersFile);
+  vi.mocked(fallback.countTokens).mockImplementation(async (request) => {
+    await Promise.resolve();
+    return {
+      totalTokens:
+        request.model === 'gemini-reader'
+          ? 17
+          : request.model === 'gemini-reviewer'
+            ? 29
+            : 999,
+    };
+  });
+  const client = new BaseLlmClient(generator, {
+    getActiveModel: () => 'main-model',
+    modelConfigService: {
+      getResolvedConfig: () => ({ model: 'parent-calibrator' }),
+    },
+  } as unknown as Config);
+  const controller = new AbortController();
+  const contents = [{ role: 'user', parts: [{ text: 'Same saved context' }] }];
+  const original = JSON.stringify(contents);
+  const [reader, reviewer] = await Promise.all([
+    withAgentModel(
+      'native:gemini-reader',
+      () => client.countTokens({ contents, abortSignal: controller.signal }),
+      () => {},
+    ),
+    withAgentModel(
+      'native:gemini-reviewer',
+      () =>
+        client.countTokens({
+          modelConfigKey: { model: 'context-calibrator' },
+          contents,
+          abortSignal: controller.signal,
+        }),
+      () => {},
+    ),
+  ]);
+  expect([reader.totalTokens, reviewer.totalTokens]).toEqual([17, 29]);
+  expect(
+    vi
+      .mocked(fallback.countTokens)
+      .mock.calls.map(([request]) => request.model),
+  ).toEqual(['gemini-reader', 'gemini-reviewer']);
+  for (const [request] of vi.mocked(fallback.countTokens).mock.calls)
+    expect(request.config?.abortSignal).toBe(controller.signal);
+  expect(JSON.stringify(contents)).toBe(original);
+  expect(fs.readFileSync(providersFile)).toEqual(before);
+  expect(fetch).not.toHaveBeenCalled();
+  expect(currentAgentModel()).toBeUndefined();
+});
+
+it('retains local token estimation when the selected native token counter fails', async () => {
+  vi.mocked(fallback.countTokens).mockRejectedValue(
+    new Error('Fixture native token endpoint unavailable'),
+  );
+  const request = {
+    model: 'main-model',
+    contents: 'Preserve local estimation fallback',
+  };
+  const result = await withAgentModel(
+    'native:gemini-reader',
+    () => generator.countTokens(request),
+    () => {},
+  );
+  expect(result.totalTokens).toBe(
+    Math.ceil(JSON.stringify(request.contents).length / 3),
+  );
+  expect(fetch).not.toHaveBeenCalled();
+});
 
 it.each(['generate', 'stream', 'tokens', 'capacity'] as const)(
   'rejects an unavailable main provider prefix during %s without dispatch or spending the saved budget',
