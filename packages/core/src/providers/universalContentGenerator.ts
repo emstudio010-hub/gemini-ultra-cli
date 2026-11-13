@@ -673,6 +673,7 @@ export class UniversalContentGenerator implements ContentGenerator {
       ? providerReasoningSignature(provider, request.model)
       : undefined;
     const tools = this.formatOpenAITools(request);
+    const declaredToolNames = new Set(tools?.map((tool) => tool.function.name));
     const messages = this.formatOpenAIMessages(request, provider, !!tools);
     const effort = ProviderManager.getInstance().getReasoningEffort();
 
@@ -713,6 +714,7 @@ export class UniversalContentGenerator implements ContentGenerator {
       number,
       { id: string; name: string; argsText: string }
     >();
+    const toolCallIndices = new Map<string, number>();
     let completed = false;
     let usage: GenerateContentResponseUsageMetadata | undefined;
     for await (const { data: dataStr } of this.readSse(
@@ -782,8 +784,34 @@ export class UniversalContentGenerator implements ContentGenerator {
             name: '',
             argsText: '',
           };
-          if (tc.id) current.id = tc.id;
-          if (tc.function?.name) current.name += tc.function.name;
+          if (tc.id && current.id && tc.id !== current.id)
+            throw new Error(
+              'OpenAI stream: tool call changed its ID within one index.',
+            );
+          if (
+            tc.id &&
+            toolCallIndices.has(tc.id) &&
+            toolCallIndices.get(tc.id) !== idx
+          )
+            throw new Error(
+              'OpenAI stream: tool call ID was reused at multiple indices.',
+            );
+          if (tc.id) {
+            current.id = tc.id;
+            toolCallIndices.set(tc.id, idx);
+          }
+          // Some compatible endpoints repeat the full name with each argument
+          // delta. Only deduplicate a known complete name; ordinary fragments
+          // (including repeated fragments) must keep their original order.
+          if (
+            tc.function?.name &&
+            !(
+              tc.function.name === current.name &&
+              declaredToolNames.has(current.name) &&
+              !declaredToolNames.has(current.name + tc.function.name)
+            )
+          )
+            current.name += tc.function.name;
           if (tc.function?.arguments) current.argsText += tc.function.arguments;
           pendingToolCalls.set(idx, current);
         }

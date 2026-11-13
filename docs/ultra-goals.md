@@ -1679,3 +1679,8 @@ WI-197/E-447至448/F-154：多源技能发现原外层取消后仍排队读文�
 ## 2026-11-13 技能发现限时与刷新中止
 
 WI-198/E-449至450/F-155：SkillManager整次发现10秒deadline、独立controller与调用方signal贯通；新刷新/clear/admin/add/filter中止旧等待/原生读取，预取消不影响现有刷新，所有终态清timer，旧结果不发布。startup仅对明确timeout双语warning并继续，其他错误仍抛出；reload错误不冒称成功并清pending，相关加载/计数/错误双语。旧8复现失败；修后40不同检查通过/1旧skip/296按范围未选，core最新及CLI严格编译/6文件lint格式/diff通过。首CLI读旧dist新2失败、config hooks全restore破坏依赖6失败及新测试one-var lint均留证并纠正，隔离测试不扫描个人技能。Windows真实Config.initialize/glob/安全句柄与编译reload handler，中文真实10082ms超时继续、英文10005ms重载失败清UI后显式重试24技能完整，替代刷新旧请求释放前返回，三组各8原生ABORT_ERR/close/signal/open，17条件true、总26174ms/退出0/0模型外部付费，fixture文件保持和根清理成功。10秒仅技能发现、非全初始化/onReload回调上限/ConPTY或整体启动基准/最终包验收。个人配置/旧E-294与E-364失败SHA/安装83保持，无打包重装版本CI或付费重跑，goal active。详见docs/ultra-skill-discovery-lifetime-handoff.md。
+
+
+## 2026-11-13 流式工具身份
+
+WI-199/E-451至452/F-156：OpenAI chat工具delta重复完整name原直接拼接，同index换ID覆盖、跨index复用ID仍执行，旧3失败/2正常对照。现声明完整名精确去重，若拼接也是声明名优先保留fragment语义；ID→index Map拒绝换ID/跨index复用，异常前不释放任何调用，参数/正常交错分片保持。45不同相关检查通过（首次44/最终新6），core/CLI严格编译/两文件lint/新文件格式/diff通过，原生成器仅修改块。Windows真实Config/gateway/公开Manage/原生researcher/AgentTool/LocalAgentExecutor/complete_task/SSE，同成员五显式轮：重复名完成→换ID失败→恢复→复用ID失败→分片名恢复，5请求/5turns/2failed保持，旧长文逐字/3成功全文历史导出/2失败board诊断保留，独立审核缺失finish拒绝；23条件true、5584ms/退出0/5loopback/0外部付费，cancel和fixture清理成功。首验证器误假定失败替换主报告及5正文历史4条件false留证，核对既有恢复合同后分别检查lastError/board与3成功报告，未放宽产品。失败尝试尚非结构化完整历史，后续索引/导出待补；非真实模型复杂逆向/ConPTY/最终包验收。个人配置/旧E-294与E-364失败SHA/安装83保持，无打包重装版本CI或付费重跑，goal active。详见docs/ultra-provider-tool-identity-handoff.md。
