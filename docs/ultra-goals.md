@@ -1589,3 +1589,8 @@ WI-179/E-411至412/F-136：原/provider退出无条件syncSession覆盖/model或
 ## 2026-11-13 非激活配置与删除恢复
 
 WI-180/E-413至414/F-137：配置窗口主菜单←/→切换编辑目标，不激活/保存/请求，头部区分配置目标与保存默认，模型清单重置光标；关闭后无法解析的当前限定路由双语提示添加/重新选模，保持当前模型。原生首轮发现删除临时Second后contextUsage→getModelContextWindow抛ProviderRouteError致Composer critical退出（10步/0网络，wrapper45秒/failed留证），core旧容量场景1失败。现仅可选容量查询捕获该类型返回未知，不调用fallback容量；普通/流式生成仍发送前严格拒绝，其他错误不吞。最终10不同相关检查、core/CLI严格编译/六文件lint格式通过；最后头部文案仅重验2个相关渲染。Windows实际源码ConPTY英文目标编辑Second4096且First/保存默认/临时Second保持，中文只删除Second→即时提示/界面存活→无害提交实际本地拒绝→/model first显式恢复/quit，13步18条件通过、17672ms/CLI与验证器退出0/0HTTP模型，唯一setModel为明确恢复，settings字节保持。既有ConPTY关闭helper AttachConsole failed诊断原样留证，不宣称PTY库完整修复。个人配置/旧E-294及E-364失败SHA/安装83保持，无打包重装版本CI/付费重跑；不冒称最后provider删除/原生认证/真实推理或最终包验收，goal active。详见docs/ultra-provider-config-target-handoff.md。
+
+
+## 2026-11-13 空配置与手填模型恢复
+
+WI-181/E-415至416/F-138：新建供应商协议确认原自动拉目录、删最后一家回空目标菜单；现手填优先零目录，Ctrl+R显式刷新/保留草稿选择/取消与late隔离，删空直接干净添加表单，保存明确激活后才同步会话。5不同相关场景通过（3新建/取消/删空替代+2既有刷新对照），首fixture页面标题错误及格式行修正留证，CLI严格编译/两文件lint格式通过，core未改不重复。Windows实际源码ConPTY唯一Last确认删除→空白Replacement表单→端点/key/协议/manual-model保存（0目录0模型）→关闭明确选新模型→显式消息实际loopback SSE回复→中文列表/quit，10步17条件通过、18279ms/CLI与验证器退出0/1本地模型协议/0目录/0外部。settings字节保持、仅新替代profile保存、唯一setModel为明确激活；既有PTY关闭helper AttachConsole failed诊断保留且无本验证器残留，不冒称真实推理/登录/其他协议/最终包验收。个人配置/旧E-294及E-364失败SHA/安装83保持，无打包重装版本CI/付费重跑，goal active。详见docs/ultra-provider-empty-recovery-handoff.md。

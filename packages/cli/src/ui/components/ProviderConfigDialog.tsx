@@ -224,6 +224,7 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
     catalogRequest.current?.abort();
     setEditingProviderId(prov?.id || null);
     setModelPool([]);
+    setModelCursor(0);
     setSelectedModelsSet(new Set());
     setCustomModelInput('');
     if (prov) {
@@ -243,7 +244,6 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
     baseUrl: string,
     apiKey: string,
     protocol: ProviderProtocol,
-    preserveSelection = false,
     customHeaders?: Record<string, string>,
   ) => {
     catalogRequest.current?.abort();
@@ -266,22 +266,12 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
         return;
       if (res.models && res.models.length > 0) {
         const unique = Array.from(new Set(res.models));
-        if (preserveSelection) {
-          setModelPool((previous) => [...new Set([...previous, ...unique])]);
-        } else {
-          setModelPool(unique);
-          setSelectedModelsSet(new Set(unique));
-        }
+        setModelPool((previous) => [...new Set([...previous, ...unique])]);
         setStatusMessage(
-          preserveSelection
-            ? t(
-                '目录已刷新；保留原选择，新模型可手动勾选。',
-                'Catalog refreshed; choices retained. Select new models manually.',
-              )
-            : t(
-                `已加载 ${unique.length} 个模型。空格勾选，Ctrl+A 全选。`,
-                `Loaded ${unique.length} models. Space to toggle, Ctrl+A for all.`,
-              ),
+          t(
+            '目录已刷新；保留原选择，新模型可手动勾选。',
+            'Catalog refreshed; choices retained. Select new models manually.',
+          ),
         );
       } else {
         setStatusMessage(
@@ -560,7 +550,12 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
               setPage('main-menu');
             } else {
               setPage('select-models-checklist');
-              void handleFetchModels(formUrl, formKey, chosen);
+              setStatusMessage(
+                t(
+                  '直接输入模型名即可保存；按 Ctrl+R 获取目录。尚未连接端点或保存配置。',
+                  'Type a model name to save, or press Ctrl+R to fetch the catalog. No endpoint connection or configuration save yet.',
+                ),
+              );
             }
             return true;
           }
@@ -588,7 +583,6 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
               provider?.baseUrl ?? formUrl,
               provider?.apiKey ?? formKey,
               provider?.protocol ?? PROTOCOLS[protocolCursor].id,
-              true,
               provider?.customHeaders,
             );
             return true;
@@ -868,7 +862,8 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
                   `✓ Deleted provider [${focusedProvider.name}]`,
                 ),
               );
-              setPage('main-menu');
+              if (updated.length === 0) startEditBasics();
+              else setPage('main-menu');
             }
             return true;
           }
