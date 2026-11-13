@@ -353,10 +353,21 @@ function appendPost(
   sender: string,
   text: string,
 ): SwarmPost {
+  return withPreparedPost(root, id, sender, text, () => {});
+}
+/** Admission checks and state changes share the board lock; no async work here. */
+function withPreparedPost(
+  root: string,
+  id: string,
+  sender: string,
+  text: string,
+  changeState: () => void,
+): SwarmPost {
   const file = path.join(directory(root, id), 'board.jsonl');
   const release = lockSync(file, { realpath: false, retries: 0 });
   try {
     const { entry, line } = preparePost(root, id, sender, text);
+    changeState();
     fs.appendFileSync(file, line, { mode: 0o600 });
     return entry;
   } finally {
@@ -724,13 +735,15 @@ export class SwarmEngine {
       );
     if (swarm.members.length >= 12)
       throw new Error('A swarm supports at most 12 named members.');
-    swarm.members.push(member);
-    saveSwarm(this.root, swarm);
-    appendPost(
+    withPreparedPost(
       this.root,
       this.id,
       'coordinator',
       `@${name} Public brief (${agent}): ${brief}`.slice(0, 4000),
+      () => {
+        swarm.members.push(member);
+        saveSwarm(this.root, swarm);
+      },
     );
     this.wake(name);
   }
@@ -755,7 +768,11 @@ export class SwarmEngine {
     member.reviewedFiles = undefined;
     saveSwarm(this.root, swarm);
   }
-  post(sender: string, text: string): void {
+  post(
+    sender: string,
+    text: string,
+    review?: { name: string; files: string[] },
+  ): void {
     const swarm = this.activeState();
     if (
       sender !== 'coordinator' &&
@@ -766,7 +783,16 @@ export class SwarmEngine {
       throw new Error(
         'Only an active member may post under its assigned identity.',
       );
-    const post = appendPost(this.root, this.id, sender, text);
+    if (
+      review &&
+      (sender !== 'coordinator' || !text.includes(`@${review.name}`))
+    )
+      throw new Error(
+        'Review reassignment requires an explicit coordinator @mention.',
+      );
+    const post = withPreparedPost(this.root, this.id, sender, text, () => {
+      if (review) this.setReviewFiles(review.name, review.files);
+    });
     for (const member of readSwarm(this.root, this.id).members) {
       if (readSwarm(this.root, this.id).phase !== 'active') break;
       if (
@@ -781,15 +807,17 @@ export class SwarmEngine {
     const swarm = this.activeState();
     const member = swarm.members.find((entry) => entry.name === name);
     if (!member) throw new Error('Unknown member.');
-    member.state = 'killed';
-    saveSwarm(this.root, swarm);
-    this.running.get(name)?.controller.abort();
-    appendPost(
+    withPreparedPost(
       this.root,
       this.id,
       'coordinator',
       `${name} removed; its reports remain on the board.`,
+      () => {
+        member.state = 'killed';
+        saveSwarm(this.root, swarm);
+      },
     );
+    this.running.get(name)?.controller.abort();
   }
   cancel(): void {
     this.stopMembers();
@@ -870,14 +898,16 @@ export class SwarmEngine {
       );
     for (const member of swarm.members)
       readSwarmResultText(this.root, this.id, member);
-    acceptReviewedAgentWorktree(this.root, this.id, verifier.verifiedTree);
-    swarm.phase = 'completed';
-    saveSwarm(this.root, swarm);
-    appendPost(
+    withPreparedPost(
       this.root,
       this.id,
       'coordinator',
       'Swarm completed after the current independent verifier accepted the deliverable.',
+      () => {
+        acceptReviewedAgentWorktree(this.root, this.id, verifier.verifiedTree);
+        swarm.phase = 'completed';
+        saveSwarm(this.root, swarm);
+      },
     );
   }
   private activeState(): Swarm {

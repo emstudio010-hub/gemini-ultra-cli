@@ -92,9 +92,14 @@ class ManageInvocation extends BaseToolInvocation<ManageParams, ToolResult> {
               throw new Error(
                 'To reassign review_files, post must name and explicitly @mention the auditor.',
               );
-            engine.setReviewFiles(this.params.name, this.params.review_files);
           }
-          engine.post('coordinator', this.params.text);
+          engine.post(
+            'coordinator',
+            this.params.text,
+            this.params.review_files
+              ? { name: this.params.name!, files: this.params.review_files }
+              : undefined,
+          );
           break;
         case 'wait':
           await engine.wait(options.abortSignal);
