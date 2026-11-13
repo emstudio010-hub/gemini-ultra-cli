@@ -721,10 +721,16 @@ export class UniversalContentGenerator implements ContentGenerator {
       if (chunk.error)
         throw new Error(`OpenAI stream error: ${JSON.stringify(chunk.error)}`);
       usage = providerUsage(chunk.usage, 'openai-chat') ?? usage;
-      if (chunk.choices?.[0]?.finish_reason === 'length')
+      if (chunk.choices?.[0]?.finish_reason === 'length') {
+        // Some endpoints include the last visible text in the terminating
+        // frame. Preserve that unaccepted draft before surfacing the failure;
+        // never parse or emit tool calls from a truncated response.
+        const text = chunk.choices[0].delta?.content;
+        if (text) yield this.buildGeminiResponse([{ text }], undefined, false);
         throw new Error(
           'OpenAI output token limit reached; response is incomplete.',
         );
+      }
       if (chunk.choices?.[0]?.finish_reason) completed = true;
       const delta = chunk.choices?.[0]?.delta;
       if (!delta) {

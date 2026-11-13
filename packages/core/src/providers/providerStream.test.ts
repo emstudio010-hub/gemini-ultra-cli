@@ -579,6 +579,65 @@ describe('Provider stream completion and recovery', () => {
     ).toBe(true);
   });
 
+  it.each(['text', 'text-and-tool', 'reasoning-only'] as const)(
+    'preserves final-frame visible draft on length failure without exposing executable calls: %s',
+    async (kind) => {
+      const delta =
+        kind === 'reasoning-only'
+          ? { reasoning_content: 'PRIVATE_REASONING_NOT_A_VISIBLE_DRAFT' }
+          : {
+              content: 'FINAL_VISIBLE_DRAFT',
+              ...(kind === 'text-and-tool'
+                ? {
+                    tool_calls: [
+                      {
+                        index: 0,
+                        id: 'late-tool',
+                        type: 'function',
+                        function: {
+                          name: 'complete_task',
+                          arguments: '{"result":"not accepted"}',
+                        },
+                      },
+                    ],
+                  }
+                : {}),
+            };
+      vi.stubGlobal(
+        'fetch',
+        vi
+          .fn()
+          .mockResolvedValue(
+            new Response(
+              frame({ choices: [{ delta, finish_reason: 'length' }] }),
+            ),
+          ),
+      );
+      const stream = await generator.generateContentStream(
+        request,
+        'terminal-length',
+        LlmRole.SUBAGENT,
+      );
+      const chunks: GenerateContentResponse[] = [];
+      await expect(
+        (async () => {
+          for await (const chunk of stream) chunks.push(chunk);
+        })(),
+      ).rejects.toThrow('output token limit reached');
+      const visible = chunks
+        .flatMap((chunk) => chunk.candidates?.[0]?.content?.parts ?? [])
+        .filter((part) => !part.thought)
+        .map((part) => part.text ?? '')
+        .join('');
+      expect(visible).toBe(
+        kind === 'reasoning-only' ? '' : 'FINAL_VISIBLE_DRAFT',
+      );
+      expect(chunks.flatMap((chunk) => chunk.functionCalls ?? [])).toEqual([]);
+      expect(fallback.generateContentStream).not.toHaveBeenCalled();
+      expect(fetch).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it('rejects incomplete streams and can complete the following request', async () => {
     vi.stubGlobal(
       'fetch',

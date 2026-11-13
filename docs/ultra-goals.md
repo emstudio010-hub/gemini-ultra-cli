@@ -1594,3 +1594,8 @@ WI-180/E-413至414/F-137：配置窗口主菜单←/→切换编辑目标，不�
 ## 2026-11-13 空配置与手填模型恢复
 
 WI-181/E-415至416/F-138：新建供应商协议确认原自动拉目录、删最后一家回空目标菜单；现手填优先零目录，Ctrl+R显式刷新/保留草稿选择/取消与late隔离，删空直接干净添加表单，保存明确激活后才同步会话。5不同相关场景通过（3新建/取消/删空替代+2既有刷新对照），首fixture页面标题错误及格式行修正留证，CLI严格编译/两文件lint格式通过，core未改不重复。Windows实际源码ConPTY唯一Last确认删除→空白Replacement表单→端点/key/协议/manual-model保存（0目录0模型）→关闭明确选新模型→显式消息实际loopback SSE回复→中文列表/quit，10步17条件通过、18279ms/CLI与验证器退出0/1本地模型协议/0目录/0外部。settings字节保持、仅新替代profile保存、唯一setModel为明确激活；既有PTY关闭helper AttachConsole failed诊断保留且无本验证器残留，不冒称真实推理/登录/其他协议/最终包验收。个人配置/旧E-294及E-364失败SHA/安装83保持，无打包重装版本CI/付费重跑，goal active。详见docs/ultra-provider-empty-recovery-handoff.md。
+
+
+## 2026-11-13 终止帧草稿保留
+
+WI-182/E-417至418/F-139：Chat流在delta.content与finish_reason=length同帧时先抛错丢最后正文，旧2复现失败/1推理对照过。现length分支只yield该帧可见正文后抛原错，不处理推理/工具、不标完成；原执行器以未验收草稿保留。最终4不同相关检查、core/CLI严格编译/两文件lint格式通过。Windows真实Config/gateway/公开Manage/注册researcher/AgentTool/LocalAgentExecutor/GeminiChat/SSE/Swarm，唯一终止帧含长正文+私有推理+完整completion/write调用：14条件通过、5216ms/退出0/1loopback，正文/长归档/导出保持，私有推理/伪完成不入报告，0工具写入、paused/blocked/1请求1轮1失败，finish拒绝。未提高上限/改预算或重试，端点10240非本轮源码硬编码根因，旧E-294/E-364真实失败SHA与false保持，不声称输出截断/事实质量解决。个人配置/安装83保持，无打包重装版本CI或付费重跑，goal active。详见docs/ultra-terminal-length-draft-handoff.md。
