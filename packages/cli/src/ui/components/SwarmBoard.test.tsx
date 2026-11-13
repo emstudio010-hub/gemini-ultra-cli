@@ -24,12 +24,29 @@ it('renders the saved roster, refreshes public posts and closes with Escape', as
   const previousLocale = i18n.getLocale();
   i18n.setLocale('en');
   const swarm = createSwarm(root, 'Public swarm evidence');
-  const engine = getSwarmEngine(root, swarm.id, async () => ({
-    completed: true,
-    text: 'Investigation complete.',
-  }));
+  fs.writeFileSync(path.join(root, 'REPORT.md'), 'Reviewed bytes');
+  const engine = getSwarmEngine(
+    root,
+    swarm.id,
+    async (agent) => ({
+      completed: true,
+      text:
+        agent === 'workflow-auditor'
+          ? JSON.stringify({
+              passed: true,
+              summary: 'Inspected report',
+              evidence: ['REPORT.md'],
+            })
+          : 'Investigation complete.',
+    }),
+    root,
+  );
   engine.add('reader', 'researcher', 'Read the assigned source.');
   await engine.wait(new AbortController().signal);
+  engine.add('auditor', 'workflow-auditor', 'Inspect REPORT.md', ['REPORT.md']);
+  await engine.wait(new AbortController().signal);
+  // The UI describes a saved snapshot, even after the real file disappears.
+  fs.unlinkSync(path.join(root, 'REPORT.md'));
   const onClose = vi.fn();
   const rendered = await renderWithProviders(
     <SwarmBoard root={root} id={swarm.id} onClose={onClose} />,
@@ -37,6 +54,9 @@ it('renders the saved roster, refreshes public posts and closes with Escape', as
   try {
     expect(rendered.lastFrame()).toContain('@reader');
     expect(rendered.lastFrame()).toContain('waiting');
+    expect(rendered.lastFrame()).toContain('Review scope: 1 file');
+    expect(rendered.lastFrame()).toContain('snapshot saved');
+    expect(rendered.lastFrame()).toContain('Snapshots are historical');
     engine.post('coordinator', 'UPDATED_ENTRY\u001b[2J');
     await waitFor(() =>
       expect(rendered.lastFrame()).toContain('UPDATED_ENTRY'),
@@ -53,6 +73,9 @@ it('renders the saved roster, refreshes public posts and closes with Escape', as
     expect(rendered.lastFrame()).toContain('@reader [等待] 继承主模型');
     expect(rendered.lastFrame()).not.toContain('[waiting]');
     expect(rendered.lastFrame()).not.toContain('inherit');
+    expect(rendered.lastFrame()).toContain('复核范围：1 个文件');
+    expect(rendered.lastFrame()).toContain('快照已保存');
+    expect(rendered.lastFrame()).toContain('快照是历史记录');
     expect(fs.readFileSync(stateFile).equals(beforeLocaleChange)).toBe(true);
     await act(async () => {
       i18n.setLocale('en');

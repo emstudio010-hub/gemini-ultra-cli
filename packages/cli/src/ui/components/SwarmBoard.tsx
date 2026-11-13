@@ -13,6 +13,8 @@ import { theme } from '../semantic-colors.js';
 import {
   agentTaskModelLabel,
   agentTaskStateLabel,
+  agentReviewScopeText,
+  agentTaskDiagnosticLabel,
 } from '../utils/agentTaskLabels.js';
 
 function safe(text: string): string {
@@ -78,6 +80,11 @@ export function SwarmBoard({
   );
   const end = Math.max(0, view.posts.length - offset);
   const posts = view.posts.slice(Math.max(0, end - 6), end);
+  const reviewers =
+    view.swarm?.members.filter(
+      (member) =>
+        member.agent === 'workflow-auditor' && member.state !== 'killed',
+    ) ?? [];
   return (
     <Box
       flexDirection="column"
@@ -136,6 +143,34 @@ export function SwarmBoard({
                 : 'Waiting for the coordinator to add members')}
           </Text>
           <Box marginTop={1} flexDirection="column">
+            {reviewers.slice(-2).map((member) => (
+              <Box key={member.name} flexDirection="column">
+                <Text color={theme.text.secondary} wrap="truncate-end">
+                  {safe(
+                    `@${member.name} ${agentReviewScopeText(member, locale, true)}`,
+                  )}
+                </Text>
+                {member.lastError && (
+                  <Text color={theme.status.error} wrap="truncate-end">
+                    {safe(agentTaskDiagnosticLabel(member.lastError, locale))}
+                  </Text>
+                )}
+              </Box>
+            ))}
+            {reviewers.length > 2 && (
+              <Text color={theme.text.secondary}>
+                {locale === 'zh'
+                  ? `另有 ${reviewers.length - 2} 名复核员，/swarm status 查看全部范围`
+                  : `${reviewers.length - 2} more reviewers; /swarm status shows every scope`}
+              </Text>
+            )}
+            {reviewers.length > 0 && (
+              <Text color={theme.text.secondary}>
+                {locale === 'zh'
+                  ? '快照是历史记录；显示范围不会重新核对当前文件。'
+                  : 'Snapshots are historical; displaying a scope does not recheck current files.'}
+              </Text>
+            )}
             {posts.map((post) => (
               <Box key={post.seq} flexDirection="column">
                 <Text color={theme.text.accent}>

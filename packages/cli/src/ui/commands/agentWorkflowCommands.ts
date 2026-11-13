@@ -39,6 +39,8 @@ import {
   agentRoleModelsText,
   agentTaskStateLabel,
   agentTaskStageLabel,
+  agentReviewScopeText,
+  agentTaskDiagnosticLabel,
 } from '../utils/agentTaskLabels.js';
 
 function interviewPrompt(record: AgentWorkflow): string {
@@ -202,6 +204,13 @@ function workflowCommand(
         return;
       }
       if (operation === 'status') {
+        const lastReport = record?.reports.at(-1);
+        const fileCheckReason =
+          lastReport?.agent === 'native-file-check' &&
+          !lastReport.completed &&
+          lastReport.text !== record?.stage
+            ? `${i18n.t('已保存的文件核对原因', 'Saved file-check cause')}: ${agentTaskDiagnosticLabel(lastReport.text, i18n.getLocale())}\n`
+            : '';
         let statusBudget;
         if (record) {
           try {
@@ -221,7 +230,7 @@ function workflowCommand(
         }
         info(
           record
-            ? `${record.mode}: ${agentTaskStateLabel(record.phase, i18n.getLocale())}\n${record.objective}\n${agentTaskStageLabel(record.stage, i18n.getLocale())}\n${i18n.t('角色模型', 'Role models')}: ${agentRoleModelsText(record.roleModels, i18n.getLocale())}\n${i18n.t('累计预算', 'Cumulative budget')}: ${JSON.stringify(statusBudget)}\n${record.milestones.map((item, index) => `${index + 1}. [${item.completed ? 'x' : ' '}] ${item.title}\n${item.acceptance}`).join('\n')}\nID: ${record.id}`
+            ? `${record.mode}: ${agentTaskStateLabel(record.phase, i18n.getLocale())}\n${record.objective}\n${agentTaskStageLabel(record.stage, i18n.getLocale())}\n${fileCheckReason}${record.mode === 'grill-me' ? '' : agentReviewScopeText(record, i18n.getLocale()) + '\n'}${i18n.t('角色模型', 'Role models')}: ${agentRoleModelsText(record.roleModels, i18n.getLocale())}\n${i18n.t('累计预算', 'Cumulative budget')}: ${JSON.stringify(statusBudget)}\n${record.milestones.map((item, index) => `${index + 1}. [${item.completed ? 'x' : ' '}] ${item.title}\n${item.acceptance}`).join('\n')}\nID: ${record.id}`
             : i18n.t(
                 '当前项目没有该工作流。',
                 'No workflow of this kind in this project.',

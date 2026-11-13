@@ -1574,3 +1574,8 @@ WI-176/E-405至406/F-133：原Swarm在内存设置result/fullResult后检查work
 ## 2026-11-13 Workflow最终文件复核
 
 WI-177/E-407至408/F-134：旧Teamwork/Boost共享工作区最终审核期间文件变化仍completed，2旧复现失败。现公开run_agent_workflow必填review_files，绑定realpath workspace/清单，最终集成审核前后核对最多64文件/64MiB指纹，多里程碑后续产物不提前拦截，managed worktree内解析。变化时末里程碑未完成、模型原audit/长归档保持，另存native-file-check失败报告/一次failed stage并blocked，不自动重试；预算耗尽也保持具体原因。显式[]仅member报告，未绑定低层旧API兼容；CLI/阶段上下文/summary同步。14不同相关检查、core/CLI严格编译/八文件lint格式通过；真实Windows git隔离snapshot及apply对照通过。Windows真实编译Teamwork命令handler（非ConPTY）访谈/草案/approve→公开Run/原生角色/AgentTool/LocalAgentExecutor/complete_task/SSE，首final响应期间宿主改报告，被拒且原长文/归档/导出保持；真实resume handler后审核B完成，累计8请求/2轮/1失败。17条件通过、5264ms/退出0/8loopback/0外部。首验证器result嵌套schema错误及fixture补scope/budget参数错误留证；未为此放宽产品。非模型真实阅读/生成质量/复杂逆向/文件锁或最终包验收；个人配置/旧E-294与E-364失败SHA/安装83保持，无打包重装版本CI/付费重跑，goal active。详见docs/ultra-workflow-review-files-handoff.md。
+
+
+## 2026-11-13 复核范围双语状态
+
+WI-178/E-409至410/F-135：CLI/SwarmBoard原不显示文件范围和历史snapshot性质，Workflow预算耗尽掩盖native-file-check原因。现共享只读显示未声明/[]成员报告/N文件及历史快照，status完整清单、Board前2路径/最近2复核员且指向status，显示原始保存原因；四条固定诊断中文呈现/英文与未知正文保持，Grill-me不附文件审核。3不同定向检查通过（Board双语切换/文件已删除仍显示历史/留言刷新/Esc/状态字节保持、历史Swarm和Workflow查看对照），CLI严格编译/五文件lint格式通过，core未改不重复。Windows编译status handler+真实保存状态/最小context，11次双语查看/18条件通过、5779ms/退出0/0网络模型/0交付文件读取，预算耗尽原因可见、控制路径转义、记录逐次不变。首验证器禁fetch误拦Yoga data WASM，first日志保留后仅允许data:，最终1嵌入式data/0HTTP；非ConPTY/浏览器/当前文件批准或复杂模型质量验收。个人配置/旧E-294及E-364失败SHA/安装83保持，无打包重装版本CI或付费重跑，goal active。详见docs/ultra-review-scope-ui-handoff.md。
