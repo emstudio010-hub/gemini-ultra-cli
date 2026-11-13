@@ -12,6 +12,7 @@ import { readSwarm, readSwarmBoard } from './swarm.js';
 import type { UiLocale } from '../i18n/i18nManager.js';
 import { readWorkflowReportText } from './workflowReportText.js';
 import { readSwarmResultText } from './swarmResultText.js';
+import { readWorkflowReports } from './workflowReportHistory.js';
 
 const digest = (value: string) =>
   createHash('sha256').update(value).digest('hex');
@@ -130,7 +131,7 @@ export function exportWorkflowReports(
     record.phase,
     record.objective,
     { kind: record.mode, record },
-    record.reports.map((report) => ({
+    readWorkflowReports(root, record).map((report) => ({
       label: `${report.stage} · ${report.agent} · completed=${report.completed}`,
       text: readWorkflowReportText(root, id, report),
     })),

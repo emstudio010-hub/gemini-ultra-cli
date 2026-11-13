@@ -11,6 +11,7 @@ import { readSwarm, readSwarmBoard, type SwarmPost } from './swarm.js';
 import { savedWorkflowBudgetSummary } from './workflowBudget.js';
 import { workflowReportArchivePath } from './workflowReportText.js';
 import { swarmResultArchivePath } from './swarmResultText.js';
+import { workflowReportCount } from './workflowReportHistory.js';
 
 export const agentTaskSelectionSchema = z
   .object({
@@ -164,7 +165,7 @@ export function readAgentTaskDetails(root: string, selection: unknown) {
       completed: item.completed,
       acceptance: item.acceptance,
     })),
-    reportCount: record.reports.length,
+    reportCount: workflowReportCount(record),
     reports: record.reports.slice(-4).map((report) => ({
       agent: report.agent.slice(0, 100),
       stage: report.stage.slice(0, 200),

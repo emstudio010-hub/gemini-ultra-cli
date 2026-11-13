@@ -14,8 +14,14 @@ import { workflowContext, workflowMilestoneTitle } from './workflowContext.js';
 import {
   saveWorkflowReportText,
   workflowReportArchivePath,
-  workflowReportArchiveSchema,
 } from './workflowReportText.js';
+import {
+  workflowStageReportSchema,
+  workflowReportHistorySchema,
+  appendWorkflowReport,
+  workflowReportCount,
+  validateWorkflowReportHistory,
+} from './workflowReportHistory.js';
 import {
   inAgentWorktree,
   readAgentWorktree,
@@ -86,19 +92,8 @@ const workflowSchema = workflowPlanSchema.extend({
   reviewedFiles: reviewedFilesSchema.optional(),
   updatedAt: z.string(),
   stage: z.string().default(''),
-  reports: z
-    .array(
-      z.object({
-        agent: z.string(),
-        stage: z.string(),
-        completed: z.boolean(),
-        text: z.string().max(16000),
-        fullText: workflowReportArchiveSchema.optional(),
-        modelsUsed: z.array(z.string().max(512)).max(16).optional(),
-      }),
-    )
-    .max(100)
-    .default([]),
+  reportHistory: workflowReportHistorySchema,
+  reports: z.array(workflowStageReportSchema).max(100).default([]),
 });
 export type AgentWorkflow = z.infer<typeof workflowSchema>;
 export type AgentWorkflowMode = AgentWorkflow['mode'];
@@ -140,7 +135,7 @@ export function agentWorkflowSummary(
     objective: record.objective,
     milestones: record.milestones,
     recordPath: workflowPath(projectTempDir, record.id),
-    reportCount: record.reports.length,
+    reportCount: workflowReportCount(record),
     roleModels: record.roleModels,
     workspace: record.workspace,
     reviewFiles: record.reviewFiles,
@@ -560,14 +555,13 @@ export async function runAgentWorkflow(
             };
             savedText = { text: result.text };
           }
-          current.reports.push({
+          appendWorkflowReport(projectTempDir, current, {
             agent,
             stage: title,
             completed: result.completed,
             modelsUsed,
             ...savedText,
           });
-          current.reports = current.reports.slice(-100);
           persist();
           if (
             !combined.aborted &&
@@ -676,16 +670,21 @@ export async function runAgentWorkflow(
           current.milestones[current.milestones.length - 1].completed = false;
           const diagnostic =
             'Declared final review files changed or became unavailable during audit. Raw audit output is retained; explicitly resume only after inspecting the current artifacts.';
-          current.reports.push({
+          appendWorkflowReport(projectTempDir, current, {
             agent: 'native-file-check',
             stage: 'final audit file check',
             completed: false,
             text: diagnostic,
           });
-          current.reports = current.reports.slice(-100);
           persist();
           failWorkflowStage(projectTempDir, id);
           throw new Error(diagnostic);
+        }
+        try {
+          validateWorkflowReportHistory(projectTempDir, current);
+        } catch (error) {
+          current.milestones[current.milestones.length - 1].completed = false;
+          throw error;
         }
         acceptReviewedAgentWorktree(projectTempDir, id, finalReviewTree);
         current.reviewedFiles = reviewedFiles;
