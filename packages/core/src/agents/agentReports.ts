@@ -156,6 +156,10 @@ export function exportSwarmReports(
   locale: UiLocale = 'en',
 ) {
   const record = readSwarm(root, id);
+  if (record.members.some((member) => member.failureHistoryIncomplete))
+    throw new Error(
+      'Failed attempt history is incomplete because archiving failed; preserve this task before exporting its available evidence.',
+    );
   const board = readSwarmBoard(root, id);
   function* entries(): Generator<Entry> {
     for (const member of record.members)
@@ -171,6 +175,15 @@ export function exportSwarmReports(
           text: readSwarmResultText(root, id, {
             result: '',
             fullResult: prior.fullResult,
+          }),
+        };
+    for (const member of record.members)
+      for (const attempt of member.failedAttempts ?? [])
+        yield {
+          label: `@${member.name} · ${member.agent} · failed attempt turn ${attempt.turn} (${attempt.outcome}) · incomplete historical evidence, not a current verdict`,
+          text: readSwarmResultText(root, id, {
+            result: '',
+            fullResult: attempt.fullResult,
           }),
         };
   }

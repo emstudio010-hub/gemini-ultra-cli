@@ -20,6 +20,10 @@ import {
   swarmResultArchivePath,
 } from './swarmResultText.js';
 import { swarmContextSnapshot, swarmMemberContext } from './swarmContext.js';
+import {
+  swarmFailedAttemptsSchema,
+  retainFailedSwarmAttempt,
+} from './swarmFailureHistory.js';
 import { SwarmBudgetError } from './swarmBudgetError.js';
 import { I18nManager } from '../i18n/i18nManager.js';
 import {
@@ -56,6 +60,8 @@ const memberSchema = z.object({
   result: z.string().max(12000).default(''),
   fullResult: swarmResultArchiveSchema.optional(),
   pastResults: swarmPriorResultsSchema,
+  failedAttempts: swarmFailedAttemptsSchema,
+  failureHistoryIncomplete: z.boolean().optional(),
   lastError: z.string().max(12000).optional(),
   verifiedRevision: z.number().int().optional(),
   verifiedTree: z.string().optional(),
@@ -179,7 +185,34 @@ function readPointer(root: string) {
 export type Swarm = z.infer<typeof swarmSchema>;
 export type SwarmMember = z.infer<typeof memberSchema>;
 /** A failed attempt must not replace evidence from an earlier accepted result. */
-function recordMemberFailure(member: SwarmMember, message: string): void {
+function recordMemberFailure(
+  root: string,
+  id: string,
+  member: SwarmMember,
+  message: string,
+  fullText = message,
+  outcome:
+    | 'incomplete'
+    | 'stopped'
+    | 'timeout'
+    | 'error'
+    | 'review'
+    | 'admission' = 'error',
+): void {
+  try {
+    const saved = retainFailedSwarmAttempt(root, id, member, fullText, outcome);
+    if (['incomplete', 'stopped', 'timeout'].includes(outcome)) {
+      message =
+        fullText.length <= 12000
+          ? fullText
+          : `${message}\nPartial output archived: ${swarmResultArchivePath(root, id, saved.fullResult)}\n${saved.result}`;
+    }
+  } catch (error) {
+    // Preserve failure accounting and the current report even if storage fails.
+    // Export must not claim a complete history after this explicit gap.
+    member.failureHistoryIncomplete = true;
+    message = `${message.slice(0, 10000)}\nFailed attempt archive unavailable: ${(error instanceof Error ? error.message : 'storage error').slice(0, 1500)}`;
+  }
   member.lastError = message.slice(0, 12000);
   if (!member.result && !member.fullResult) member.result = member.lastError;
 }
@@ -950,6 +983,8 @@ export class SwarmEngine {
       member.verifiedTree = undefined;
       member.reviewedFiles = undefined;
       recordMemberFailure(
+        this.root,
+        this.id,
         member,
         'This saved auditor requires explicit review_files before resuming. Assign its deliverable file list, or [] only for member-report-only tasks, then explicitly @mention it.',
       );
@@ -965,6 +1000,8 @@ export class SwarmEngine {
     if (member.turns >= 20) {
       member.state = 'paused';
       recordMemberFailure(
+        this.root,
+        this.id,
         member,
         'Member reached the 20-turn wake budget; task-wide counters are retained for all successors.',
       );
@@ -1099,16 +1136,13 @@ export class SwarmEngine {
           : stopped
             ? 'Member turn was stopped; late output was not accepted.'
             : 'Member turn did not complete.';
-        const partial = saveSwarmResultText(
+        recordMemberFailure(
           this.root,
           this.id,
-          `${diagnostic}\n${result.text}`,
-        );
-        recordMemberFailure(
           member,
-          partial.fullResult
-            ? `${diagnostic}\nPartial output archived: ${swarmResultArchivePath(this.root, this.id, partial.fullResult)}\n${partial.result}`
-            : partial.result,
+          diagnostic,
+          `${diagnostic}\n${result.text}`,
+          timedOut ? 'timeout' : stopped ? 'stopped' : 'incomplete',
         );
         if (!hadResult) member.modelsUsed = modelsUsed;
       } else {
@@ -1136,6 +1170,8 @@ export class SwarmEngine {
         if (!verdict?.success) {
           member.state = 'paused';
           recordMemberFailure(
+            this.root,
+            this.id,
             member,
             'Independent reviewer returned an invalid verdict. Expected JSON with passed, a nonblank summary and nonblank evidence entries. Raw reviewer output is retained; inspect it before an explicitly authorized correction.',
           );
@@ -1158,6 +1194,8 @@ export class SwarmEngine {
           ) {
             member.state = 'paused';
             recordMemberFailure(
+              this.root,
+              this.id,
               member,
               'Reviewed files changed or became unavailable during independent review. Raw reviewer output is retained; inspect the current files before a new review.',
             );
@@ -1193,6 +1231,8 @@ export class SwarmEngine {
       if (member.state !== 'killed') member.state = 'paused';
       const hadResult = !!member.result || !!member.fullResult;
       recordMemberFailure(
+        this.root,
+        this.id,
         member,
         error instanceof Error ? error.message : 'Member execution failed.',
       );
