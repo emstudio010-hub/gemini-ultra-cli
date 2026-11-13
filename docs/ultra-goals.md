@@ -1564,3 +1564,8 @@ WI-174/E-401至402/F-131：原Swarm JSON.parse抛出可丢当前复核正文，�
 ## 2026-11-13 Swarm文件复核一致性
 
 WI-175/E-403至404/F-132：原共享工作区文件变化不推进成员revision，旧通过仍可能完成；现公开工具绑定workspace，auditor显式review_files，最多64文件/64MiB，在开轮/通过/finish核对SHA与字节，managed worktree内解析。审查中变化paused/原文保持/一次失败，之后变化拒finish且状态字节保持；无关文件不影响。已有auditor可post带name/list/@name显式重审，旧缺清单wake修前实际多跑一轮，现暂停且不计轮/请求/失败。显式[]只批准member报告范围，无workspace低层旧API保留。最终23不同相关检查通过、core/CLI严格编译/九文件lint格式通过；managed worktree真实Windows git路径通过，源checkout保持。Windows真实公开工具/注册auditor/AgentTool/LocalAgentExecutor/complete_task/SSE/文件指纹16条件通过、7926ms/退出0/2loopback请求/0外部，宿主审查中/后改动均拦截，恢复精确版本完成。首验证器行为通过但重复释放导致退出1留证，send保护后通过，最终wake补强后再验。非实际模型独立阅读/清单完整性/文件系统锁/跨进程原子性或复杂真实任务质量验收；个人配置/旧E-294与E-364失败SHA/安装83保持，无打包重装版本CI或付费重跑，goal active。详见docs/ultra-swarm-review-files-handoff.md。
+
+
+## 2026-11-13 Swarm隔离复核原文保留
+
+WI-176/E-405至406/F-133：原Swarm在内存设置result/fullResult后检查worktree，变化抛错后catch重读旧状态，长verdict正文虽有孤立归档但引用丢失。旧真实Windows git/worktree runner场景实际1失败；现auditor判定前先持久化原文/归档引用，verified标记仍空，异常恢复保留当前正文并paused/一次失败，不自动重试。最终9不同相关场景、core/CLI严格源码编译/两文件lint格式通过。Windows真实Config/gateway/公开ManageSwarmTool/注册auditor/AgentTool/LocalAgentExecutor/complete_task/SSE/真实git worktree，第一响应期间宿主改隔离文件，长passing JSON原文/引用/归档/导出保持且finish拒绝；显式重审第二verdict后完成，旧长归档仍在，源checkout报告/HEAD/index保持。17条件通过、9392ms/退出0/2loopback请求/0外部，非真实模型读取智能/复杂逆向质量/磁盘故障或最终包验收。个人配置/旧E-294与E-364失败SHA/安装83保持，无打包重装版本CI或付费重跑，goal active。详见docs/ultra-swarm-isolated-review-handoff.md。

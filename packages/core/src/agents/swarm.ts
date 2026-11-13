@@ -1080,6 +1080,10 @@ export class SwarmEngine {
         result.completed &&
         member.state === 'waiting'
       ) {
+        // Postflight worktree reads can throw. Retain this raw verdict and its
+        // archive reference before checking approval, so failure recovery reads
+        // the current evidence rather than an older member result.
+        saveSwarm(this.root, swarm);
         const verdict = parseReviewVerdict(result.text);
         if (!verdict?.success) {
           member.state = 'paused';

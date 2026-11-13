@@ -28,6 +28,10 @@ import {
   readSwarm,
   requireSwarmWorktree,
 } from './swarm.js';
+import {
+  readSwarmResultText,
+  swarmResultArchivePath,
+} from './swarmResultText.js';
 
 let scratch: string;
 let source: string;
@@ -298,4 +302,60 @@ it('refuses missing required manifests and files changed during independent revi
     'changed during or after',
   );
   expect(() => applyAgentWorktree(root, id)).toThrow('final review');
+});
+
+it('retains the full Swarm verdict when its isolated worktree changes during review', async () => {
+  const task = createSwarm(
+    root,
+    'Retain review output after an isolated file changes',
+  );
+  const worktree = prepareAgentWorktree(root, task.id, source);
+  requireSwarmWorktree(root, task.id);
+  const raw = JSON.stringify({
+    passed: true,
+    summary: 'ISOLATED_REVIEW_DETAIL '.repeat(800),
+    evidence: ['seed.txt'],
+  });
+  let calls = 0;
+  const engine = getSwarmEngine(
+    root,
+    task.id,
+    async () => {
+      calls++;
+      fs.writeFileSync(
+        path.join(worktree.directory, 'seed.txt'),
+        'changed during review\n',
+      );
+      return { completed: true, text: raw };
+    },
+    source,
+  );
+  engine.add(
+    'reviewer',
+    'workflow-auditor',
+    'Inspect seed.txt without editing',
+    ['seed.txt'],
+  );
+  await engine.wait(new AbortController().signal);
+  const state = readSwarm(root, task.id);
+  const member = state.members[0];
+  expect(readSwarmResultText(root, task.id, member)).toBe(raw);
+  expect(member.fullResult).toBeDefined();
+  expect(
+    fs.readFileSync(
+      swarmResultArchivePath(root, task.id, member.fullResult!),
+      'utf8',
+    ),
+  ).toBe(raw);
+  expect(member.state).toBe('paused');
+  expect(member.lastError).toContain(
+    'Isolated files changed during independent review',
+  );
+  expect(member.verifiedRevision).toBeUndefined();
+  expect(member.verifiedTree).toBeUndefined();
+  expect(member.reviewedFiles).toBeUndefined();
+  expect(state.budget).toMatchObject({ turns: 1, failedTurns: 1 });
+  expect(calls).toBe(1);
+  expect(() => engine.finish()).toThrow(/paused/);
+  expect(fs.readFileSync(path.join(source, 'seed.txt'), 'utf8')).toBe('base\n');
 });
