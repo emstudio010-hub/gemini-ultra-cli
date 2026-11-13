@@ -36,7 +36,119 @@ describe('experiments', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.clearAllMocks();
+  });
+
+  it('does not cache a missing backend as the experiments for a later native login', async () => {
+    const { getExperiments } = await import('./experiments.js');
+    expect(await getExperiments()).toEqual({ flags: {}, experimentIds: [] });
+    vi.mocked(mockServer.listExperiments).mockResolvedValue({
+      experimentIds: [42],
+    });
+    expect((await getExperiments(mockServer)).experimentIds).toEqual([42]);
+    expect(mockServer.listExperiments).toHaveBeenCalledOnce();
+  });
+
+  it('keeps different native backends separate while sharing each backend cache', async () => {
+    const { getExperiments } = await import('./experiments.js');
+    const other = {
+      listExperiments: vi.fn().mockResolvedValue({ experimentIds: [84] }),
+    } as unknown as CodeAssistServer;
+    vi.mocked(mockServer.listExperiments).mockResolvedValue({
+      experimentIds: [42],
+    });
+    const first = await getExperiments(mockServer);
+    expect((await getExperiments(other)).experimentIds).toEqual([84]);
+    expect(await getExperiments(mockServer)).toBe(first);
+    expect(mockServer.listExperiments).toHaveBeenCalledOnce();
+    expect(other.listExperiments).toHaveBeenCalledOnce();
+  });
+
+  it('permits an explicit fetch after failure without automatically retrying', async () => {
+    const { getExperiments } = await import('./experiments.js');
+    const failure = new Error('Fixture unavailable');
+    vi.mocked(mockServer.listExperiments)
+      .mockRejectedValueOnce(failure)
+      .mockResolvedValueOnce({ experimentIds: [42] });
+    await expect(getExperiments(mockServer)).rejects.toBe(failure);
+    expect(mockServer.listExperiments).toHaveBeenCalledOnce();
+    expect((await getExperiments(mockServer)).experimentIds).toEqual([42]);
+    expect(mockServer.listExperiments).toHaveBeenCalledTimes(2);
+  });
+
+  it('bounds a hanging experiments request and excludes its late result from the next explicit fetch', async () => {
+    vi.useFakeTimers();
+    const { getExperiments } = await import('./experiments.js');
+    let release!: (value: ListExperimentsResponse) => void;
+    let signal: AbortSignal | undefined;
+    vi.mocked(mockServer.listExperiments).mockImplementationOnce(
+      (_metadata, value) => {
+        signal = value;
+        return new Promise((resolve) => {
+          release = resolve;
+        });
+      },
+    );
+    let outcome = 'pending';
+    const pending = getExperiments(mockServer).then(
+      () => {
+        outcome = 'resolved';
+      },
+      () => {
+        outcome = 'rejected';
+      },
+    );
+    try {
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(outcome).toBe('rejected');
+      expect(signal?.aborted).toBe(true);
+      expect(mockServer.listExperiments).toHaveBeenCalledOnce();
+      vi.mocked(mockServer.listExperiments).mockResolvedValueOnce({
+        experimentIds: [42],
+      });
+      const fresh = await getExperiments(mockServer);
+      release({ experimentIds: [99] });
+      await pending;
+      expect(await getExperiments(mockServer)).toBe(fresh);
+      expect(fresh.experimentIds).toEqual([42]);
+      expect(mockServer.listExperiments).toHaveBeenCalledTimes(2);
+    } finally {
+      release?.({});
+    }
+  });
+
+  it('does not dispatch after client metadata arrives beyond the loading deadline', async () => {
+    vi.useFakeTimers();
+    const { getExperiments } = await import('./experiments.js');
+    let release!: (
+      value: Awaited<ReturnType<typeof getClientMetadata>>,
+    ) => void;
+    vi.mocked(getClientMetadata).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    let outcome = 'pending';
+    const pending = getExperiments(mockServer).then(
+      () => {
+        outcome = 'resolved';
+      },
+      () => {
+        outcome = 'rejected';
+      },
+    );
+    try {
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(outcome).toBe('rejected');
+      release({});
+      await pending;
+      await vi.advanceTimersByTimeAsync(1);
+      expect(mockServer.listExperiments).not.toHaveBeenCalled();
+    } finally {
+      release?.({});
+    }
   });
 
   it('should fetch and parse experiments from the server', async () => {
@@ -56,6 +168,7 @@ describe('experiments', () => {
     expect(getClientMetadata).toHaveBeenCalled();
     expect(mockServer.listExperiments).toHaveBeenCalledWith(
       await getClientMetadata(),
+      expect.any(AbortSignal),
     );
 
     // Verify that the response was parsed correctly

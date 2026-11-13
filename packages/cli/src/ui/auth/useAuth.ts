@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { LoadedSettings } from '../../config/settings.js';
 import {
   AuthType,
@@ -46,6 +46,7 @@ export const useAuthCommand = (
   initialAuthError: string | null = null,
   initialAccountSuspensionInfo: AccountSuspensionInfo | null = null,
 ) => {
+  const mayReuseInitialAuth = useRef(!initialAuthError);
   const [authState, setAuthState] = useState<AuthState>(
     initialAuthError ? AuthState.Updating : AuthState.Unauthenticated,
   );
@@ -92,6 +93,8 @@ export const useAuthCommand = (
       if (authState !== AuthState.Unauthenticated) {
         return;
       }
+      const mayReuseReadyAuth = mayReuseInitialAuth.current;
+      mayReuseInitialAuth.current = false;
 
       const authType = settings.merged.security.auth.selectedType;
       if (!authType) {
@@ -137,7 +140,13 @@ export const useAuthCommand = (
       }
 
       try {
-        await config.refreshAuth(authType);
+        // Startup already authenticated this Config. Keep all validation above,
+        // and only reuse that completed result on the first UI auth attempt.
+        const reuseReadyAuth =
+          mayReuseReadyAuth &&
+          config.isAuthReady?.() === true &&
+          config.getContentGeneratorConfig()?.authType === authType;
+        if (!reuseReadyAuth) await config.refreshAuth(authType);
 
         debugLogger.log(`Authenticated via "${authType}".`);
         setAuthError(null);

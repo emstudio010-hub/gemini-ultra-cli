@@ -685,6 +685,24 @@ describe('CodeAssistServer', () => {
     expect(response).toEqual(mockResponse);
   });
 
+  it('forwards experiment cancellation to HTTP and rejects a pre-cancelled dispatch', async () => {
+    const { server } = createTestServer();
+    const requestPost = vi.spyOn(server, 'requestPost').mockResolvedValue({});
+    const controller = new AbortController();
+    await server.listExperiments({}, controller.signal);
+    expect(requestPost).toHaveBeenCalledWith(
+      'listExperiments',
+      { project: 'test-project', metadata: { duetProject: 'test-project' } },
+      controller.signal,
+    );
+    const reason = new Error('Experiments loading cancelled');
+    controller.abort(reason);
+    await expect(server.listExperiments({}, controller.signal)).rejects.toBe(
+      reason,
+    );
+    expect(requestPost).toHaveBeenCalledOnce();
+  });
+
   it('forwards quota cancellation to HTTP and rejects a pre-cancelled request before dispatch', async () => {
     const { server } = createTestServer();
     const requestPost = vi

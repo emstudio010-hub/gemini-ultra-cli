@@ -9,32 +9,49 @@ import { getClientMetadata } from './client_metadata.js';
 import type { ListExperimentsResponse, Flag } from './types.js';
 import * as fs from 'node:fs';
 import { debugLogger } from '../../utils/debugLogger.js';
+import { withAbortSignal } from '../../utils/withAbortSignal.js';
 
 export interface Experiments {
   flags: Record<string, Flag>;
   experimentIds: number[];
 }
 
-let experimentsPromise: Promise<Experiments> | undefined;
+const experimentsByServer = new WeakMap<
+  CodeAssistServer,
+  Promise<Experiments>
+>();
 
 /**
  * Gets the experiments from the server.
  *
- * The experiments are cached so that they are only fetched once.
+ * Share successful and in-flight reads only for the same native backend.
+ * Failed reads may be retried by a later explicit caller.
  */
 export async function getExperiments(
   server?: CodeAssistServer,
 ): Promise<Experiments> {
-  if (experimentsPromise) {
-    return experimentsPromise;
+  const cached = server ? experimentsByServer.get(server) : undefined;
+  if (cached) {
+    return cached;
   }
 
-  experimentsPromise = (async () => {
+  if (!server && !process.env['GEMINI_EXP']) {
+    return { flags: {}, experimentIds: [] };
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(new Error('Experiments loading timed out')),
+    10_000,
+  );
+  const promise = withAbortSignal(controller.signal, async () => {
     if (process.env['GEMINI_EXP']) {
       try {
         const expPath = process.env['GEMINI_EXP'];
         debugLogger.debug('Reading experiments from', expPath);
-        const content = await fs.promises.readFile(expPath, 'utf8');
+        const content = await withAbortSignal(controller.signal, () =>
+          fs.promises.readFile(expPath, 'utf8'),
+        );
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         const response: ListExperimentsResponse = JSON.parse(content);
         if (
@@ -51,15 +68,27 @@ export async function getExperiments(
       }
     }
 
+    controller.signal.throwIfAborted();
     if (!server) {
       return { flags: {}, experimentIds: [] };
     }
 
-    const metadata = await getClientMetadata();
-    const response = await server.listExperiments(metadata);
+    const metadata = await withAbortSignal(
+      controller.signal,
+      getClientMetadata,
+    );
+    const response = await server.listExperiments(metadata, controller.signal);
     return parseExperiments(response);
-  })();
-  return experimentsPromise;
+  }).finally(() => clearTimeout(timeout));
+  if (server) experimentsByServer.set(server, promise);
+  try {
+    return await promise;
+  } catch (error) {
+    if (server && experimentsByServer.get(server) === promise) {
+      experimentsByServer.delete(server);
+    }
+    throw error;
+  }
 }
 
 function parseExperiments(response: ListExperimentsResponse): Experiments {

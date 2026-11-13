@@ -148,6 +148,126 @@ describe('useAuth', () => {
       );
     });
 
+    it('reuses ready startup auth only once after validation and refreshes an explicit later attempt', async () => {
+      const config = {
+        isAuthReady: () => true,
+        getContentGeneratorConfig: () => ({
+          authType: AuthType.LOGIN_WITH_GOOGLE,
+        }),
+        refreshAuth: vi.fn().mockResolvedValue(undefined),
+      } as unknown as Config;
+      const settings = createSettings(AuthType.LOGIN_WITH_GOOGLE);
+      const screen = await renderHook(() => useAuthCommand(settings, config));
+      try {
+        expect(screen.result.current.authState).toBe(AuthState.Authenticated);
+        expect(mockValidateAuthMethod).toHaveBeenCalledWith(
+          AuthType.LOGIN_WITH_GOOGLE,
+        );
+        expect(config.refreshAuth).not.toHaveBeenCalled();
+        await act(async () =>
+          screen.result.current.setAuthState(AuthState.Unauthenticated),
+        );
+        expect(config.refreshAuth).toHaveBeenCalledOnce();
+        expect(screen.result.current.authState).toBe(AuthState.Authenticated);
+      } finally {
+        screen.unmount();
+      }
+    });
+
+    it('does not reuse startup auth invalidated while validation was pending', async () => {
+      let ready = true;
+      let release!: (value: string | null) => void;
+      mockValidateAuthMethod.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            release = resolve;
+          }),
+      );
+      const config = {
+        isAuthReady: () => ready,
+        getContentGeneratorConfig: () => ({
+          authType: AuthType.LOGIN_WITH_GOOGLE,
+        }),
+        refreshAuth: vi.fn().mockResolvedValue(undefined),
+      } as unknown as Config;
+      const settings = createSettings(AuthType.LOGIN_WITH_GOOGLE);
+      const screen = await renderHook(() => useAuthCommand(settings, config));
+      try {
+        expect(screen.result.current.authState).toBe(AuthState.Unauthenticated);
+        expect(config.refreshAuth).not.toHaveBeenCalled();
+        await act(async () => {
+          ready = false;
+          release(null);
+        });
+        expect(config.refreshAuth).toHaveBeenCalledWith(
+          AuthType.LOGIN_WITH_GOOGLE,
+        );
+        expect(screen.result.current.authState).toBe(AuthState.Authenticated);
+      } finally {
+        screen.unmount();
+      }
+    });
+
+    it.each(['enforced', 'validation', 'environment'] as const)(
+      'still rejects %s errors when startup auth is already ready',
+      async (kind) => {
+        const config = {
+          isAuthReady: () => true,
+          getContentGeneratorConfig: () => ({
+            authType: AuthType.LOGIN_WITH_GOOGLE,
+          }),
+          refreshAuth: vi.fn(),
+        } as unknown as Config;
+        const settings = createSettings(AuthType.LOGIN_WITH_GOOGLE);
+        if (kind === 'enforced')
+          settings.merged.security.auth.enforcedType = AuthType.USE_GEMINI;
+        if (kind === 'validation')
+          mockValidateAuthMethod.mockResolvedValue('Validation Failed');
+        if (kind === 'environment')
+          process.env['GEMINI_DEFAULT_AUTH_TYPE'] = 'INVALID_TYPE';
+        const screen = await renderHook(() => useAuthCommand(settings, config));
+        try {
+          expect(screen.result.current.authState).toBe(AuthState.Updating);
+          expect(screen.result.current.authError).toContain(
+            kind === 'enforced'
+              ? 'Authentication is enforced'
+              : kind === 'validation'
+                ? 'Validation Failed'
+                : 'Invalid value for GEMINI_DEFAULT_AUTH_TYPE',
+          );
+          expect(config.refreshAuth).not.toHaveBeenCalled();
+        } finally {
+          screen.unmount();
+        }
+      },
+    );
+
+    it.each(['not-ready', 'different-method'] as const)(
+      'refreshes startup auth when it is %s',
+      async (kind) => {
+        const config = {
+          isAuthReady: () => kind !== 'not-ready',
+          getContentGeneratorConfig: () => ({
+            authType:
+              kind === 'different-method'
+                ? AuthType.USE_GEMINI
+                : AuthType.LOGIN_WITH_GOOGLE,
+          }),
+          refreshAuth: vi.fn().mockResolvedValue(undefined),
+        } as unknown as Config;
+        const settings = createSettings(AuthType.LOGIN_WITH_GOOGLE);
+        const screen = await renderHook(() => useAuthCommand(settings, config));
+        try {
+          expect(config.refreshAuth).toHaveBeenCalledWith(
+            AuthType.LOGIN_WITH_GOOGLE,
+          );
+          expect(screen.result.current.authState).toBe(AuthState.Authenticated);
+        } finally {
+          screen.unmount();
+        }
+      },
+    );
+
     it('should initialize with Unauthenticated state', async () => {
       const { result } = await renderHook(() =>
         useAuthCommand(createSettings(AuthType.LOGIN_WITH_GOOGLE), mockConfig),

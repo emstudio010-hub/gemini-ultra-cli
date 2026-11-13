@@ -992,6 +992,7 @@ export class Config implements McpContext, AgentLoopContext {
   private disabledHooks: string[];
   private experiments: Experiments | undefined;
   private experimentsPromise: Promise<Experiments | undefined> | undefined;
+  private authReady = false;
   private hookSystem?: HookSystem;
   private readonly onModelChange: ((model: string) => void) | undefined;
   private readonly onReload:
@@ -1623,6 +1624,7 @@ export class Config implements McpContext, AgentLoopContext {
     baseUrl?: string,
     customHeaders?: Record<string, string>,
   ) {
+    this.authReady = false;
     // Reset availability service when switching auth
     this.modelAvailabilityService.reset();
     this.fallbackOverrides.clear();
@@ -1664,8 +1666,20 @@ export class Config implements McpContext, AgentLoopContext {
     this.contentGeneratorConfig = newContentGeneratorConfig;
 
     const codeAssistServer = getCodeAssistServer(this);
+    const quotaController = new AbortController();
+    const quotaTimeout = codeAssistServer?.projectId
+      ? setTimeout(
+          () =>
+            quotaController.abort(
+              new Error('Bootstrap quota refresh timed out'),
+            ),
+          10_000,
+        )
+      : undefined;
     const quotaPromise = codeAssistServer?.projectId
-      ? this.refreshUserQuota()
+      ? this.refreshUserQuota(quotaController.signal).finally(() =>
+          clearTimeout(quotaTimeout),
+        )
       : Promise.resolve();
 
     this.experimentsPromise = getExperiments(codeAssistServer)
@@ -1732,6 +1746,11 @@ export class Config implements McpContext, AgentLoopContext {
     if ((await this.getProModelNoAccess()) && isAutoModel(this.model)) {
       this.setModel(PREVIEW_GEMINI_FLASH_MODEL);
     }
+    this.authReady = true;
+  }
+
+  isAuthReady(): boolean {
+    return this.authReady;
   }
 
   async getExperimentsAsync(): Promise<Experiments | undefined> {

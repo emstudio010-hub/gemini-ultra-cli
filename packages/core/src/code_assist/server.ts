@@ -352,7 +352,9 @@ export class CodeAssistServer implements ContentGenerator {
 
   async listExperiments(
     metadata: ClientMetadata,
+    signal?: AbortSignal,
   ): Promise<ListExperimentsResponse> {
+    signal?.throwIfAborted();
     if (!this.projectId) {
       throw new Error('projectId is not defined for CodeAssistServer.');
     }
@@ -361,7 +363,13 @@ export class CodeAssistServer implements ContentGenerator {
       project: projectId,
       metadata: { ...metadata, duetProject: projectId },
     };
-    return this.requestPost<ListExperimentsResponse>('listExperiments', req);
+    return signal
+      ? this.requestPost<ListExperimentsResponse>(
+          'listExperiments',
+          req,
+          signal,
+        )
+      : this.requestPost<ListExperimentsResponse>('listExperiments', req);
   }
 
   async retrieveUserQuota(

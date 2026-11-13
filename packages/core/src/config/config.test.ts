@@ -976,8 +976,68 @@ describe('Server Config (config.ts)', () => {
   });
 
   describe('refreshAuth', () => {
+    it('bounds optional bootstrap quota waiting and prevents a late response from overwriting the next quota', async () => {
+      vi.useFakeTimers();
+      let release!: (value: {
+        buckets: Array<{ modelId: string; remainingFraction: number }>;
+      }) => void;
+      let signal: AbortSignal | undefined;
+      const server = {
+        projectId: 'fixture-project',
+        retrieveUserQuota: vi.fn((_request, value?: AbortSignal) => {
+          signal = value;
+          return new Promise((resolve) => {
+            release = resolve;
+          });
+        }),
+      };
+      vi.mocked(getCodeAssistServer).mockReturnValue(
+        server as unknown as CodeAssistServer,
+      );
+      vi.mocked(createContentGeneratorConfig).mockResolvedValueOnce({
+        authType: AuthType.LOGIN_WITH_GOOGLE,
+      });
+      const config = new Config(baseParams);
+      let settled = false;
+      let failure: unknown;
+      const pending = config
+        .refreshAuth(AuthType.LOGIN_WITH_GOOGLE)
+        .then(() => {
+          settled = true;
+        })
+        .catch((error: unknown) => {
+          failure = error;
+        });
+      try {
+        await vi.advanceTimersByTimeAsync(10_000);
+        expect(failure).toBeUndefined();
+        expect(settled).toBe(true);
+        expect(signal?.aborted).toBe(true);
+        expect(server.retrieveUserQuota).toHaveBeenCalledOnce();
+        const fresh = {
+          buckets: [{ modelId: 'gemini-2.5-pro', remainingFraction: 0.8 }],
+        };
+        server.retrieveUserQuota.mockResolvedValueOnce(fresh);
+        await config.refreshUserQuota();
+        release({
+          buckets: [
+            { modelId: 'gemini-3-pro-preview', remainingFraction: 0.1 },
+          ],
+        });
+        await pending;
+        await vi.advanceTimersByTimeAsync(1);
+        expect(config.getLastRetrievedQuota()).toBe(fresh);
+        expect(config.getBaseLlmClient()).toBeDefined();
+      } finally {
+        release?.({ buckets: [] });
+        vi.mocked(getCodeAssistServer).mockReturnValue(undefined);
+        vi.useRealTimers();
+      }
+    });
+
     it('should refresh auth and update config', async () => {
       const config = new Config(baseParams);
+      expect(config.isAuthReady()).toBe(false);
       const authType = AuthType.USE_GEMINI;
       const mockContentConfig = {
         apiKey: 'test-key',
@@ -988,6 +1048,7 @@ describe('Server Config (config.ts)', () => {
       );
 
       await config.refreshAuth(authType);
+      expect(config.isAuthReady()).toBe(true);
 
       expect(createContentGeneratorConfig).toHaveBeenCalledWith(
         config,
@@ -1000,6 +1061,21 @@ describe('Server Config (config.ts)', () => {
       // Verify that contentGeneratorConfig is updated
       expect(config.getContentGeneratorConfig()).toEqual(mockContentConfig);
       expect(GeminiClient).toHaveBeenCalledWith(config);
+    });
+
+    it('does not expose a failed reauthentication as a ready auth result', async () => {
+      const config = new Config(baseParams);
+      vi.mocked(createContentGeneratorConfig).mockResolvedValueOnce({
+        authType: AuthType.LOGIN_WITH_GOOGLE,
+      });
+      await config.refreshAuth(AuthType.LOGIN_WITH_GOOGLE);
+      expect(config.isAuthReady()).toBe(true);
+      const failure = new Error('Fixture auth failed');
+      vi.mocked(createContentGeneratorConfig).mockRejectedValueOnce(failure);
+      await expect(config.refreshAuth(AuthType.LOGIN_WITH_GOOGLE)).rejects.toBe(
+        failure,
+      );
+      expect(config.isAuthReady()).toBe(false);
     });
 
     it('should clear fallback overrides when refreshing auth', async () => {
@@ -1114,6 +1190,9 @@ describe('Server Config (config.ts)', () => {
     });
 
     it('should switch to flash model if user has no Pro access and model is auto', async () => {
+      vi.mocked(createContentGeneratorConfig).mockResolvedValueOnce({
+        authType: AuthType.LOGIN_WITH_GOOGLE,
+      });
       vi.mocked(getExperiments).mockResolvedValue({
         experimentIds: [],
         flags: {
@@ -1137,6 +1216,9 @@ describe('Server Config (config.ts)', () => {
     });
 
     it('should NOT switch to flash model if user has Pro access and model is auto', async () => {
+      vi.mocked(createContentGeneratorConfig).mockResolvedValueOnce({
+        authType: AuthType.LOGIN_WITH_GOOGLE,
+      });
       vi.mocked(getExperiments).mockResolvedValue({
         experimentIds: [],
         flags: {
