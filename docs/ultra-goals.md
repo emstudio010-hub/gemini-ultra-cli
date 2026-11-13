@@ -1554,3 +1554,8 @@ WI-172/E-397至398/F-129：原core仅写开始清缓存，写期间/旧读取可
 ## 2026-11-13 认证入口收敛与双语等待
 
 WI-173/E-399至400/F-130：全packages核对legacy AppContainer handleAuthSelect无消费者，删handler/UIActions字段/stub/专用导入，实际AuthDialog/shared useAuth保留。key表单/等待/超时/取消及部分选择说明随useLocale，英文原文/URL/输入保持；等待timer原依赖父级变化callback可续期，现挂载一次+最新callback ref。最终10不同相关检查通过，含90秒换callback/语言后原期限调用最新owner、英文快照不改，strict CLI源码编译/10文件lint格式通过；首重绘未等/标签mock换行断言失败修夹具留证。Windows最终实际/language中英→认证中文等待/Esc真实quota关闭→gateway重试→中英key表单/提交/统计，15步30条件通过、18372ms/退出0/2元数据HTTP/0模型，取消68ms仅本机单次；timer变更前一次原生通过另保留。非三分钟挂钟/OS凭据库/所有认证异常翻译或最终包验收。个人配置/旧E-294与E-364失败SHA/安装83保持，无打包重装版本CI/付费重跑，goal active。详见docs/ultra-auth-entry-locale-handoff.md。
+
+
+## 2026-11-13 Swarm无效复核保留与完成门禁
+
+WI-174/E-401至402/F-131：原Swarm JSON.parse抛出可丢当前复核正文，空白summary/evidence可标通过；finish信任旧revision标记。现安全解析/统一trim非空校验，invalid成员paused/原文及长归档保持/一次失败无自动重试，预算交接不冒称通过；finish重读原文，旧空白通过标记拒绝且状态不改。旧5复现失败/2合法对照过，最终9新+6相关对照共15不同场景通过，core/CLI严格源码编译/两文件最终lint格式通过；首const lint及聚合显示旧14常量修正留证。Windows真实Config/gateway/注册auditor/AgentTool/LocalAgentExecutor/complete_task/SSE/Swarm+导出，空白complete_task实际GOAL却被Swarm拒绝、正文保持，合法对照及旧marker拒绝；长格式错误仅runner边界0请求验证。最终19条件通过、4956ms/退出0/2loopback模型协议/0外部，finish补强前成功另保留。非真实模型独立阅读/复杂逆向质量或共享目录所有文件指纹验收；E-294/E-364仍失败且SHA保持，个人配置/安装83保持。无打包重装版本CI/付费重跑，goal active。详见docs/ultra-swarm-verdict-handoff.md。

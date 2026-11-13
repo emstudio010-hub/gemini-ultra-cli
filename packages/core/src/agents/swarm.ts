@@ -51,6 +51,18 @@ const memberSchema = z.object({
   model: agentModelSpecSchema.optional(),
   modelsUsed: z.array(z.string().max(512)).max(16).default([]),
 });
+const reviewVerdictSchema = z.object({
+  passed: z.boolean(),
+  summary: z.string().trim().min(1),
+  evidence: z.array(z.string().trim().min(1)).min(1),
+});
+function parseReviewVerdict(text: string) {
+  try {
+    return reviewVerdictSchema.safeParse(JSON.parse(text));
+  } catch {
+    return undefined;
+  }
+}
 const budgetSchema = z.object({
   maxRequests: z.number().int().min(1).max(10000).default(120),
   maxFailedTurns: z.number().int().min(1).max(100).default(2),
@@ -473,14 +485,10 @@ function swarmBudgetHandoff(root: string, swarm: Swarm): SwarmBudgetError {
   );
   if (reviewer) {
     try {
-      const verdict = z
-        .object({
-          passed: z.boolean(),
-          summary: z.string(),
-          evidence: z.array(z.string()).optional(),
-        })
-        .safeParse(JSON.parse(readSwarmResultText(root, swarm.id, reviewer)));
-      if (verdict.success) {
+      const verdict = parseReviewVerdict(
+        readSwarmResultText(root, swarm.id, reviewer),
+      );
+      if (verdict?.success) {
         lines.push(
           `${i18n.t('已保存的复核', 'Saved review')} @${reviewer.name}: ${verdict.data.passed ? i18n.t('通过（不代表任务完成）', 'passed (not task completion)') : i18n.t('未通过', 'failed')}`,
           verdict.data.summary.slice(0, 2000),
@@ -778,12 +786,20 @@ export class SwarmEngine {
       throw new Error(
         'Members are still working, queued or paused. Resolve them before completion.',
       );
-    const verifier = swarm.members.find(
-      (member) =>
-        member.agent === 'workflow-auditor' &&
-        member.state !== 'killed' &&
-        member.verifiedRevision === swarm.revision,
-    );
+    const verifier = swarm.members.find((member) => {
+      if (
+        member.agent !== 'workflow-auditor' ||
+        member.state === 'killed' ||
+        member.verifiedRevision !== swarm.revision
+      )
+        return false;
+      // Old saved approval markers cannot authorize a verdict that no longer
+      // satisfies the current acceptance contract.
+      const verdict = parseReviewVerdict(
+        readSwarmResultText(this.root, this.id, member),
+      );
+      return verdict?.success && verdict.data.passed;
+    });
     if (!verifier)
       throw new Error(
         'A current independent verifier verdict is required before finishing.',
@@ -971,15 +987,16 @@ export class SwarmEngine {
         result.completed &&
         member.state === 'waiting'
       ) {
-        const verdict = z
-          .object({
-            passed: z.boolean(),
-            summary: z.string().min(1),
-            evidence: z.array(z.string().min(1)).min(1),
-          })
-          .safeParse(JSON.parse(result.text));
+        const verdict = parseReviewVerdict(result.text);
+        if (!verdict?.success) {
+          member.state = 'paused';
+          recordMemberFailure(
+            member,
+            'Independent reviewer returned an invalid verdict. Expected JSON with passed, a nonblank summary and nonblank evidence entries. Raw reviewer output is retained; inspect it before an explicitly authorized correction.',
+          );
+        }
         if (
-          verdict.success &&
+          verdict?.success &&
           verdict.data.passed &&
           swarm.revision === revision
         ) {
