@@ -42,6 +42,7 @@ export const handleSlashCommand = async (
   settings: LoadedSettings,
 ): Promise<PartListUnion | typeof LOCAL_SLASH_COMMAND_HANDLED | undefined> => {
   const trimmed = rawQuery.trim();
+  abortController.signal.throwIfAborted();
   if (!trimmed.startsWith('/')) {
     return;
   }
@@ -55,6 +56,7 @@ export const handleSlashCommand = async (
     abortController.signal,
   );
   const commands = commandService.getCommands();
+  abortController.signal.throwIfAborted();
 
   const { commandToExecute, args } = parseSlashCommand(rawQuery, commands);
 

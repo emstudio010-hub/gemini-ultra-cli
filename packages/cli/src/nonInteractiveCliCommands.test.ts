@@ -7,6 +7,7 @@ import { expect, it, vi } from 'vitest';
 import type { Config } from '@google/gemini-cli-core';
 import type { LoadedSettings } from './config/settings.js';
 import { handleSlashCommand } from './nonInteractiveCliCommands.js';
+import { CommandService } from './services/CommandService.js';
 vi.mock('./services/CommandService.js', () => ({
   CommandService: {
     create: vi.fn().mockResolvedValue({ getCommands: () => [] }),
@@ -35,4 +36,41 @@ it('rejects an unavailable provider credential command before headless model fal
       settings,
     ),
   ).resolves.toBeUndefined();
+});
+
+it('does not load commands for cancelled noninteractive input', async () => {
+  const controller = new AbortController();
+  const reason = new Error('Cancelled noninteractive input');
+  controller.abort(reason);
+  const before = vi.mocked(CommandService.create).mock.calls.length;
+  await expect(
+    handleSlashCommand(
+      '/stats',
+      controller,
+      {} as Config,
+      {} as LoadedSettings,
+    ),
+  ).rejects.toBe(reason);
+  expect(vi.mocked(CommandService.create).mock.calls.length).toBe(before);
+});
+
+it('rejects cancellation during loading before invoking any resolved command or fallback', async () => {
+  const controller = new AbortController();
+  const reason = new Error('Cancelled command loading');
+  const action = vi.fn();
+  vi.mocked(CommandService.create).mockImplementationOnce(async () => {
+    controller.abort(reason);
+    return {
+      getCommands: () => [{ name: 'stats', action }],
+    } as unknown as CommandService;
+  });
+  await expect(
+    handleSlashCommand(
+      '/stats',
+      controller,
+      {} as Config,
+      {} as LoadedSettings,
+    ),
+  ).rejects.toBe(reason);
+  expect(action).not.toHaveBeenCalled();
 });

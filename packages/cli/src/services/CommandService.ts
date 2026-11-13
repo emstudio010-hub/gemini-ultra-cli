@@ -46,6 +46,8 @@ export class CommandService {
     signal: AbortSignal,
   ): Promise<CommandService> {
     const allCommands = await this.loadAllCommands(loaders, signal);
+    if (signal.aborted)
+      return new CommandService(Object.freeze([]), Object.freeze([]));
     const { finalCommands, conflicts } =
       SlashCommandResolver.resolve(allCommands);
 
@@ -66,19 +68,38 @@ export class CommandService {
     loaders: ICommandLoader[],
     signal: AbortSignal,
   ): Promise<SlashCommand[]> {
-    const results = await Promise.allSettled(
-      loaders.map((loader) => loader.loadCommands(signal)),
+    if (signal.aborted) return [];
+    let onAbort!: () => void;
+    const cancelled = new Promise<Array<PromiseSettledResult<SlashCommand[]>>>(
+      (resolve) => {
+        onAbort = () => resolve([]);
+        signal.addEventListener('abort', onAbort, { once: true });
+      },
     );
-
-    const commands: SlashCommand[] = [];
-    for (const result of results) {
-      if (result.status === 'fulfilled') {
-        commands.push(...result.value);
-      } else {
-        debugLogger.debug('A command loader failed:', result.reason);
+    try {
+      // Async wrappers isolate synchronous throws, and allSettled keeps late
+      // rejections observed even after cancellation stops the caller waiting.
+      const results = await Promise.race([
+        Promise.allSettled(
+          loaders.map(async (loader) =>
+            signal.aborted ? [] : loader.loadCommands(signal),
+          ),
+        ),
+        cancelled,
+      ]);
+      if (signal.aborted) return [];
+      const commands: SlashCommand[] = [];
+      for (const result of results) {
+        if (result.status === 'fulfilled') {
+          commands.push(...result.value);
+        } else {
+          debugLogger.debug('A command loader failed:', result.reason);
+        }
       }
+      return commands;
+    } finally {
+      signal.removeEventListener('abort', onAbort);
     }
-    return commands;
   }
 
   /**
