@@ -314,7 +314,16 @@ export class CodeAssistServer implements ContentGenerator {
 
   async fetchAdminControls(
     req: FetchAdminControlsRequest,
+    signal?: AbortSignal,
   ): Promise<FetchAdminControlsResponse> {
+    signal?.throwIfAborted();
+    if (signal) {
+      return this.requestPost<FetchAdminControlsResponse>(
+        'fetchAdminControls',
+        req,
+        signal,
+      );
+    }
     return this.requestPost<FetchAdminControlsResponse>(
       'fetchAdminControls',
       req,

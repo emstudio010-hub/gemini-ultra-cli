@@ -12,6 +12,7 @@ import {
   AuthType,
   type Config,
   ProjectIdRequiredError,
+  AuthRefreshSupersededError,
 } from '@google/gemini-cli-core';
 import { AuthState } from '../types.js';
 import type { LoadedSettings } from '../../config/settings.js';
@@ -247,6 +248,26 @@ describe('useAuth', () => {
         );
         expect(screen.result.current.authState).toBe(AuthState.Authenticated);
         await act(async () => old.reject(new Error('OLD_AUTH_ERROR')));
+        expect(screen.result.current.authState).toBe(AuthState.Authenticated);
+        expect(screen.result.current.authError).toBeNull();
+      } finally {
+        screen.unmount();
+      }
+    });
+
+    it('does not turn a superseded Config request into a new UI login error', async () => {
+      vi.mocked(mockConfig.refreshAuth).mockRejectedValueOnce(
+        new AuthRefreshSupersededError(),
+      );
+      const settings = createSettings(AuthType.LOGIN_WITH_GOOGLE);
+      const screen = await renderHook(() =>
+        useAuthCommand(settings, mockConfig),
+      );
+      try {
+        expect(screen.result.current.authError).toBeNull();
+        await act(async () =>
+          screen.result.current.setAuthState(AuthState.Authenticated),
+        );
         expect(screen.result.current.authState).toBe(AuthState.Authenticated);
         expect(screen.result.current.authError).toBeNull();
       } finally {

@@ -703,6 +703,25 @@ describe('CodeAssistServer', () => {
     expect(requestPost).toHaveBeenCalledOnce();
   });
 
+  it('forwards admin cancellation to HTTP and rejects a pre-cancelled dispatch', async () => {
+    const { server } = createTestServer();
+    const requestPost = vi.spyOn(server, 'requestPost').mockResolvedValue({});
+    const controller = new AbortController();
+    const req = { project: 'fixture' };
+    await server.fetchAdminControls(req, controller.signal);
+    expect(requestPost).toHaveBeenCalledWith(
+      'fetchAdminControls',
+      req,
+      controller.signal,
+    );
+    const reason = new Error('Admin owner cancelled');
+    controller.abort(reason);
+    await expect(
+      server.fetchAdminControls(req, controller.signal),
+    ).rejects.toBe(reason);
+    expect(requestPost).toHaveBeenCalledOnce();
+  });
+
   it('forwards quota cancellation to HTTP and rejects a pre-cancelled request before dispatch', async () => {
     const { server } = createTestServer();
     const requestPost = vi

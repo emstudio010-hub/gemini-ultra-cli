@@ -15,9 +15,12 @@ import {
 } from '../types.js';
 import { getCodeAssistServer } from '../codeAssist.js';
 import type { Config } from '../../config/config.js';
+import { withAbortSignal } from '../../utils/withAbortSignal.js';
 
 let pollingInterval: NodeJS.Timeout | undefined;
 let currentSettings: AdminControlsSettings | undefined;
+let pollingOwner: object | undefined;
+let removePollingAbort: (() => void) | undefined;
 
 export function sanitizeAdminSettings(
   settings: FetchAdminControlsResponse,
@@ -109,7 +112,9 @@ export async function fetchAdminControls(
   cachedSettings: AdminControlsSettings | undefined,
   adminControlsEnabled: boolean,
   onSettingsChanged: (settings: AdminControlsSettings) => void,
+  signal?: AbortSignal,
 ): Promise<AdminControlsSettings> {
+  signal?.throwIfAborted();
   if (!server || !server.projectId || !adminControlsEnabled) {
     stopAdminControlsPolling();
     currentSettings = undefined;
@@ -120,14 +125,22 @@ export async function fetchAdminControls(
   // to avoid blocking startup with another fetch. We'll still start polling.
   if (cachedSettings && Object.keys(cachedSettings).length !== 0) {
     currentSettings = cachedSettings;
-    startAdminControlsPolling(server, server.projectId, onSettingsChanged);
+    startAdminControlsPolling(
+      server,
+      server.projectId,
+      onSettingsChanged,
+      signal,
+    );
     return cachedSettings;
   }
 
   try {
-    const rawSettings = await server.fetchAdminControls({
-      project: server.projectId,
-    });
+    const req = { project: server.projectId };
+    const rawSettings = await withAbortSignal(signal, () =>
+      signal
+        ? server.fetchAdminControls(req, signal)
+        : server.fetchAdminControls(req),
+    );
 
     if (rawSettings.adminControlsApplicable !== true) {
       stopAdminControlsPolling();
@@ -137,9 +150,15 @@ export async function fetchAdminControls(
 
     const sanitizedSettings = sanitizeAdminSettings(rawSettings);
     currentSettings = sanitizedSettings;
-    startAdminControlsPolling(server, server.projectId, onSettingsChanged);
+    startAdminControlsPolling(
+      server,
+      server.projectId,
+      onSettingsChanged,
+      signal,
+    );
     return sanitizedSettings;
   } catch (e) {
+    signal?.throwIfAborted();
     debugLogger.error('Failed to fetch admin controls: ', e);
     throw e;
   }
@@ -187,15 +206,28 @@ function startAdminControlsPolling(
   server: CodeAssistServer,
   project: string,
   onSettingsChanged: (settings: AdminControlsSettings) => void,
+  signal?: AbortSignal,
 ) {
   stopAdminControlsPolling();
+  const owner = {};
+  pollingOwner = owner;
+  const onAbort = () => {
+    if (pollingOwner === owner) stopAdminControlsPolling();
+  };
+  signal?.addEventListener('abort', onAbort, { once: true });
+  removePollingAbort = () => signal?.removeEventListener('abort', onAbort);
 
   pollingInterval = setInterval(
     async () => {
+      if (pollingOwner !== owner || signal?.aborted) return;
       try {
-        const rawSettings = await server.fetchAdminControls({
-          project,
-        });
+        const req = { project };
+        const rawSettings = await withAbortSignal(signal, () =>
+          signal
+            ? server.fetchAdminControls(req, signal)
+            : server.fetchAdminControls(req),
+        );
+        if (pollingOwner !== owner || signal?.aborted) return;
 
         if (rawSettings.adminControlsApplicable !== true) {
           stopAdminControlsPolling();
@@ -210,7 +242,9 @@ function startAdminControlsPolling(
           onSettingsChanged(newSettings);
         }
       } catch (e) {
-        debugLogger.error('Failed to poll admin controls: ', e);
+        if (pollingOwner === owner && !signal?.aborted) {
+          debugLogger.error('Failed to poll admin controls: ', e);
+        }
       }
     },
     5 * 60 * 1000,
@@ -221,6 +255,9 @@ function startAdminControlsPolling(
  * Stops polling for admin controls.
  */
 export function stopAdminControlsPolling() {
+  pollingOwner = undefined;
+  removePollingAbort?.();
+  removePollingAbort = undefined;
   if (pollingInterval) {
     clearInterval(pollingInterval);
     pollingInterval = undefined;

@@ -272,6 +272,7 @@ import { getExperiments } from '../code_assist/experiments/experiments.js';
 import type { CodeAssistServer } from '../code_assist/server.js';
 import { MemoryContextManager } from '../context/memoryContextManager.js';
 import { UserTierId } from '../code_assist/types.js';
+import { stopAdminControlsPolling } from '../code_assist/admin/admin_controls.js';
 import type {
   ModelConfigService,
   ModelConfigServiceConfig,
@@ -976,6 +977,185 @@ describe('Server Config (config.ts)', () => {
   });
 
   describe('refreshAuth', () => {
+    it.each(['config', 'generator'] as const)(
+      'rejects a superseded late %s factory without replacing the current auth',
+      async (stage) => {
+        const config = new Config(baseParams);
+        const currentGenerator = {} as ContentGenerator;
+        const oldGenerator = {} as ContentGenerator;
+        let release!: () => void;
+        vi.mocked(createContentGeneratorConfig).mockImplementation(
+          async (_config, authType) => ({ authType }),
+        );
+        vi.mocked(createContentGenerator).mockResolvedValue(currentGenerator);
+        if (stage === 'config')
+          vi.mocked(createContentGeneratorConfig).mockImplementationOnce(
+            () =>
+              new Promise((resolve) => {
+                release = () => resolve({ authType: AuthType.USE_GEMINI });
+              }),
+          );
+        else
+          vi.mocked(createContentGenerator).mockImplementationOnce(
+            () =>
+              new Promise((resolve) => {
+                release = () => resolve(oldGenerator);
+              }),
+          );
+        let oldError: unknown;
+        const pending = config
+          .refreshAuth(AuthType.USE_GEMINI)
+          .catch((error) => {
+            oldError = error;
+          });
+        await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+        await config.refreshAuth(AuthType.USE_VERTEX_AI);
+        release();
+        await pending;
+        expect((oldError as Error)?.name).toBe('AuthRefreshSupersededError');
+        expect(config.getContentGeneratorConfig().authType).toBe(
+          AuthType.USE_VERTEX_AI,
+        );
+        expect(config.getContentGenerator()).toBe(currentGenerator);
+        expect(config.isAuthReady()).toBe(true);
+      },
+    );
+
+    it('rejects a pre-cancelled auth before dispatch and does not change ready auth', async () => {
+      const config = new Config(baseParams);
+      vi.mocked(createContentGeneratorConfig).mockResolvedValue({
+        authType: AuthType.USE_GEMINI,
+      });
+      await config.refreshAuth(AuthType.USE_GEMINI);
+      vi.mocked(createContentGeneratorConfig).mockClear();
+      const reason = new Error('Caller cancelled');
+      await expect(
+        config.refreshAuth(
+          AuthType.USE_VERTEX_AI,
+          undefined,
+          undefined,
+          undefined,
+          AbortSignal.abort(reason),
+        ),
+      ).rejects.toBe(reason);
+      expect(createContentGeneratorConfig).not.toHaveBeenCalled();
+      expect(config.getContentGeneratorConfig().authType).toBe(
+        AuthType.USE_GEMINI,
+      );
+      expect(config.isAuthReady()).toBe(true);
+    });
+
+    it('cancels a pending factory promptly without publishing its late generator', async () => {
+      const config = new Config(baseParams);
+      const initial = {} as ContentGenerator;
+      vi.mocked(createContentGeneratorConfig).mockImplementation(
+        async (_config, authType) => ({ authType }),
+      );
+      vi.mocked(createContentGenerator).mockResolvedValueOnce(initial);
+      await config.refreshAuth(AuthType.USE_GEMINI);
+      let release!: (value: ContentGenerator) => void;
+      vi.mocked(createContentGenerator).mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            release = resolve;
+          }),
+      );
+      const controller = new AbortController();
+      const reason = new Error('Caller stopped waiting');
+      let rejection: unknown;
+      const pending = config
+        .refreshAuth(
+          AuthType.USE_VERTEX_AI,
+          undefined,
+          undefined,
+          undefined,
+          controller.signal,
+        )
+        .catch((error) => {
+          rejection = error;
+        });
+      try {
+        await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+        controller.abort(reason);
+        await vi.waitFor(() => expect(rejection).toBe(reason), {
+          timeout: 200,
+        });
+      } finally {
+        release({} as ContentGenerator);
+        await pending;
+      }
+      expect(config.getContentGenerator()).toBe(initial);
+      expect(config.getContentGeneratorConfig().authType).toBe(
+        AuthType.USE_GEMINI,
+      );
+      expect(config.isAuthReady()).toBe(false);
+    });
+
+    it('prevents superseded metadata from replacing current values', async () => {
+      const config = new Config(baseParams);
+      let releaseQuota!: (value: {
+        buckets: Array<{ modelId: string; remainingFraction: number }>;
+      }) => void;
+      let releaseExperiments!: (value: {
+        experimentIds: number[];
+        flags: Record<string, never>;
+      }) => void;
+      const fresh = {
+        buckets: [{ modelId: DEFAULT_GEMINI_MODEL, remainingFraction: 0.8 }],
+      };
+      const server = {
+        projectId: 'fixture',
+        retrieveUserQuota: vi
+          .fn()
+          .mockImplementationOnce(
+            () =>
+              new Promise((resolve) => {
+                releaseQuota = resolve;
+              }),
+          )
+          .mockResolvedValue(fresh),
+      };
+      vi.mocked(getCodeAssistServer).mockReturnValue(
+        server as unknown as CodeAssistServer,
+      );
+      vi.mocked(createContentGeneratorConfig).mockImplementation(
+        async (_config, authType) => ({ authType }),
+      );
+      vi.mocked(getExperiments)
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              releaseExperiments = resolve;
+            }),
+        )
+        .mockResolvedValue({ experimentIds: [222], flags: {} });
+      let oldError: unknown;
+      const old = config
+        .refreshAuth(AuthType.LOGIN_WITH_GOOGLE)
+        .catch((error) => {
+          oldError = error;
+        });
+      try {
+        await vi.waitFor(() =>
+          expect(server.retrieveUserQuota).toHaveBeenCalledOnce(),
+        );
+        await config.refreshAuth(AuthType.COMPUTE_ADC);
+        releaseQuota({
+          buckets: [{ modelId: DEFAULT_GEMINI_MODEL, remainingFraction: 0.1 }],
+        });
+        releaseExperiments({ experimentIds: [111], flags: {} });
+        await old;
+        expect((oldError as Error)?.name).toBe('AuthRefreshSupersededError');
+        expect(config.getLastRetrievedQuota()).toBe(fresh);
+        expect(config.getExperiments()?.experimentIds).toEqual([222]);
+        expect(config.getContentGeneratorConfig().authType).toBe(
+          AuthType.COMPUTE_ADC,
+        );
+      } finally {
+        vi.mocked(getCodeAssistServer).mockReturnValue(undefined);
+      }
+    });
+
     it('bounds optional bootstrap quota waiting and prevents a late response from overwriting the next quota', async () => {
       vi.useFakeTimers();
       let release!: (value: {
@@ -1030,6 +1210,90 @@ describe('Server Config (config.ts)', () => {
         expect(config.getBaseLlmClient()).toBeDefined();
       } finally {
         release?.({ buckets: [] });
+        vi.mocked(getCodeAssistServer).mockReturnValue(undefined);
+        vi.useRealTimers();
+      }
+    });
+
+    it('does not apply an independent quota read from the previous auth generation', async () => {
+      const config = new Config(baseParams);
+      let release!: (value: {
+        buckets: Array<{ modelId: string; remainingFraction: number }>;
+      }) => void;
+      const fresh = {
+        buckets: [{ modelId: DEFAULT_GEMINI_MODEL, remainingFraction: 0.8 }],
+      };
+      const server = {
+        projectId: 'fixture',
+        retrieveUserQuota: vi
+          .fn()
+          .mockImplementationOnce(
+            () =>
+              new Promise((resolve) => {
+                release = resolve;
+              }),
+          )
+          .mockResolvedValue(fresh),
+      };
+      vi.mocked(getCodeAssistServer).mockReturnValue(
+        server as unknown as CodeAssistServer,
+      );
+      vi.mocked(createContentGeneratorConfig).mockResolvedValue({
+        authType: AuthType.COMPUTE_ADC,
+      });
+      let oldError: unknown;
+      const old = config.refreshUserQuota().catch((error) => {
+        oldError = error;
+      });
+      try {
+        await config.refreshAuth(AuthType.COMPUTE_ADC);
+        release({
+          buckets: [{ modelId: DEFAULT_GEMINI_MODEL, remainingFraction: 0.1 }],
+        });
+        await old;
+        expect((oldError as Error)?.name).toBe('AuthRefreshSupersededError');
+        expect(config.getLastRetrievedQuota()).toBe(fresh);
+      } finally {
+        vi.mocked(getCodeAssistServer).mockReturnValue(undefined);
+      }
+    });
+
+    it('refetches admin settings for a new backend identity instead of reusing the previous account cache', async () => {
+      vi.useFakeTimers();
+      const config = new Config(baseParams);
+      const backend = (projectId: string, strictModeDisabled: boolean) => ({
+        projectId,
+        client: { credentials: { refresh_token: 'FAKE_' + projectId } },
+        httpOptions: {},
+        getMethodUrl: () => 'https://fixture.invalid/admin',
+        retrieveUserQuota: vi.fn().mockResolvedValue({ buckets: [] }),
+        fetchAdminControls: vi.fn().mockResolvedValue({
+          adminControlsApplicable: true,
+          strictModeDisabled,
+        }),
+      });
+      const first = backend('first', true);
+      const second = backend('second', false);
+      let active = first;
+      vi.mocked(getCodeAssistServer).mockImplementation(
+        () => active as unknown as CodeAssistServer,
+      );
+      vi.mocked(createContentGeneratorConfig).mockResolvedValue({
+        authType: AuthType.LOGIN_WITH_GOOGLE,
+      });
+      vi.mocked(getExperiments).mockResolvedValue({
+        experimentIds: [],
+        flags: { [ExperimentFlags.ENABLE_ADMIN_CONTROLS]: { boolValue: true } },
+      });
+      try {
+        await config.refreshAuth(AuthType.LOGIN_WITH_GOOGLE);
+        expect(config.getRemoteAdminSettings()?.strictModeDisabled).toBe(true);
+        active = second;
+        await config.refreshAuth(AuthType.LOGIN_WITH_GOOGLE);
+        expect(second.fetchAdminControls).toHaveBeenCalledOnce();
+        expect(config.getRemoteAdminSettings()?.strictModeDisabled).toBe(false);
+      } finally {
+        stopAdminControlsPolling();
         vi.mocked(getCodeAssistServer).mockReturnValue(undefined);
         vi.useRealTimers();
       }

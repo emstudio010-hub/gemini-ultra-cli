@@ -88,6 +88,7 @@ import {
   type AgentsDiscoveredPayload,
   ChangeAuthRequestedError,
   ProjectIdRequiredError,
+  AuthRefreshSupersededError,
   buildUserSteeringHintPrompt,
   logBillingEvent,
   ApiKeyUpdatedEvent,
@@ -1049,7 +1050,10 @@ export const AppContainer = (props: AppContainerProps) => {
             new ApiKeyUpdatedEvent(previousAuthType, authType),
           );
         } catch (e) {
-          if (e instanceof ChangeAuthRequestedError) {
+          if (
+            e instanceof ChangeAuthRequestedError ||
+            e instanceof AuthRefreshSupersededError
+          ) {
             return;
           }
           if (e instanceof ProjectIdRequiredError) {
@@ -1095,6 +1099,7 @@ Logging in with Google... Restarting Gemini CLI to continue.
         await config.refreshAuth(AuthType.USE_GEMINI);
         setAuthState(AuthState.Authenticated);
       } catch (e) {
+        if (e instanceof AuthRefreshSupersededError) return;
         onAuthError(
           `Failed to save API key: ${e instanceof Error ? e.message : String(e)}`,
         );

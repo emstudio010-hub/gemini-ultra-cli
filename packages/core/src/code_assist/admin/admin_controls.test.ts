@@ -55,6 +55,87 @@ describe('Admin Controls', () => {
     vi.useRealTimers();
   });
 
+  it('cancels an owned initial read and prevents its late response from stopping a newer poller', async () => {
+    const controller = new AbortController();
+    let release!: (value: FetchAdminControlsResponse) => void;
+    vi.mocked(mockServer.fetchAdminControls).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    const reason = new Error('Owner superseded');
+    let rejection: unknown;
+    const pending = fetchAdminControls(
+      mockServer,
+      undefined,
+      true,
+      mockOnSettingsChanged,
+      controller.signal,
+    ).catch((error) => {
+      rejection = error;
+    });
+    try {
+      controller.abort(reason);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(rejection).toBe(reason);
+      const other = {
+        projectId: 'other',
+        fetchAdminControls: vi
+          .fn()
+          .mockResolvedValue({ adminControlsApplicable: true }),
+      } as unknown as CodeAssistServer;
+      await fetchAdminControls(
+        other,
+        { strictModeDisabled: false },
+        true,
+        vi.fn(),
+      );
+      release({ adminControlsApplicable: false });
+      await pending;
+      await vi.advanceTimersByTimeAsync(300000);
+      expect(other.fetchAdminControls).toHaveBeenCalledOnce();
+    } finally {
+      release({ adminControlsApplicable: false });
+      await pending;
+    }
+  });
+
+  it('ignores a previous in-flight poll after a newer poller takes ownership', async () => {
+    let release!: (value: FetchAdminControlsResponse) => void;
+    vi.mocked(mockServer.fetchAdminControls).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    await fetchAdminControls(
+      mockServer,
+      { strictModeDisabled: false },
+      true,
+      mockOnSettingsChanged,
+    );
+    vi.advanceTimersByTime(300000);
+    const other = {
+      projectId: 'other',
+      fetchAdminControls: vi
+        .fn()
+        .mockResolvedValue({ adminControlsApplicable: true }),
+    } as unknown as CodeAssistServer;
+    await fetchAdminControls(
+      other,
+      { strictModeDisabled: true },
+      true,
+      vi.fn(),
+    );
+    release({ adminControlsApplicable: false });
+    await Promise.resolve();
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(300000);
+    expect(other.fetchAdminControls).toHaveBeenCalledOnce();
+    expect(mockOnSettingsChanged).not.toHaveBeenCalled();
+  });
+
   describe('sanitizeAdminSettings', () => {
     it('should strip unknown fields and pass through mcpConfigJson when valid', () => {
       const mcpConfig = {

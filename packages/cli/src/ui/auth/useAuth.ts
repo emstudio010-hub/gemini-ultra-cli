@@ -22,6 +22,7 @@ import {
   ChangeAuthRequestedError,
   ValidationCancelledError,
   I18nManager,
+  AuthRefreshSupersededError,
 } from '@google/gemini-cli-core';
 import { getErrorMessage } from '@google/gemini-cli-core';
 import { AuthState } from '../types.js';
@@ -217,6 +218,7 @@ export const useAuthCommand = (
         setAuthState(AuthState.Authenticated);
       } catch (e) {
         if (!isCurrent()) return;
+        if (e instanceof AuthRefreshSupersededError) return;
         if (
           e instanceof ChangeAuthRequestedError ||
           e instanceof ValidationCancelledError

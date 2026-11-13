@@ -794,6 +794,13 @@ export interface ConfigParameters {
   logRagSnippets?: boolean;
 }
 
+export class AuthRefreshSupersededError extends Error {
+  constructor() {
+    super('Authentication request was superseded.');
+    this.name = 'AuthRefreshSupersededError';
+  }
+}
+
 interface StartupAuthMetadata {
   client: CodeAssistServer['client'];
   signature: string;
@@ -1037,6 +1044,8 @@ export class Config implements McpContext, AgentLoopContext {
   private experiments: Experiments | undefined;
   private experimentsPromise: Promise<Experiments | undefined> | undefined;
   private authReady = false;
+  private authRefreshController: AbortController | undefined;
+  private authRefreshGeneration = 0;
   private hookSystem?: HookSystem;
   private readonly onModelChange: ((model: string) => void) | undefined;
   private readonly onReload:
@@ -1667,169 +1676,227 @@ export class Config implements McpContext, AgentLoopContext {
     apiKey?: string,
     baseUrl?: string,
     customHeaders?: Record<string, string>,
+    signal?: AbortSignal,
   ) {
-    const handoff = startupAuthHandoffs.get(this);
-    startupAuthHandoffs.delete(this);
-    startupAuthMetadata.delete(this);
-    this.authReady = false;
-    // Reset availability service when switching auth
-    this.modelAvailabilityService.reset();
-    this.fallbackOverrides.clear();
-    this.modelConfigService.clearRuntimeOverrides();
-
-    // Vertex and Genai have incompatible encryption and sending history with
-    // thoughtSignature from Genai to Vertex will fail, we need to strip them
-    if (
-      this.contentGeneratorConfig?.authType === AuthType.USE_GEMINI &&
-      authMethod !== AuthType.USE_GEMINI
-    ) {
-      // Restore the conversation history to the new client
-      this.geminiClient.stripThoughtsFromHistory();
-    }
-
-    // Reset availability status when switching auth (e.g. from limited key to OAuth)
-    this.modelAvailabilityService.reset();
-
-    // Clear stale authType to ensure getGemini31LaunchedSync doesn't return stale results
-    // during the transition.
-    if (this.contentGeneratorConfig) {
-      this.contentGeneratorConfig.authType = undefined;
-    }
-
-    const newContentGeneratorConfig = await createContentGeneratorConfig(
-      this,
-      authMethod,
-      apiKey,
-      baseUrl,
-      customHeaders,
-      this.vertexAiRouting,
-    );
-    this.contentGenerator = await createContentGenerator(
-      newContentGeneratorConfig,
-      this,
-      this.getSessionId(),
-    );
-    // Only assign to instance properties after successful initialization
-    this.contentGeneratorConfig = newContentGeneratorConfig;
-
-    const codeAssistServer = getCodeAssistServer(this);
-    const identity = authMetadataIdentity(codeAssistServer);
-    const previous = handoff?.metadata;
-    const age = previous ? Date.now() - previous.finishedAt : Infinity;
-    const canReuseMetadata =
-      previous &&
-      handoff.source.isAuthReady() &&
-      startupAuthMetadata.get(handoff.source) === previous &&
-      previous.authType === authMethod &&
-      previous.sessionId === this.getSessionId() &&
-      previous.sessionId === handoff.source.getSessionId() &&
-      previous.targetDir === this.getTargetDir() &&
-      age >= 0 &&
-      age <= 30_000 &&
-      previous.client === identity?.client &&
-      previous.signature === identity?.signature;
-    let experiments: Experiments | undefined;
-    let quota: RetrieveUserQuotaResponse | undefined;
-    if (canReuseMetadata) {
-      experiments = structuredClone(previous.experiments);
-      quota = structuredClone(previous.quota);
-      this.experimentsPromise = Promise.resolve(experiments);
-      if (experiments) this.setExperiments(experiments);
-      if (quota) this.applyUserQuota(quota, previous.quotaFetchedAt);
-    } else {
-      const quotaController = new AbortController();
-      const quotaTimeout = codeAssistServer?.projectId
-        ? setTimeout(
-            () =>
-              quotaController.abort(
-                new Error('Bootstrap quota refresh timed out'),
-              ),
-            10_000,
-          )
-        : undefined;
-      const quotaPromise = codeAssistServer?.projectId
-        ? this.refreshUserQuota(quotaController.signal).finally(() =>
-            clearTimeout(quotaTimeout),
-          )
-        : Promise.resolve(undefined);
-      this.experimentsPromise = getExperiments(codeAssistServer)
-        .then((value) => {
-          this.setExperiments(value);
-          return value;
-        })
-        .catch((e) => {
-          debugLogger.error('Failed to fetch experiments', e);
-          return undefined;
-        });
-      [experiments, quota] = await Promise.all([
-        this.experimentsPromise,
-        quotaPromise.catch((e) => {
-          debugLogger.error('Failed to fetch user quota', e);
-          return undefined;
-        }),
-      ]);
-    }
-
-    const requestTimeoutMs = this.getRequestTimeoutMs();
-    if (requestTimeoutMs !== undefined) {
-      updateGlobalFetchTimeouts(requestTimeoutMs);
-    }
-
-    // Initialize BaseLlmClient now that the ContentGenerator and experiments are available
-    this.baseLlmClient = new BaseLlmClient(this.contentGenerator, this);
-
-    const authType = this.contentGeneratorConfig.authType;
-    if (
-      authType === AuthType.USE_GEMINI ||
-      authType === AuthType.USE_VERTEX_AI
-    ) {
-      this.setHasAccessToPreviewModel(true);
-    }
-
-    // Only reset when we have explicit "no access" (hasAccessToPreviewModel === false).
-    // When null (quota not fetched) or true, we preserve the saved model.
-    if (
-      isPreviewModel(this.model, this) &&
-      this.hasAccessToPreviewModel === false
-    ) {
-      this.setModel(DEFAULT_GEMINI_MODEL_AUTO);
-    }
-
-    const adminControlsEnabled =
-      experiments?.flags[ExperimentFlags.ENABLE_ADMIN_CONTROLS]?.boolValue ??
-      false;
-
+    signal?.throwIfAborted();
+    this.authRefreshController?.abort(new AuthRefreshSupersededError());
+    const controller = new AbortController();
+    this.authRefreshController = controller;
+    const generation = ++this.authRefreshGeneration;
+    const assertCurrent = () => {
+      controller.signal.throwIfAborted();
+      if (generation !== this.authRefreshGeneration)
+        throw new AuthRefreshSupersededError();
+    };
+    const isCurrent = () =>
+      !controller.signal.aborted && generation === this.authRefreshGeneration;
+    const onAbort = () => controller.abort(signal?.reason);
+    signal?.addEventListener('abort', onAbort, { once: true });
     try {
-      const adminControls = await fetchAdminControls(
-        codeAssistServer,
-        this.getRemoteAdminSettings(),
-        adminControlsEnabled,
-        (newSettings: AdminControlsSettings) => {
-          this.setRemoteAdminSettings(newSettings);
-          coreEvents.emitAdminSettingsChanged();
-        },
-      );
-      this.setRemoteAdminSettings(adminControls);
-    } catch (e) {
-      debugLogger.error('Failed to fetch admin controls', e);
-    }
+      const handoff = startupAuthHandoffs.get(this);
+      const priorMetadata = startupAuthMetadata.get(this);
+      const priorAuthType = this.contentGeneratorConfig?.authType;
+      const hadAuth = this.contentGeneratorConfig !== undefined;
+      startupAuthHandoffs.delete(this);
+      startupAuthMetadata.delete(this);
+      this.authReady = false;
+      // Reset availability service when switching auth
+      this.modelAvailabilityService.reset();
+      this.fallbackOverrides.clear();
+      this.modelConfigService.clearRuntimeOverrides();
 
-    if ((await this.getProModelNoAccess()) && isAutoModel(this.model)) {
-      this.setModel(PREVIEW_GEMINI_FLASH_MODEL);
-    }
-    this.authReady = true;
-    const completedIdentity = authMetadataIdentity(codeAssistServer);
-    if (completedIdentity) {
-      startupAuthMetadata.set(this, {
-        ...completedIdentity,
-        authType: this.contentGeneratorConfig.authType,
-        sessionId: this.getSessionId(),
-        targetDir: this.getTargetDir(),
-        finishedAt: canReuseMetadata ? previous.finishedAt : Date.now(),
-        experiments: structuredClone(experiments),
-        quota: structuredClone(quota),
-        quotaFetchedAt: this.lastQuotaFetchTime,
-      });
+      // Vertex and Genai have incompatible encryption and sending history with
+      // thoughtSignature from Genai to Vertex will fail, we need to strip them
+      if (
+        this.contentGeneratorConfig?.authType === AuthType.USE_GEMINI &&
+        authMethod !== AuthType.USE_GEMINI
+      ) {
+        // Restore the conversation history to the new client
+        this.geminiClient.stripThoughtsFromHistory();
+      }
+
+      // Reset availability status when switching auth (e.g. from limited key to OAuth)
+      this.modelAvailabilityService.reset();
+
+      const newContentGeneratorConfig = await withAbortSignal(
+        controller.signal,
+        () =>
+          createContentGeneratorConfig(
+            this,
+            authMethod,
+            apiKey,
+            baseUrl,
+            customHeaders,
+            this.vertexAiRouting,
+          ),
+      );
+      assertCurrent();
+      const generator = await withAbortSignal(controller.signal, () =>
+        createContentGenerator(
+          newContentGeneratorConfig,
+          this,
+          this.getSessionId(),
+        ),
+      );
+      assertCurrent();
+      this.contentGenerator = generator;
+      // Only assign to instance properties after successful initialization
+      this.contentGeneratorConfig = newContentGeneratorConfig;
+      this.experiments = undefined;
+      this.hasAccessToPreviewModel = null;
+      this.modelQuotas.clear();
+      this.lastRetrievedQuota = undefined;
+      this.lastQuotaFetchTime = 0;
+      this.lastEmittedQuotaRemaining = undefined;
+      this.lastEmittedQuotaLimit = undefined;
+      this.emitQuotaChangedEvent();
+
+      const codeAssistServer = getCodeAssistServer(this);
+      const identity = authMetadataIdentity(codeAssistServer);
+      const previous = handoff?.metadata;
+      const age = previous ? Date.now() - previous.finishedAt : Infinity;
+      const canReuseMetadata =
+        previous &&
+        handoff.source.isAuthReady() &&
+        startupAuthMetadata.get(handoff.source) === previous &&
+        previous.authType === authMethod &&
+        previous.sessionId === this.getSessionId() &&
+        previous.sessionId === handoff.source.getSessionId() &&
+        previous.targetDir === this.getTargetDir() &&
+        age >= 0 &&
+        age <= 30_000 &&
+        previous.client === identity?.client &&
+        previous.signature === identity?.signature;
+      if (
+        hadAuth &&
+        !canReuseMetadata &&
+        (priorAuthType !== authMethod ||
+          priorMetadata?.client !== identity?.client ||
+          priorMetadata?.signature !== identity?.signature)
+      ) {
+        this.setRemoteAdminSettings(undefined);
+      }
+      let experiments: Experiments | undefined;
+      let quota: RetrieveUserQuotaResponse | undefined;
+      if (canReuseMetadata) {
+        experiments = structuredClone(previous.experiments);
+        quota = structuredClone(previous.quota);
+        this.experimentsPromise = Promise.resolve(experiments);
+        if (experiments) this.setExperiments(experiments);
+        if (quota) this.applyUserQuota(quota, previous.quotaFetchedAt);
+      } else {
+        const quotaController = new AbortController();
+        const quotaTimeout = codeAssistServer?.projectId
+          ? setTimeout(
+              () =>
+                quotaController.abort(
+                  new Error('Bootstrap quota refresh timed out'),
+                ),
+              10_000,
+            )
+          : undefined;
+        const quotaPromise = codeAssistServer?.projectId
+          ? this.refreshUserQuota(
+              AbortSignal.any([controller.signal, quotaController.signal]),
+            ).finally(() => clearTimeout(quotaTimeout))
+          : Promise.resolve(undefined);
+        this.experimentsPromise = withAbortSignal(controller.signal, () =>
+          getExperiments(codeAssistServer),
+        )
+          .then((value) => {
+            assertCurrent();
+            this.setExperiments(value);
+            return value;
+          })
+          .catch((e) => {
+            assertCurrent();
+            debugLogger.error('Failed to fetch experiments', e);
+            return undefined;
+          });
+        [experiments, quota] = await Promise.all([
+          this.experimentsPromise,
+          quotaPromise.catch((e) => {
+            assertCurrent();
+            debugLogger.error('Failed to fetch user quota', e);
+            return undefined;
+          }),
+        ]);
+      }
+      assertCurrent();
+
+      const requestTimeoutMs = this.getRequestTimeoutMs();
+      if (requestTimeoutMs !== undefined) {
+        updateGlobalFetchTimeouts(requestTimeoutMs);
+      }
+
+      // Initialize BaseLlmClient now that the ContentGenerator and experiments are available
+      this.baseLlmClient = new BaseLlmClient(this.contentGenerator, this);
+
+      const authType = this.contentGeneratorConfig.authType;
+      if (
+        authType === AuthType.USE_GEMINI ||
+        authType === AuthType.USE_VERTEX_AI
+      ) {
+        this.setHasAccessToPreviewModel(true);
+      }
+
+      // Only reset when we have explicit "no access" (hasAccessToPreviewModel === false).
+      // When null (quota not fetched) or true, we preserve the saved model.
+      if (
+        isPreviewModel(this.model, this) &&
+        this.hasAccessToPreviewModel === false
+      ) {
+        this.setModel(DEFAULT_GEMINI_MODEL_AUTO);
+      }
+
+      const adminControlsEnabled =
+        experiments?.flags[ExperimentFlags.ENABLE_ADMIN_CONTROLS]?.boolValue ??
+        false;
+
+      try {
+        const adminControls = await fetchAdminControls(
+          codeAssistServer,
+          this.getRemoteAdminSettings(),
+          adminControlsEnabled,
+          (newSettings: AdminControlsSettings) => {
+            if (!isCurrent()) return;
+            this.setRemoteAdminSettings(newSettings);
+            coreEvents.emitAdminSettingsChanged();
+          },
+          controller.signal,
+        );
+        assertCurrent();
+        this.setRemoteAdminSettings(adminControls);
+      } catch (e) {
+        assertCurrent();
+        debugLogger.error('Failed to fetch admin controls', e);
+      }
+
+      if (
+        (await withAbortSignal(controller.signal, () =>
+          this.getProModelNoAccess(),
+        )) &&
+        isAutoModel(this.model)
+      ) {
+        this.setModel(PREVIEW_GEMINI_FLASH_MODEL);
+      }
+      assertCurrent();
+      this.authReady = true;
+      const completedIdentity = authMetadataIdentity(codeAssistServer);
+      if (completedIdentity) {
+        startupAuthMetadata.set(this, {
+          ...completedIdentity,
+          authType: this.contentGeneratorConfig.authType,
+          sessionId: this.getSessionId(),
+          targetDir: this.getTargetDir(),
+          finishedAt: canReuseMetadata ? previous.finishedAt : Date.now(),
+          experiments: structuredClone(experiments),
+          quota: structuredClone(quota),
+          quotaFetchedAt: this.lastQuotaFetchTime,
+        });
+      }
+    } finally {
+      signal?.removeEventListener('abort', onAbort);
     }
   }
 
@@ -1994,6 +2061,8 @@ export class Config implements McpContext, AgentLoopContext {
   }
 
   setSessionId(sessionId: string): void {
+    if (!this.authReady)
+      this.authRefreshController?.abort(new AuthRefreshSupersededError());
     startupAuthMetadata.delete(this);
     startupAuthHandoffs.delete(this);
     const previousPlansDir = this.storage.isInitialized()
@@ -2550,6 +2619,7 @@ export class Config implements McpContext, AgentLoopContext {
     signal?: AbortSignal,
   ): Promise<RetrieveUserQuotaResponse | undefined> {
     signal?.throwIfAborted();
+    const generation = this.authRefreshGeneration;
     const codeAssistServer = getCodeAssistServer(this);
     if (!codeAssistServer || !codeAssistServer.projectId) {
       return undefined;
@@ -2562,11 +2632,15 @@ export class Config implements McpContext, AgentLoopContext {
           : codeAssistServer.retrieveUserQuota(request),
       );
 
+      if (generation !== this.authRefreshGeneration)
+        throw new AuthRefreshSupersededError();
       this.applyUserQuota(quota);
 
       return quota;
     } catch (e) {
       signal?.throwIfAborted();
+      if (generation !== this.authRefreshGeneration)
+        throw new AuthRefreshSupersededError();
       debugLogger.debug('Failed to retrieve user quota', e);
       return undefined;
     }
