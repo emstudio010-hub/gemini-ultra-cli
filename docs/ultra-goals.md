@@ -1569,3 +1569,8 @@ WI-175/E-403至404/F-132：原共享工作区文件变化不推进成员revision
 ## 2026-11-13 Swarm隔离复核原文保留
 
 WI-176/E-405至406/F-133：原Swarm在内存设置result/fullResult后检查worktree，变化抛错后catch重读旧状态，长verdict正文虽有孤立归档但引用丢失。旧真实Windows git/worktree runner场景实际1失败；现auditor判定前先持久化原文/归档引用，verified标记仍空，异常恢复保留当前正文并paused/一次失败，不自动重试。最终9不同相关场景、core/CLI严格源码编译/两文件lint格式通过。Windows真实Config/gateway/公开ManageSwarmTool/注册auditor/AgentTool/LocalAgentExecutor/complete_task/SSE/真实git worktree，第一响应期间宿主改隔离文件，长passing JSON原文/引用/归档/导出保持且finish拒绝；显式重审第二verdict后完成，旧长归档仍在，源checkout报告/HEAD/index保持。17条件通过、9392ms/退出0/2loopback请求/0外部，非真实模型读取智能/复杂逆向质量/磁盘故障或最终包验收。个人配置/旧E-294与E-364失败SHA/安装83保持，无打包重装版本CI或付费重跑，goal active。详见docs/ultra-swarm-isolated-review-handoff.md。
+
+
+## 2026-11-13 Workflow最终文件复核
+
+WI-177/E-407至408/F-134：旧Teamwork/Boost共享工作区最终审核期间文件变化仍completed，2旧复现失败。现公开run_agent_workflow必填review_files，绑定realpath workspace/清单，最终集成审核前后核对最多64文件/64MiB指纹，多里程碑后续产物不提前拦截，managed worktree内解析。变化时末里程碑未完成、模型原audit/长归档保持，另存native-file-check失败报告/一次failed stage并blocked，不自动重试；预算耗尽也保持具体原因。显式[]仅member报告，未绑定低层旧API兼容；CLI/阶段上下文/summary同步。14不同相关检查、core/CLI严格编译/八文件lint格式通过；真实Windows git隔离snapshot及apply对照通过。Windows真实编译Teamwork命令handler（非ConPTY）访谈/草案/approve→公开Run/原生角色/AgentTool/LocalAgentExecutor/complete_task/SSE，首final响应期间宿主改报告，被拒且原长文/归档/导出保持；真实resume handler后审核B完成，累计8请求/2轮/1失败。17条件通过、5264ms/退出0/8loopback/0外部。首验证器result嵌套schema错误及fixture补scope/budget参数错误留证；未为此放宽产品。非模型真实阅读/生成质量/复杂逆向/文件锁或最终包验收；个人配置/旧E-294与E-364失败SHA/安装83保持，无打包重装版本CI/付费重跑，goal active。详见docs/ultra-workflow-review-files-handoff.md。

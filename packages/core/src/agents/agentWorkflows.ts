@@ -23,6 +23,12 @@ import {
   agentWorktreeTree,
 } from './agentWorktree.js';
 import {
+  reviewFilesSchema,
+  reviewedFilesSchema,
+  captureReviewFiles,
+  reviewFilesUnchanged,
+} from './swarmReviewFiles.js';
+import {
   agentRoleModelsSchema,
   normalizeAgentModel,
   workflowRoleSchema,
@@ -75,6 +81,9 @@ const workflowSchema = workflowPlanSchema.extend({
   recordRecoveryPath: z.string().optional(),
   roleModels: agentRoleModelsSchema.default({}),
   worktreeRequired: z.boolean().default(false),
+  workspace: z.string().min(1).optional(),
+  reviewFiles: reviewFilesSchema.optional(),
+  reviewedFiles: reviewedFilesSchema.optional(),
   updatedAt: z.string(),
   stage: z.string().default(''),
   reports: z
@@ -133,6 +142,9 @@ export function agentWorkflowSummary(
     recordPath: workflowPath(projectTempDir, record.id),
     reportCount: record.reports.length,
     roleModels: record.roleModels,
+    workspace: record.workspace,
+    reviewFiles: record.reviewFiles,
+    reviewedFiles: record.reviewedFiles,
     worktree: readAgentWorktree(projectTempDir, record.id),
     recentReports: record.reports.slice(-4).map((report) => ({
       ...report,
@@ -427,6 +439,7 @@ export async function runAgentWorkflow(
   signal: AbortSignal,
   runAgent: WorkflowAgentRunner,
   onProgress?: (message: string) => void,
+  reviewScope?: { workspace: string; files: string[] },
 ): Promise<AgentWorkflow> {
   assertNoPendingSwarm(projectTempDir);
   const directory = workflowDir(projectTempDir);
@@ -456,6 +469,23 @@ export async function runAgentWorkflow(
     withAgentTaskLock(projectTempDir, () => {
       assertNoPendingSwarm(projectTempDir);
       assertWorkflowBudgetOwnership(projectTempDir, current);
+      if (reviewScope) {
+        const workspace = fs.realpathSync.native(reviewScope.workspace);
+        if (
+          current.workspace &&
+          path.relative(current.workspace, workspace) !== ''
+        )
+          throw new Error(
+            'This workflow is bound to another workspace; use its original workspace.',
+          );
+        current.workspace = workspace;
+        current.reviewFiles = reviewFilesSchema.parse(reviewScope.files);
+      }
+      if (current.workspace && current.reviewFiles === undefined)
+        throw new Error(
+          'This saved workflow requires explicit review_files before execution.',
+        );
+      current.reviewedFiles = undefined;
       active.set(directory, { id, controller });
       current.phase = 'running';
       workflowBudget(projectTempDir, current);
@@ -611,7 +641,23 @@ export async function runAgentWorkflow(
           milestone.completed = true;
           persist();
         }
-        const finalReviewTree = agentWorktreeTree(projectTempDir, id);
+        const finalReviewDirectory =
+          readAgentWorktree(projectTempDir, id)?.directory ?? current.workspace;
+        let finalReviewTree: string | undefined;
+        let reviewedFiles: ReturnType<typeof captureReviewFiles> | undefined;
+        try {
+          finalReviewTree = agentWorktreeTree(projectTempDir, id);
+          reviewedFiles =
+            current.workspace && finalReviewDirectory
+              ? captureReviewFiles(
+                  finalReviewDirectory,
+                  reviewFilesSchema.parse(current.reviewFiles),
+                )
+              : undefined;
+        } catch (error) {
+          current.milestones[current.milestones.length - 1].completed = false;
+          throw error;
+        }
         const audit = await stage(
           'workflow-auditor',
           'final audit',
@@ -623,7 +669,26 @@ export async function runAgentWorkflow(
             'Final independent audit did not accept the deliverable.',
           );
         }
+        if (
+          reviewedFiles &&
+          !reviewFilesUnchanged(finalReviewDirectory!, reviewedFiles)
+        ) {
+          current.milestones[current.milestones.length - 1].completed = false;
+          const diagnostic =
+            'Declared final review files changed or became unavailable during audit. Raw audit output is retained; explicitly resume only after inspecting the current artifacts.';
+          current.reports.push({
+            agent: 'native-file-check',
+            stage: 'final audit file check',
+            completed: false,
+            text: diagnostic,
+          });
+          current.reports = current.reports.slice(-100);
+          persist();
+          failWorkflowStage(projectTempDir, id);
+          throw new Error(diagnostic);
+        }
         acceptReviewedAgentWorktree(projectTempDir, id, finalReviewTree);
+        current.reviewedFiles = reviewedFiles;
         current.phase = 'completed';
         current.stage = 'completed';
         persist();

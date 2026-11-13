@@ -53,6 +53,7 @@ function context(): AgentLoopContext {
   return {
     config: {
       storage: { getProjectTempDir: () => root },
+      getTargetDir: () => root,
       getApprovalMode: () => ApprovalMode.YOLO,
       getAgentRegistry: () => ({ getDefinition: () => ({ kind: 'local' }) }),
     },
@@ -86,7 +87,7 @@ it('retains the same failure in blocked Boost/Teamwork stage reports', async () 
     'default',
   );
   const result = await new RunAgentWorkflowTool(context(), {} as MessageBus)
-    .build({ workflow_id: workflow.id })
+    .build({ workflow_id: workflow.id, review_files: [] })
     .execute(options());
   const saved = readAgentWorkflow(root, workflow.id);
   expect(result.error).toBeDefined();
@@ -123,6 +124,7 @@ it('preserves a successful structured auditor verdict for the completion gate', 
       action: 'add',
       name: 'verifier',
       agent: 'workflow-auditor',
+      review_files: [],
       brief: 'Read the artifact and return a verdict.',
     })
     .execute(options());

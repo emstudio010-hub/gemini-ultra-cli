@@ -511,6 +511,9 @@ it('restores permissions when cancelling an interview and routes boost directly 
     type: 'submit_prompt',
     content: expect.stringContaining('run_agent_workflow'),
   });
+  expect(prompt).toMatchObject({
+    content: expect.stringContaining('review_files'),
+  });
   expect(latestAgentWorkflow(root, 'boost')?.approved).toBe(true);
 });
 

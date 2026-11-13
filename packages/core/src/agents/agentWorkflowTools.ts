@@ -118,13 +118,14 @@ export class DraftAgentWorkflowTool extends BaseDeclarativeTool<
   }
 }
 
-class RunInvocation extends BaseToolInvocation<
-  { workflow_id: string },
-  ToolResult
-> {
+interface RunParams {
+  workflow_id: string;
+  review_files: string[];
+}
+class RunInvocation extends BaseToolInvocation<RunParams, ToolResult> {
   constructor(
     private readonly context: AgentLoopContext,
-    params: { workflow_id: string },
+    params: RunParams,
     bus: MessageBus,
   ) {
     super(params, bus);
@@ -156,6 +157,10 @@ class RunInvocation extends BaseToolInvocation<
         return localAgentOutcome(result, agent !== 'workflow-auditor');
       },
       options.updateOutput,
+      {
+        workspace: this.context.config.getTargetDir(),
+        files: this.params.review_files,
+      },
     );
     return {
       llmContent: `${JSON.stringify(agentWorkflowSummary(root, record))}\nIntegrate the reports into the requested deliverable. A blocked/cancelled workflow is not complete; preserve partial results and describe the exact remaining requirement. Do not automatically relaunch blocked work; the user can explicitly resume it.`,
@@ -173,7 +178,7 @@ class RunInvocation extends BaseToolInvocation<
   }
 }
 export class RunAgentWorkflowTool extends BaseDeclarativeTool<
-  { workflow_id: string },
+  RunParams,
   ToolResult
 > {
   static readonly Name = 'run_agent_workflow';
@@ -188,8 +193,18 @@ export class RunAgentWorkflowTool extends BaseDeclarativeTool<
       Kind.Agent,
       {
         type: 'object',
-        properties: { workflow_id: { type: 'string' } },
-        required: ['workflow_id'],
+        properties: {
+          workflow_id: { type: 'string' },
+          review_files: {
+            type: 'array',
+            items: { type: 'string', minLength: 1, maxLength: 1024 },
+            maxItems: 64,
+            uniqueItems: true,
+            description:
+              'List every final deliverable and evidence file to inspect inside the task workspace (or managed worktree); at most 64 MiB total. Files may be created by later milestones and are checked only before/after the final integrated audit. Use [] only for member-report-only tasks with no workspace-file deliverables; that scope does not approve workspace files. On explicit resume, declare the current required final file list again.',
+          },
+        },
+        required: ['workflow_id', 'review_files'],
         additionalProperties: false,
       },
       messageBus,
@@ -198,7 +213,7 @@ export class RunAgentWorkflowTool extends BaseDeclarativeTool<
     );
   }
   protected createInvocation(
-    params: { workflow_id: string },
+    params: RunParams,
     bus: MessageBus,
   ): RunInvocation {
     return new RunInvocation(this.context, params, bus);

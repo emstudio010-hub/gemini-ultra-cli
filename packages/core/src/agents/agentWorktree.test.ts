@@ -213,8 +213,16 @@ it('runs native workflow stages in the managed directory and seals the final rev
             : 'Scoped evidence.',
       };
     },
+    undefined,
+    { workspace: source, files: ['new.txt'] },
   );
   expect(finished.phase).toBe('completed');
+  expect(finished.reviewedFiles?.directory).toBe(
+    fs.realpathSync.native(state.directory),
+  );
+  expect(finished.reviewedFiles?.files.map((file) => file.path)).toEqual([
+    'new.txt',
+  ]);
   expect(fs.existsSync(path.join(source, 'new.txt'))).toBe(false);
   applyAgentWorktree(root, record.id);
   expect(fs.readFileSync(path.join(source, 'new.txt'), 'utf8')).toBe(
