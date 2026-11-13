@@ -153,6 +153,7 @@ vi.mock('../context/chatCompressionService.js', async (importOriginal) => {
 vi.mock('../core/geminiChat.js', () => ({
   StreamEventType: {
     CHUNK: 'chunk',
+    RETRY: 'retry',
   },
   GeminiChat: vi.fn().mockImplementation(() => ({
     initialize: vi.fn(),
@@ -513,6 +514,191 @@ describe('LocalAgentExecutor', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  describe('interrupted visible drafts', () => {
+    it.each([false, true])(
+      'keeps attempts separate when an existing retry ends with success=%s',
+      async (success) => {
+        const executor = await LocalAgentExecutor.create(
+          createTestDefinition([LS_TOOL_NAME]),
+          mockConfig,
+        );
+        mockSendMessageStream.mockResolvedValueOnce({
+          async *[Symbol.asyncIterator]() {
+            yield {
+              type: StreamEventType.CHUNK,
+              value: createMockResponseChunk(
+                [{ text: 'STALE_DRAFT_' + 'x'.repeat(70000) }],
+                [
+                  {
+                    id: 'stale',
+                    name: LS_TOOL_NAME,
+                    args: { path: '/OLD_ATTEMPT' },
+                  },
+                ],
+              ),
+            };
+            yield { type: StreamEventType.RETRY };
+            yield {
+              type: StreamEventType.CHUNK,
+              value: createMockResponseChunk(
+                [{ text: 'CURRENT_VISIBLE_DRAFT' }],
+                success
+                  ? [
+                      {
+                        id: 'current',
+                        name: COMPLETE_TASK_TOOL_NAME,
+                        args: { finalResult: 'Current accepted result' },
+                      },
+                    ]
+                  : undefined,
+              ),
+            };
+            if (!success) throw new Error('Latest stream interrupted');
+          },
+        });
+        const output = await executor.run(
+          { goal: 'Do not mix attempts' },
+          signal,
+        );
+        expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
+        if (success) {
+          expect(output.terminate_reason).toBe(AgentTerminateMode.GOAL);
+          expect(output.result).toBe('Current accepted result');
+          expect(mockScheduleAgentTools).toHaveBeenCalledTimes(1);
+          expect(
+            mockScheduleAgentTools.mock.calls[0][1].map(
+              (request: ToolCallRequestInfo) => request.name,
+            ),
+          ).toEqual([COMPLETE_TASK_TOOL_NAME]);
+        } else {
+          expect(output.terminate_reason).toBe(AgentTerminateMode.ERROR);
+          expect(output.result).toContain('CURRENT_VISIBLE_DRAFT');
+          expect(output.result).not.toContain('STALE_DRAFT_');
+          expect(output.result).not.toContain('Visible draft truncated');
+          expect(mockScheduleAgentTools).not.toHaveBeenCalled();
+        }
+      },
+    );
+
+    it.each([false, true])(
+      'retains a bounded unaccepted draft (long=%s) without executing a collected tool call or retrying',
+      async (long) => {
+        const executor = await LocalAgentExecutor.create(
+          createTestDefinition([LS_TOOL_NAME]),
+          mockConfig,
+          onActivity,
+        );
+        const draft = long
+          ? 'VISIBLE_START_' + 'x'.repeat(70000) + 'VISIBLE_TAIL_OMITTED'
+          : 'VISIBLE_START_ partial analysis, not yet reviewed.';
+        mockSendMessageStream.mockResolvedValueOnce({
+          async *[Symbol.asyncIterator]() {
+            yield {
+              type: StreamEventType.CHUNK,
+              value: {
+                candidates: [
+                  {
+                    content: {
+                      role: 'model',
+                      parts: [
+                        { text: 'PRIVATE_REASONING', thought: true },
+                        { text: draft },
+                      ],
+                    },
+                  },
+                ],
+                functionCalls: [
+                  {
+                    id: 'unaccepted-call',
+                    name: LS_TOOL_NAME,
+                    args: { path: '/PRIVATE_TOOL_ARGUMENTS' },
+                  },
+                ],
+              },
+            };
+            throw new Error(
+              'OpenAI output token limit reached; response is incomplete.',
+            );
+          },
+        });
+        const output = await executor.run({ goal: 'Review evidence' }, signal);
+        expect(output.terminate_reason).toBe(AgentTerminateMode.ERROR);
+        expect(output.result).toContain('output token limit reached');
+        expect(output.result).toContain('Unaccepted partial visible response');
+        expect(output.result).toContain('VISIBLE_START_');
+        expect(output.result).not.toContain('PRIVATE_REASONING');
+        expect(output.result).not.toContain('PRIVATE_TOOL_ARGUMENTS');
+        if (long) {
+          expect(output.result.length).toBeLessThan(66000);
+          expect(output.result).not.toContain('VISIBLE_TAIL_OMITTED');
+          expect(output.result).toContain('Visible draft truncated');
+        } else {
+          expect(output.result).toContain(draft);
+        }
+        expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
+        expect(mockScheduleAgentTools).not.toHaveBeenCalled();
+      },
+    );
+
+    it('keeps a thought-only interrupted stream as the original error without returning private reasoning', async () => {
+      const executor = await LocalAgentExecutor.create(
+        createTestDefinition([LS_TOOL_NAME]),
+        mockConfig,
+      );
+      const error = new Error('Interrupted before visible output');
+      mockSendMessageStream.mockResolvedValueOnce({
+        async *[Symbol.asyncIterator]() {
+          yield {
+            type: StreamEventType.CHUNK,
+            value: {
+              candidates: [
+                {
+                  content: {
+                    parts: [{ text: 'PRIVATE_REASONING', thought: true }],
+                  },
+                },
+              ],
+            },
+          };
+          throw error;
+        },
+      });
+      await expect(
+        executor.run({ goal: 'Read evidence' }, signal),
+      ).rejects.toBe(error);
+      expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
+      expect(mockSaveSummary).not.toHaveBeenCalled();
+    });
+
+    it('preserves cancellation after visible text instead of converting it to a retained failure', async () => {
+      const executor = await LocalAgentExecutor.create(
+        createTestDefinition([LS_TOOL_NAME]),
+        mockConfig,
+      );
+      const reason = new Error('User cancelled the draft');
+      mockSendMessageStream.mockResolvedValueOnce({
+        async *[Symbol.asyncIterator]() {
+          yield {
+            type: StreamEventType.CHUNK,
+            value: {
+              candidates: [
+                { content: { parts: [{ text: 'Visible prefix' }] } },
+              ],
+            },
+          };
+          abortController.abort(reason);
+          throw reason;
+        },
+      });
+      await expect(
+        executor.run({ goal: 'Cancel evidence review' }, signal),
+      ).rejects.toBe(reason);
+      expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
+      expect(mockScheduleAgentTools).not.toHaveBeenCalled();
+      expect(mockSaveSummary).not.toHaveBeenCalled();
+    });
   });
 
   describe('create (Initialization and Validation)', () => {

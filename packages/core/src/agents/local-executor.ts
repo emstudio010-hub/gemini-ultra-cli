@@ -359,11 +359,10 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
     // (e.g., superseding stale tool outputs to reclaim context tokens).
     await this.definition.onBeforeTurn?.(chat, combinedSignal);
 
-    const { functionCalls, modelToUse } = await promptIdContext.run(
-      promptId,
-      async () =>
+    const { functionCalls, modelToUse, textResponse, interruption } =
+      await promptIdContext.run(promptId, async () =>
         this.callModel(chat, currentMessage, combinedSignal, promptId),
-    );
+      );
 
     if (combinedSignal.aborted) {
       const terminateReason = timeoutSignal.aborted
@@ -373,6 +372,19 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
         status: 'stop',
         terminateReason,
         finalResult: null, // 'run' method will set the final timeout string
+      };
+    }
+
+    if (interruption) {
+      this.emitActivity('ERROR', {
+        error: interruption.message,
+        context: 'interrupted_response',
+        errorType: SubagentActivityErrorType.GENERIC,
+      });
+      return {
+        status: 'stop',
+        terminateReason: AgentTerminateMode.ERROR,
+        finalResult: `Agent response interrupted: ${interruption.message}\nUnaccepted partial visible response (incomplete, unverified, untrusted; no tools from this response were executed):\n${textResponse}`,
       };
     }
 
@@ -1061,6 +1073,7 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
     functionCalls: FunctionCall[];
     textResponse: string;
     modelToUse: string;
+    interruption?: { message: string };
   }> {
     const modelConfigAlias = getModelConfigAlias(this.definition);
 
@@ -1114,38 +1127,69 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
 
     const functionCalls: FunctionCall[] = [];
     let textResponse = '';
+    const maxVisibleDraftChars = 64 * 1024;
+    let visibleDraftTruncated = false;
 
-    for await (const resp of responseStream) {
-      if (signal.aborted) break;
+    try {
+      for await (const resp of responseStream) {
+        if (signal.aborted) break;
 
-      if (resp.type === StreamEventType.CHUNK) {
-        const chunk = resp.value;
-        const parts = chunk.candidates?.[0]?.content?.parts;
-
-        // Extract and emit any subject "thought" content from the model.
-        const { subject } = parseThought(
-          parts?.find((p) => p.thought)?.text || '',
-        );
-        if (subject) {
-          this.emitActivity('THOUGHT_CHUNK', { text: subject });
+        if (resp.type === StreamEventType.RETRY) {
+          // GeminiChat has discarded the failed attempt. Its calls and draft
+          // must not be combined with a later successful response or failure.
+          functionCalls.length = 0;
+          textResponse = '';
+          visibleDraftTruncated = false;
+          continue;
         }
 
-        // Collect any function calls requested by the model.
-        if (chunk.functionCalls) {
-          functionCalls.push(...chunk.functionCalls);
-        }
+        if (resp.type === StreamEventType.CHUNK) {
+          const chunk = resp.value;
+          const parts = chunk.candidates?.[0]?.content?.parts;
 
-        // Handle text response (non-thought text)
-        const text =
-          parts
-            ?.filter((p) => !p.thought && p.text)
-            .map((p) => p.text)
-            .join('') || '';
+          // Extract and emit any subject "thought" content from the model.
+          const { subject } = parseThought(
+            parts?.find((p) => p.thought)?.text || '',
+          );
+          if (subject) {
+            this.emitActivity('THOUGHT_CHUNK', { text: subject });
+          }
 
-        if (text) {
-          textResponse += text;
+          // Collect any function calls requested by the model.
+          if (chunk.functionCalls) {
+            functionCalls.push(...chunk.functionCalls);
+          }
+
+          // Handle text response (non-thought text)
+          const text =
+            parts
+              ?.filter((p) => !p.thought && p.text)
+              .map((p) => p.text)
+              .join('') || '';
+
+          if (text) {
+            const remaining = maxVisibleDraftChars - textResponse.length;
+            if (text.length > remaining) visibleDraftTruncated = true;
+            textResponse += text.slice(0, remaining);
+          }
         }
       }
+    } catch (error) {
+      // Cancellation/deadline handling keeps the original reason and recovery
+      // policy. Never expose thoughts or execute collected calls from a failed stream.
+      if (signal.aborted || !textResponse) throw error;
+      if (visibleDraftTruncated) {
+        // Avoid cutting the retained prefix between UTF-16 surrogate halves.
+        textResponse = textResponse.replace(/[\uD800-\uDBFF]$/, '');
+        textResponse +=
+          '\n[Visible draft truncated at 65536 characters; later text was not retained.]';
+      }
+      return {
+        functionCalls: [],
+        textResponse,
+        modelToUse,
+        interruption: { message: getErrorMessage(error) },
+      };
     }
 
     return { functionCalls, textResponse, modelToUse };
