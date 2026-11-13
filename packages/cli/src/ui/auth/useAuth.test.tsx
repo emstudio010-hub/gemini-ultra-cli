@@ -20,6 +20,7 @@ import type { LoadedSettings } from '../../config/settings.js';
 // Mock dependencies
 const mockLoadApiKey = vi.fn();
 const mockSaveApiKey = vi.fn();
+const mockClearApiKey = vi.fn();
 const mockValidateAuthMethod = vi.fn();
 
 vi.mock('@google/gemini-cli-core', async (importOriginal) => {
@@ -29,6 +30,8 @@ vi.mock('@google/gemini-cli-core', async (importOriginal) => {
     ...actual,
     loadApiKey: () => mockLoadApiKey(),
     saveApiKey: (key: string) => mockSaveApiKey(key),
+    clearApiKey: (options?: { throwOnError?: boolean }) =>
+      mockClearApiKey(options),
   };
 });
 
@@ -171,6 +174,167 @@ describe('useAuth', () => {
         mockLoadApiKey.mockClear();
         return screen;
       };
+
+      it('clears after an in-flight save and prevents that save from authenticating', async () => {
+        const screen = await openKeyInput();
+        let release!: () => void;
+        const mutations: string[] = [];
+        mockSaveApiKey.mockImplementationOnce(
+          () =>
+            new Promise<void>((resolve) => {
+              release = () => {
+                mutations.push('save');
+                resolve();
+              };
+            }),
+        );
+        mockClearApiKey.mockImplementation(async () => {
+          mutations.push('clear');
+        });
+        try {
+          let save!: Promise<void>;
+          let clear!: Promise<boolean>;
+          await act(async () => {
+            save = screen.result.current.handleApiKeySubmit('FAKE_OLD');
+            await Promise.resolve();
+            clear = screen.result.current.handleApiKeyClear();
+            await Promise.resolve();
+          });
+          expect(mockClearApiKey).not.toHaveBeenCalled();
+          await act(async () => {
+            release();
+            await save;
+            expect(await clear).toBe(true);
+          });
+          expect(mutations).toEqual(['save', 'clear']);
+          expect(mockClearApiKey).toHaveBeenCalledExactlyOnceWith({
+            throwOnError: true,
+          });
+          expect(mockConfig.refreshAuth).not.toHaveBeenCalled();
+          expect(screen.result.current.apiKeyDefaultValue).toBe('');
+          expect(screen.result.current.authState).toBe(
+            AuthState.AwaitingApiKeyInput,
+          );
+        } finally {
+          screen.unmount();
+        }
+      });
+
+      it('saves after an in-flight clear without allowing its result to replace the new key', async () => {
+        const screen = await openKeyInput();
+        let release!: () => void;
+        const mutations: string[] = [];
+        mockClearApiKey.mockImplementationOnce(
+          () =>
+            new Promise<void>((resolve) => {
+              release = () => {
+                mutations.push('clear');
+                resolve();
+              };
+            }),
+        );
+        mockSaveApiKey.mockImplementationOnce(async () => {
+          mutations.push('save');
+        });
+        mockLoadApiKey.mockResolvedValue('FAKE_NEW');
+        vi.mocked(mockConfig.refreshAuth).mockResolvedValueOnce(undefined);
+        try {
+          let clear!: Promise<boolean>;
+          let save!: Promise<void>;
+          await act(async () => {
+            clear = screen.result.current.handleApiKeyClear();
+            await Promise.resolve();
+            save = screen.result.current.handleApiKeySubmit('FAKE_NEW');
+            await Promise.resolve();
+          });
+          expect(mockSaveApiKey).not.toHaveBeenCalled();
+          await act(async () => {
+            release();
+            expect(await clear).toBe(false);
+            await save;
+          });
+          expect(mutations).toEqual(['clear', 'save']);
+          expect(screen.result.current.apiKeyDefaultValue).toBe('FAKE_NEW');
+          expect(screen.result.current.authState).toBe(AuthState.Authenticated);
+        } finally {
+          screen.unmount();
+        }
+      });
+
+      it('does not start a queued clear after the key dialog is cancelled', async () => {
+        const screen = await openKeyInput();
+        let release!: () => void;
+        mockSaveApiKey.mockImplementationOnce(
+          () =>
+            new Promise<void>((resolve) => {
+              release = resolve;
+            }),
+        );
+        try {
+          let save!: Promise<void>;
+          let clear!: Promise<boolean>;
+          await act(async () => {
+            save = screen.result.current.handleApiKeySubmit('FAKE_KEY');
+            await Promise.resolve();
+            clear = screen.result.current.handleApiKeyClear();
+            screen.result.current.setAuthState(AuthState.Updating);
+            release();
+            await save;
+            expect(await clear).toBe(false);
+          });
+          expect(mockClearApiKey).not.toHaveBeenCalled();
+          expect(mockConfig.refreshAuth).not.toHaveBeenCalled();
+        } finally {
+          screen.unmount();
+        }
+      });
+
+      it('does not publish an in-flight clear after unmount', async () => {
+        const screen = await openKeyInput();
+        let release!: () => void;
+        mockClearApiKey.mockImplementationOnce(
+          () =>
+            new Promise<void>((resolve) => {
+              release = resolve;
+            }),
+        );
+        let clear!: Promise<boolean>;
+        await act(async () => {
+          clear = screen.result.current.handleApiKeyClear();
+          await Promise.resolve();
+        });
+        screen.unmount();
+        await act(async () => {
+          release();
+          expect(await clear).toBe(false);
+        });
+      });
+
+      it('reports a strict clear failure without private details and allows a later save', async () => {
+        const screen = await openKeyInput();
+        mockClearApiKey.mockRejectedValueOnce(new Error('FAKE_PRIVATE_DETAIL'));
+        try {
+          await act(async () =>
+            expect(screen.result.current.handleApiKeyClear()).resolves.toBe(
+              false,
+            ),
+          );
+          expect(screen.result.current.authError).toContain('Could not clear');
+          expect(screen.result.current.authError).not.toContain(
+            'FAKE_PRIVATE_DETAIL',
+          );
+          await act(async () =>
+            screen.result.current.setAuthState(AuthState.AwaitingApiKeyInput),
+          );
+          vi.mocked(mockConfig.refreshAuth).mockResolvedValueOnce(undefined);
+          await act(async () =>
+            screen.result.current.handleApiKeySubmit('FAKE_NEW'),
+          );
+          expect(screen.result.current.authState).toBe(AuthState.Authenticated);
+        } finally {
+          screen.unmount();
+        }
+      });
 
       it.each(['resolve', 'reject'] as const)(
         'does not start auth after cancelled key save %s',

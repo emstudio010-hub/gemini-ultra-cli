@@ -141,4 +141,11 @@ describe('ApiKeyCredentialStorage', () => {
     await expect(clearApiKey()).resolves.not.toThrow();
     expect(deleteCredentialsMock).toHaveBeenCalledWith('default-api-key');
   });
+
+  it('rejects an explicit strict clear when credential deletion fails', async () => {
+    const failure = new Error('Controlled credential deletion failure');
+    deleteCredentialsMock.mockRejectedValueOnce(failure);
+    await expect(clearApiKey({ throwOnError: true })).rejects.toBe(failure);
+    expect(deleteCredentialsMock).toHaveBeenCalledWith('default-api-key');
+  });
 });

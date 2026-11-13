@@ -948,6 +948,7 @@ export const AppContainer = (props: AppContainerProps) => {
     onAuthError,
     apiKeyDefaultValue,
     handleApiKeySubmit,
+    handleApiKeyClear,
     accountSuspensionInfo,
     setAccountSuspensionInfo,
   } = useAuthCommand(
@@ -3073,6 +3074,7 @@ Logging in with Google... Restarting Gemini CLI to continue.
       addMessage,
       popAllMessages,
       handleApiKeySubmit,
+      handleApiKeyClear,
       handleApiKeyCancel,
       setBannerVisible,
       setShortcutsHelpVisible,
@@ -3174,6 +3176,7 @@ Logging in with Google... Restarting Gemini CLI to continue.
       addMessage,
       popAllMessages,
       handleApiKeySubmit,
+      handleApiKeyClear,
       handleApiKeyCancel,
       setBannerVisible,
       setShortcutsHelpVisible,

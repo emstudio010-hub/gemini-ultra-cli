@@ -11,7 +11,7 @@ import { theme } from '../semantic-colors.js';
 import { TextInput } from '../components/shared/TextInput.js';
 import { useTextBuffer } from '../components/shared/text-buffer.js';
 import { useUIState } from '../contexts/UIStateContext.js';
-import { clearApiKey, debugLogger } from '@google/gemini-cli-core';
+import { debugLogger } from '@google/gemini-cli-core';
 import { useKeypress } from '../hooks/useKeypress.js';
 import { Command } from '../key/keyMatchers.js';
 import { useKeyMatchers } from '../hooks/useKeyMatchers.js';
@@ -20,6 +20,7 @@ import { KeypressPriority } from '../contexts/KeypressContext.js';
 interface ApiAuthDialogProps {
   onSubmit: (apiKey: string) => void;
   onCancel: () => void;
+  onClear: () => Promise<boolean>;
   error?: string | null;
   defaultValue?: string;
 }
@@ -27,6 +28,7 @@ interface ApiAuthDialogProps {
 export function ApiAuthDialog({
   onSubmit,
   onCancel,
+  onClear,
   error,
   defaultValue = '',
 }: ApiAuthDialogProps): React.JSX.Element {
@@ -34,14 +36,14 @@ export function ApiAuthDialog({
   const { terminalWidth } = useUIState();
   const viewportWidth = terminalWidth - 8;
 
-  const pendingPromise = useRef<{ cancel: () => void } | null>(null);
-
-  useEffect(
-    () => () => {
-      pendingPromise.current?.cancel();
-    },
-    [],
-  );
+  const lifecycle = useRef({ mounted: true, clear: 0 }).current;
+  useEffect(() => {
+    lifecycle.mounted = true;
+    return () => {
+      lifecycle.mounted = false;
+      lifecycle.clear++;
+    };
+  }, [lifecycle]);
 
   const initialApiKey = defaultValue;
 
@@ -58,6 +60,8 @@ export function ApiAuthDialog({
   });
 
   const appliedDefault = useRef(defaultValue);
+  const currentBuffer = useRef(buffer);
+  currentBuffer.current = buffer;
   const edited = useRef(false);
   useEffect(() => {
     if (buffer.text !== appliedDefault.current) edited.current = true;
@@ -69,34 +73,27 @@ export function ApiAuthDialog({
 
   const handleSubmit = (value: string) => {
     edited.current = true;
+    lifecycle.clear++;
     onSubmit(value);
   };
 
-  const handleClear = () => {
+  const handleClear = async () => {
     edited.current = true;
-    pendingPromise.current?.cancel();
-
-    let isCancelled = false;
-    const wrappedPromise = new Promise<void>((resolve, reject) => {
-      clearApiKey().then(
-        () => !isCancelled && resolve(),
-        (error) => !isCancelled && reject(error),
-      );
-    });
-
-    pendingPromise.current = {
-      cancel: () => {
-        isCancelled = true;
-      },
-    };
-
-    return wrappedPromise
-      .then(() => {
-        buffer.setText('');
-      })
-      .catch((err) => {
-        debugLogger.debug('Failed to clear API key:', err);
-      });
+    const clear = ++lifecycle.clear;
+    const priorText = buffer.text;
+    try {
+      const cleared = await onClear();
+      if (
+        cleared &&
+        lifecycle.mounted &&
+        lifecycle.clear === clear &&
+        currentBuffer.current.text === priorText
+      )
+        currentBuffer.current.setText('');
+    } catch {
+      // The auth owner reports storage errors without exposing credential details.
+      debugLogger.debug('API key clear did not complete.');
+    }
   };
 
   useKeypress(
@@ -143,7 +140,10 @@ export function ApiAuthDialog({
           <TextInput
             buffer={buffer}
             onSubmit={handleSubmit}
-            onCancel={onCancel}
+            onCancel={() => {
+              lifecycle.clear++;
+              onCancel();
+            }}
             placeholder="Paste your API key here"
           />
         </Box>

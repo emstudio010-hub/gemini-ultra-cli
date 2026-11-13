@@ -17,6 +17,7 @@ import {
   type Config,
   loadApiKey,
   saveApiKey,
+  clearApiKey,
   debugLogger,
   isAccountSuspendedError,
   ProjectIdRequiredError,
@@ -66,7 +67,7 @@ export const useAuthCommand = (
     mounted: true,
   }).current;
   const mayReuseInitialAuth = useRef(!initialAuthError);
-  const keySaveQueue = useRef<Promise<void>>(Promise.resolve());
+  const keyMutationQueue = useRef<Promise<void>>(Promise.resolve());
   const [authState, setAuthStateValue] = useState<AuthState>(
     initialAuthError ? AuthState.Updating : AuthState.Unauthenticated,
   );
@@ -171,10 +172,10 @@ export const useAuthCommand = (
         }
         // Credential storage cannot cancel an in-flight write. Serialize this
         // UI's writes so an older completion cannot overwrite a newer key.
-        const save = keySaveQueue.current.then(async () => {
+        const save = keyMutationQueue.current.then(async () => {
           if (isCurrent()) await saveApiKey(apiKey);
         });
-        keySaveQueue.current = save.catch(() => undefined);
+        keyMutationQueue.current = save.catch(() => undefined);
         await save;
         if (!isCurrent()) return;
         await reloadApiKey(isCurrent);
@@ -220,6 +221,45 @@ export const useAuthCommand = (
       setAuthState,
     ],
   );
+
+  const handleApiKeyClear = useCallback(async (): Promise<boolean> => {
+    if (!lifecycle.mounted || authState !== AuthState.AwaitingApiKeyInput)
+      return false;
+    const attempt = ++lifecycle.authAttempt;
+    lifecycle.keyRead++;
+    cancelPendingAuth();
+    const controller = new AbortController();
+    lifecycle.controller = controller;
+    const isCurrent = () =>
+      lifecycle.mounted &&
+      lifecycle.authAttempt === attempt &&
+      !controller.signal.aborted &&
+      settings.merged.security.auth.selectedType === AuthType.USE_GEMINI;
+    try {
+      if (!isCurrent()) return false;
+      const clear = keyMutationQueue.current.then(async () => {
+        if (isCurrent()) await clearApiKey({ throwOnError: true });
+      });
+      keyMutationQueue.current = clear.catch(() => undefined);
+      await clear;
+      if (!isCurrent()) return false;
+      lifecycle.keyRead++;
+      setApiKeyDefaultValue('');
+      setAuthError(null);
+      return true;
+    } catch {
+      if (isCurrent())
+        onAuthError(
+          I18nManager.getInstance().t(
+            '无法清除已保存的 API 密钥。请重试或选择其他认证方式。',
+            'Could not clear the saved API key. Try again or choose another authentication method.',
+          ),
+        );
+      return false;
+    } finally {
+      if (lifecycle.controller === controller) lifecycle.controller = undefined;
+    }
+  }, [lifecycle, authState, settings, cancelPendingAuth, onAuthError]);
 
   useEffect(() => {
     if (authState !== AuthState.AwaitingApiKeyInput) return;
@@ -380,6 +420,7 @@ export const useAuthCommand = (
     apiKeyDefaultValue,
     reloadApiKey,
     handleApiKeySubmit,
+    handleApiKeyClear,
     accountSuspensionInfo,
     setAccountSuspensionInfo,
   };

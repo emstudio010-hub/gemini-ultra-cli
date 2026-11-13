@@ -583,6 +583,7 @@ const mockUIActions: UIActions = {
   addMessage: vi.fn(),
   popAllMessages: vi.fn(),
   handleApiKeySubmit: vi.fn(),
+  handleApiKeyClear: vi.fn().mockResolvedValue(true),
   handleApiKeyCancel: vi.fn(),
   setBannerVisible: vi.fn(),
   setShortcutsHelpVisible: vi.fn(),

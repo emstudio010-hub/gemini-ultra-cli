@@ -300,6 +300,7 @@ export const DialogManager = ({
         <ApiAuthDialog
           onSubmit={uiActions.handleApiKeySubmit}
           onCancel={uiActions.handleApiKeyCancel}
+          onClear={uiActions.handleApiKeyClear}
           error={uiState.authError}
           defaultValue={uiState.apiKeyDefaultValue}
         />

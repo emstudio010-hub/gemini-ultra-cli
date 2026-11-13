@@ -82,11 +82,14 @@ export async function saveApiKey(
 /**
  * Clear cached API key
  */
-export async function clearApiKey(): Promise<void> {
+export async function clearApiKey(options?: {
+  throwOnError?: boolean;
+}): Promise<void> {
   apiKeyCache.delete(DEFAULT_API_KEY_ENTRY);
   try {
     await storage.deleteCredentials(DEFAULT_API_KEY_ENTRY);
   } catch (error: unknown) {
+    if (options?.throwOnError) throw error;
     debugLogger.error('Failed to clear API key from storage:', error);
   }
 }
