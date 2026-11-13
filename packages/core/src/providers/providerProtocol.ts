@@ -52,6 +52,7 @@ export const responsesSchema = z.object({
     .optional(),
   response: z
     .object({
+      status: z.string().optional(),
       usage: z.unknown().optional(),
       error: z.unknown().optional(),
       incomplete_details: z.unknown().optional(),

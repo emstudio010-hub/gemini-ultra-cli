@@ -613,6 +613,13 @@ export class UniversalContentGenerator implements ContentGenerator {
       throw new Error(
         'OpenAI output token limit reached; response is incomplete.',
       );
+    if (
+      choice.finish_reason &&
+      !['stop', 'tool_calls'].includes(choice.finish_reason)
+    )
+      throw new Error(
+        'OpenAI response ended abnormally; response is incomplete.',
+      );
     const parts: Part[] = [];
 
     if (choice?.message?.reasoning_content) {
@@ -721,14 +728,17 @@ export class UniversalContentGenerator implements ContentGenerator {
       if (chunk.error)
         throw new Error(`OpenAI stream error: ${JSON.stringify(chunk.error)}`);
       usage = providerUsage(chunk.usage, 'openai-chat') ?? usage;
-      if (chunk.choices?.[0]?.finish_reason === 'length') {
+      const stopReason = chunk.choices?.[0]?.finish_reason;
+      if (stopReason && !['stop', 'tool_calls'].includes(stopReason)) {
         // Some endpoints include the last visible text in the terminating
         // frame. Preserve that unaccepted draft before surfacing the failure;
         // never parse or emit tool calls from a truncated response.
-        const text = chunk.choices[0].delta?.content;
+        const text = chunk.choices?.[0]?.delta?.content;
         if (text) yield this.buildGeminiResponse([{ text }], undefined, false);
         throw new Error(
-          'OpenAI output token limit reached; response is incomplete.',
+          stopReason === 'length'
+            ? 'OpenAI output token limit reached; response is incomplete.'
+            : 'OpenAI response ended abnormally; response is incomplete.',
         );
       }
       if (chunk.choices?.[0]?.finish_reason) completed = true;
@@ -1078,6 +1088,15 @@ export class UniversalContentGenerator implements ContentGenerator {
             `OpenAI Responses error: ${JSON.stringify(ev.response?.error ?? ev.response?.incomplete_details ?? ev.error ?? ev)}`,
           );
         case 'response.completed':
+          if (
+            (ev.response?.status !== undefined &&
+              ev.response.status !== 'completed') ||
+            ev.response?.error != null ||
+            ev.response?.incomplete_details != null
+          )
+            throw new Error(
+              'OpenAI Responses returned an unsuccessful terminal state; response is incomplete.',
+            );
           usage = providerUsage(ev.response?.usage, 'openai-responses');
           completed = true;
           break;
@@ -1270,10 +1289,15 @@ export class UniversalContentGenerator implements ContentGenerator {
         throw new Error(`Anthropic stream error: ${JSON.stringify(ev.error)}`);
       } else if (
         ev.type === 'message_delta' &&
-        ev.delta?.stop_reason === 'max_tokens'
+        ev.delta?.stop_reason &&
+        !['end_turn', 'tool_use', 'stop_sequence'].includes(
+          ev.delta.stop_reason,
+        )
       ) {
         throw new Error(
-          'Anthropic output token limit reached; response is incomplete.',
+          ev.delta.stop_reason === 'max_tokens'
+            ? 'Anthropic output token limit reached; response is incomplete.'
+            : 'Anthropic response ended abnormally; response is incomplete.',
         );
       } else if (ev.type === 'message_stop') {
         completed = true;
@@ -1355,11 +1379,17 @@ export class UniversalContentGenerator implements ContentGenerator {
       throw new Error(`Gemini error: ${JSON.stringify(raw.error)}`);
     if (
       raw.candidates?.some(
-        (candidate) => candidate.finishReason === FinishReason.MAX_TOKENS,
+        (candidate) =>
+          candidate.finishReason &&
+          candidate.finishReason !== FinishReason.STOP,
       )
     )
       throw new Error(
-        'Gemini output token limit reached; response is incomplete.',
+        raw.candidates?.some(
+          (candidate) => candidate.finishReason === FinishReason.MAX_TOKENS,
+        )
+          ? 'Gemini output token limit reached; response is incomplete.'
+          : 'Gemini response ended abnormally; response is incomplete.',
       );
     return Object.assign(new GenerateContentResponse(), raw);
   }
@@ -1398,7 +1428,9 @@ export class UniversalContentGenerator implements ContentGenerator {
         throw new Error(`Gemini stream error: ${JSON.stringify(raw.error)}`);
       if (
         raw.candidates?.some(
-          (candidate) => candidate.finishReason === FinishReason.MAX_TOKENS,
+          (candidate) =>
+            candidate.finishReason &&
+            candidate.finishReason !== FinishReason.STOP,
         )
       ) {
         const visible =
@@ -1412,7 +1444,11 @@ export class UniversalContentGenerator implements ContentGenerator {
         if (visible.length)
           yield this.buildGeminiResponse(visible, undefined, false);
         throw new Error(
-          'Gemini output token limit reached; response is incomplete.',
+          raw.candidates?.some(
+            (candidate) => candidate.finishReason === FinishReason.MAX_TOKENS,
+          )
+            ? 'Gemini output token limit reached; response is incomplete.'
+            : 'Gemini response ended abnormally; response is incomplete.',
         );
       }
       if (raw.candidates?.some((candidate) => candidate.finishReason))

@@ -1604,3 +1604,8 @@ WI-182/E-417至418/F-139：Chat流在delta.content与finish_reason=length同帧�
 ## 2026-11-13 Gemini截断完成门禁
 
 WI-183/E-419至420/F-140：外接Gemini原有finishReason即完成，MAX_TOKENS+完整调用可误接受；旧流式/非流式2复现失败。现两入口明确拒绝MAX，流式仅保留可见终止正文，原始call parts暂存至正常终止，EOF/超限不释放早期调用，STOP正常；原生Google认证未改。12不同相关检查、core/CLI严格编译/两文件最终lint格式通过，首SDK Part/schema类型编译问题以推断类型修正留证。Windows真实Config/gateway/公开Manage/注册researcher/AgentTool/LocalAgentExecutor/GeminiChat/Gemini SSE/Swarm，首响应早期complete+终止MAX长正文/推理/write→paused/blocked/1请求1轮1失败，草稿/归档/导出保持、0执行/误完成，显式cancel独立fixture后新STOP对照正常；17条件通过、5367ms/退出0/2loopback/0外部。未提高token/重试/改旧真实失败，E-294/E-364 SHA/false及个人配置/安装83保持，无打包重装版本CI或付费重跑；非真实模型质量/原生认证/所有finishReason或最终包验收，goal active。详见docs/ultra-gemini-length-gate-handoff.md。
+
+
+## 2026-11-13 跨协议异常结束门禁
+
+WI-184/E-421至422/F-141：旧Chat content_filter/未知原因、Responses completed事件附incomplete/error（schema原丢status）、Anthropic refusal/pause/context超限、Gemini SAFETY/OTHER带完整调用均可resolve，10旧复现失败。现明确原因仅正常值接受，Responses显式矛盾状态拒绝，length/MAX诊断保持、异常流保留可见草稿不释放工具/不自动重试，原生Google/缺省兼容边界保持。24不同相关检查、core/CLI严格编译/三文件lint格式通过。Windows真实Config/gateway/公开Manage/原生角色/AgentTool/LocalAgentExecutor/GeminiChat/四外接协议/Swarm导出，每协议独立异常/正常task对照：异常paused/blocked/1失败草稿保持，正常waiting/无失败，均1请求1轮，导出不改state、执行不改provider；38条件通过、6303ms/退出0/8loopback/0外部，显式cancel独立fixture非自动重试。个人配置/旧E-294及E-364失败SHA/安装83保持，无打包重装版本CI/付费重跑，不冒称真实推理或所有协议变体/最终包验收，goal active。详见docs/ultra-provider-stop-reason-handoff.md。
