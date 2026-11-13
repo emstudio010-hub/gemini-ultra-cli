@@ -23,6 +23,10 @@ import { swarmContextSnapshot, swarmMemberContext } from './swarmContext.js';
 import { SwarmBudgetError } from './swarmBudgetError.js';
 import { I18nManager } from '../i18n/i18nManager.js';
 import {
+  swarmPriorResultsSchema,
+  retainPriorSwarmResult,
+} from './swarmResultHistory.js';
+import {
   reviewFilesSchema,
   reviewedFilesSchema,
   captureReviewFiles,
@@ -51,6 +55,7 @@ const memberSchema = z.object({
   turns: z.number().int().nonnegative().default(0),
   result: z.string().max(12000).default(''),
   fullResult: swarmResultArchiveSchema.optional(),
+  pastResults: swarmPriorResultsSchema,
   lastError: z.string().max(12000).optional(),
   verifiedRevision: z.number().int().optional(),
   verifiedTree: z.string().optional(),
@@ -1108,6 +1113,7 @@ export class SwarmEngine {
         if (!hadResult) member.modelsUsed = modelsUsed;
       } else {
         const saved = saveSwarmResultText(this.root, this.id, result.text);
+        retainPriorSwarmResult(this.root, this.id, member);
         member.result = saved.result;
         member.fullResult = saved.fullResult;
         member.lastError = undefined;

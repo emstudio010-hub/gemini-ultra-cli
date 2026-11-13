@@ -63,8 +63,21 @@ export function saveSwarmResultText(
   root: string,
   id: string,
   text: string,
+  forceArchive: true,
+): { result: string; fullResult: Archive };
+export function saveSwarmResultText(
+  root: string,
+  id: string,
+  text: string,
+  forceArchive?: boolean,
+): MemberText;
+export function saveSwarmResultText(
+  root: string,
+  id: string,
+  text: string,
+  forceArchive = false,
 ): MemberText {
-  if (text.length <= 12000) return { result: text };
+  if (!forceArchive && text.length <= 12000) return { result: text };
   const data = Buffer.from(text, 'utf8');
   if (data.length > maxBytes)
     throw new Error(

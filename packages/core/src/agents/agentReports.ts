@@ -163,6 +163,16 @@ export function exportSwarmReports(
         label: `@${member.name} · ${member.agent} · ${member.state} · turns=${member.turns}`,
         text: readSwarmResultText(root, id, member),
       };
+    // Keep existing current-member report positions stable, then append historical evidence.
+    for (const member of record.members)
+      for (const prior of member.pastResults ?? [])
+        yield {
+          label: `@${member.name} · ${member.agent} · historical saved result before turn ${prior.beforeTurn} · not a current verdict`,
+          text: readSwarmResultText(root, id, {
+            result: '',
+            fullResult: prior.fullResult,
+          }),
+        };
   }
   return publish(
     root,
