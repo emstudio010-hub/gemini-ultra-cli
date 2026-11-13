@@ -7,6 +7,8 @@
 import type React from 'react';
 import { Box, Text } from 'ink';
 import { theme } from '../semantic-colors.js';
+import { useLocale } from '../hooks/useLocale.js';
+import { statsRoleLabel } from '../utils/statsLabels.js';
 import { formatDuration } from '../utils/formatters.js';
 import {
   calculateAverageLatency,
@@ -52,6 +54,8 @@ export const ModelStatsDisplay: React.FC<ModelStatsDisplayProps> = ({
   currentModel,
   quotaStats,
 }) => {
+  const chinese = useLocale() === 'zh';
+  const t = (zh: string, en: string) => (chinese ? zh : en);
   const { stats } = useSessionStats();
 
   const pooledRemaining = quotaStats?.remaining;
@@ -74,7 +78,10 @@ export const ModelStatsDisplay: React.FC<ModelStatsDisplayProps> = ({
         paddingX={2}
       >
         <Text color={theme.text.primary}>
-          No API calls have been made in this session.
+          {t(
+            '本会话尚未发起 API 请求。',
+            'No API calls have been made in this session.',
+          )}
         </Text>
       </Box>
     );
@@ -129,9 +136,13 @@ export const ModelStatsDisplay: React.FC<ModelStatsDisplayProps> = ({
 
   // API Section
   rows.push({ metric: 'API', isSection: true });
-  rows.push(createRow('Requests', (m) => m.api.totalRequests.toLocaleString()));
   rows.push(
-    createRow('Errors', (m) => {
+    createRow(t('请求数', 'Requests'), (m) =>
+      m.api.totalRequests.toLocaleString(),
+    ),
+  );
+  rows.push(
+    createRow(t('错误', 'Errors'), (m) => {
       const errorRate = calculateErrorRate(m);
       return (
         <Text
@@ -145,16 +156,18 @@ export const ModelStatsDisplay: React.FC<ModelStatsDisplayProps> = ({
     }),
   );
   rows.push(
-    createRow('Avg Latency', (m) => formatDuration(calculateAverageLatency(m))),
+    createRow(t('平均延迟', 'Avg Latency'), (m) =>
+      formatDuration(calculateAverageLatency(m)),
+    ),
   );
 
   // Spacer
   rows.push({ metric: '' });
 
   // Tokens Section
-  rows.push({ metric: 'Tokens', isSection: true });
+  rows.push({ metric: t('Token', 'Tokens'), isSection: true });
   rows.push(
-    createRow('Total', (m) => (
+    createRow(t('合计', 'Total'), (m) => (
       <Text color={theme.text.secondary}>
         {m.tokens.total.toLocaleString()}
       </Text>
@@ -162,7 +175,7 @@ export const ModelStatsDisplay: React.FC<ModelStatsDisplayProps> = ({
   );
   rows.push(
     createRow(
-      'Input',
+      t('输入', 'Input'),
       (m) => (
         <Text color={theme.text.primary}>
           {m.tokens.input.toLocaleString()}
@@ -175,7 +188,7 @@ export const ModelStatsDisplay: React.FC<ModelStatsDisplayProps> = ({
   if (hasCached) {
     rows.push(
       createRow(
-        'Cache Reads',
+        t('缓存读取', 'Cache Reads'),
         (m) => {
           const cacheHitRate = calculateCacheHitRate(m);
           return (
@@ -192,7 +205,7 @@ export const ModelStatsDisplay: React.FC<ModelStatsDisplayProps> = ({
   if (hasThoughts) {
     rows.push(
       createRow(
-        'Thoughts',
+        t('思考', 'Thoughts'),
         (m) => (
           <Text color={theme.text.primary}>
             {m.tokens.thoughts.toLocaleString()}
@@ -206,7 +219,7 @@ export const ModelStatsDisplay: React.FC<ModelStatsDisplayProps> = ({
   if (hasTool) {
     rows.push(
       createRow(
-        'Tool',
+        t('工具', 'Tool'),
         (m) => (
           <Text color={theme.text.primary}>
             {m.tokens.tool.toLocaleString()}
@@ -219,7 +232,7 @@ export const ModelStatsDisplay: React.FC<ModelStatsDisplayProps> = ({
 
   rows.push(
     createRow(
-      'Output',
+      t('输出', 'Output'),
       (m) => (
         <Text color={theme.text.primary}>
           {m.tokens.candidates.toLocaleString()}
@@ -233,12 +246,12 @@ export const ModelStatsDisplay: React.FC<ModelStatsDisplayProps> = ({
   if (allRoles.length > 0) {
     // Spacer
     rows.push({ metric: '' });
-    rows.push({ metric: 'Roles', isSection: true });
+    rows.push({ metric: t('角色', 'Roles'), isSection: true });
 
     allRoles.forEach((role) => {
       // Role Header Row
       const roleHeaderRow: StatRowData = {
-        metric: role,
+        metric: statsRoleLabel(role, chinese),
         isSection: true,
         color: theme.text.primary,
       };
@@ -264,18 +277,20 @@ export const ModelStatsDisplay: React.FC<ModelStatsDisplayProps> = ({
         rows.push(row);
       };
 
-      addRoleMetric('Requests', (r) => r.totalRequests.toLocaleString());
-      addRoleMetric('Input', (r) => (
+      addRoleMetric(t('请求数', 'Requests'), (r) =>
+        r.totalRequests.toLocaleString(),
+      );
+      addRoleMetric(t('输入', 'Input'), (r) => (
         <Text color={theme.text.primary}>
           {r.tokens.input.toLocaleString()}
         </Text>
       ));
-      addRoleMetric('Output', (r) => (
+      addRoleMetric(t('输出', 'Output'), (r) => (
         <Text color={theme.text.primary}>
           {r.tokens.candidates.toLocaleString()}
         </Text>
       ));
-      addRoleMetric('Cache Reads', (r) => (
+      addRoleMetric(t('缓存读取', 'Cache Reads'), (r) => (
         <Text color={theme.text.secondary}>
           {r.tokens.cached.toLocaleString()}
         </Text>
@@ -286,7 +301,7 @@ export const ModelStatsDisplay: React.FC<ModelStatsDisplayProps> = ({
   const columns: Array<Column<StatRowData>> = [
     {
       key: 'metric',
-      header: 'Metric',
+      header: t('指标', 'Metric'),
       width: 28,
       renderCell: (row) => (
         <Text
@@ -316,8 +331,8 @@ export const ModelStatsDisplay: React.FC<ModelStatsDisplayProps> = ({
 
   const isAuto = currentModel && isAutoModel(currentModel);
   const statsTitle = isAuto
-    ? `${getDisplayString(currentModel)} Stats For Nerds`
-    : 'Model Stats For Nerds';
+    ? `${getDisplayString(currentModel)} ${t('详细统计', 'Stats For Nerds')}`
+    : t('模型详细统计', 'Model Stats For Nerds');
 
   return (
     <Box
@@ -335,13 +350,15 @@ export const ModelStatsDisplay: React.FC<ModelStatsDisplayProps> = ({
       {showUserIdentity && selectedAuthType && (
         <Box>
           <Box width={28}>
-            <Text color={theme.text.link}>Auth Method:</Text>
+            <Text color={theme.text.link}>
+              {t('认证方式：', 'Auth Method:')}
+            </Text>
           </Box>
           <Text color={theme.text.primary}>
             {selectedAuthType.startsWith('oauth')
               ? userEmail
-                ? `Signed in with Google (${userEmail})`
-                : 'Signed in with Google'
+                ? `${t('通过 Google 登录', 'Signed in with Google')} (${userEmail})`
+                : t('通过 Google 登录', 'Signed in with Google')
               : selectedAuthType}
           </Text>
         </Box>
@@ -349,7 +366,7 @@ export const ModelStatsDisplay: React.FC<ModelStatsDisplayProps> = ({
       {showUserIdentity && tier && (
         <Box>
           <Box width={28}>
-            <Text color={theme.text.link}>Tier:</Text>
+            <Text color={theme.text.link}>{t('账户等级：', 'Tier:')}</Text>
           </Box>
           <Text color={theme.text.primary}>{tier}</Text>
         </Box>

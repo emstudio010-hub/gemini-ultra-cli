@@ -8,6 +8,8 @@ import type React from 'react';
 import { Box, Text } from 'ink';
 import { ThemedGradient } from './ThemedGradient.js';
 import { theme } from '../semantic-colors.js';
+import { useLocale } from '../hooks/useLocale.js';
+import { statsRoleLabel } from '../utils/statsLabels.js';
 import { formatDuration } from '../utils/formatters.js';
 import {
   useSessionStats,
@@ -90,6 +92,9 @@ interface ModelRow {
 }
 
 const ModelUsageTable: React.FC<ModelUsageTableProps> = ({ models }) => {
+  const chinese = useLocale() === 'zh';
+  const t = (zh: string, en: string) => (chinese ? zh : en);
+
   const nameWidth = 28;
   const requestsWidth = 8;
   const inputTokensWidth = 14;
@@ -125,7 +130,7 @@ const ModelUsageTable: React.FC<ModelUsageTableProps> = ({ models }) => {
       roleEntries.forEach(([role, roleMetrics]) => {
         rows.push({
           name: `${name}-${role}`,
-          displayName: `  ↳ ${role}`,
+          displayName: `  ↳ ${statsRoleLabel(role, chinese)}`,
           requests: roleMetrics.totalRequests,
           cachedTokens: roleMetrics.tokens.cached.toLocaleString(),
           inputTokens: roleMetrics.tokens.prompt.toLocaleString(),
@@ -139,10 +144,13 @@ const ModelUsageTable: React.FC<ModelUsageTableProps> = ({ models }) => {
   return (
     <Box flexDirection="column" marginTop={1}>
       <Text bold color={theme.text.primary}>
-        Model Usage
+        {t('模型用量', 'Model Usage')}
       </Text>
       <Text color={theme.text.secondary}>
-        Use /model to view model quota information
+        {t(
+          '使用 /model 查看模型配额信息',
+          'Use /model to view model quota information',
+        )}
       </Text>
       <Box height={1} />
 
@@ -157,27 +165,27 @@ const ModelUsageTable: React.FC<ModelUsageTableProps> = ({ models }) => {
       >
         <Box width={nameWidth}>
           <Text bold color={theme.text.secondary}>
-            Model
+            {t('模型', 'Model')}
           </Text>
         </Box>
         <Box width={requestsWidth} justifyContent="flex-end">
           <Text bold color={theme.text.secondary}>
-            Reqs
+            {t('请求数', 'Reqs')}
           </Text>
         </Box>
         <Box width={inputTokensWidth} justifyContent="flex-end">
           <Text bold color={theme.text.secondary}>
-            Input Tokens
+            {t('输入 Token', 'Input Tokens')}
           </Text>
         </Box>
         <Box width={cacheReadsWidth} justifyContent="flex-end">
           <Text bold color={theme.text.secondary}>
-            Cache Reads
+            {t('缓存读取', 'Cache Reads')}
           </Text>
         </Box>
         <Box width={outputTokensWidth} justifyContent="flex-end">
           <Text bold color={theme.text.secondary}>
-            Output Tokens
+            {t('输出 Token', 'Output Tokens')}
           </Text>
         </Box>
       </Box>
@@ -248,6 +256,8 @@ export const StatsDisplay: React.FC<StatsDisplayProps> = ({
   tier,
   creditBalance,
 }) => {
+  const chinese = useLocale() === 'zh';
+  const t = (zh: string, en: string) => (chinese ? zh : en);
   const { stats } = useSessionStats();
   const { metrics } = stats;
   const { tools, files, models } = metrics;
@@ -276,7 +286,7 @@ export const StatsDisplay: React.FC<StatsDisplayProps> = ({
     }
     return (
       <Text bold color={theme.text.accent}>
-        Session Stats
+        {t('会话统计', 'Session Stats')}
       </Text>
     );
   };
@@ -300,28 +310,28 @@ export const StatsDisplay: React.FC<StatsDisplayProps> = ({
       {renderTitle()}
       <Box height={1} />
 
-      <Section title="Interaction Summary">
-        <StatRow title="Session ID:">
+      <Section title={t('交互概览', 'Interaction Summary')}>
+        <StatRow title={t('会话 ID：', 'Session ID:')}>
           <Text color={theme.text.primary}>{stats.sessionId}</Text>
         </StatRow>
         {showUserIdentity && selectedAuthType && (
-          <StatRow title="Auth Method:">
+          <StatRow title={t('认证方式：', 'Auth Method:')}>
             <Text color={theme.text.primary}>
               {selectedAuthType.startsWith('oauth')
                 ? userEmail
-                  ? `Signed in with Google (${userEmail})`
-                  : 'Signed in with Google'
+                  ? `${t('通过 Google 登录', 'Signed in with Google')} (${userEmail})`
+                  : t('通过 Google 登录', 'Signed in with Google')
                 : selectedAuthType}
             </Text>
           </StatRow>
         )}
         {showUserIdentity && tier && (
-          <StatRow title="Tier:">
+          <StatRow title={t('账户等级：', 'Tier:')}>
             <Text color={theme.text.primary}>{tier}</Text>
           </StatRow>
         )}
         {showUserIdentity && creditBalance != null && creditBalance >= 0 && (
-          <StatRow title="Google AI Credits:">
+          <StatRow title={t('Google AI 点数：', 'Google AI Credits:')}>
             <Text
               color={
                 creditBalance > 0 ? theme.text.primary : theme.text.secondary
@@ -331,29 +341,29 @@ export const StatsDisplay: React.FC<StatsDisplayProps> = ({
             </Text>
           </StatRow>
         )}
-        <StatRow title="Tool Calls:">
+        <StatRow title={t('工具调用：', 'Tool Calls:')}>
           <Text color={theme.text.primary}>
             {tools.totalCalls} ({' '}
             <Text color={theme.status.success}>✓ {tools.totalSuccess}</Text>{' '}
             <Text color={theme.status.error}>x {tools.totalFail}</Text> )
           </Text>
         </StatRow>
-        <StatRow title="Success Rate:">
+        <StatRow title={t('成功率：', 'Success Rate:')}>
           <Text color={successColor}>{computed.successRate.toFixed(1)}%</Text>
         </StatRow>
         {computed.totalDecisions > 0 && (
-          <StatRow title="User Agreement:">
+          <StatRow title={t('用户同意率：', 'User Agreement:')}>
             <Text color={agreementColor}>
               {computed.agreementRate.toFixed(1)}%{' '}
               <Text color={theme.text.secondary}>
-                ({computed.totalDecisions} reviewed)
+                ({computed.totalDecisions} {t('次审核', 'reviewed')})
               </Text>
             </Text>
           </StatRow>
         )}
         {files &&
           (files.totalLinesAdded > 0 || files.totalLinesRemoved > 0) && (
-            <StatRow title="Code Changes:">
+            <StatRow title={t('代码变更：', 'Code Changes:')}>
               <Text color={theme.text.primary}>
                 <Text color={theme.status.success}>
                   +{files.totalLinesAdded}
@@ -366,16 +376,16 @@ export const StatsDisplay: React.FC<StatsDisplayProps> = ({
           )}
       </Section>
 
-      <Section title="Performance">
-        <StatRow title="Wall Time:">
+      <Section title={t('性能', 'Performance')}>
+        <StatRow title={t('总耗时：', 'Wall Time:')}>
           <Text color={theme.text.primary}>{duration}</Text>
         </StatRow>
-        <StatRow title="Agent Active:">
+        <StatRow title={t('代理活跃时间：', 'Agent Active:')}>
           <Text color={theme.text.primary}>
             {formatDuration(computed.agentActiveTime)}
           </Text>
         </StatRow>
-        <SubStatRow title="API Time:">
+        <SubStatRow title={t('API 耗时：', 'API Time:')}>
           <Text color={theme.text.primary}>
             {formatDuration(computed.totalApiTime)}{' '}
             <Text color={theme.text.secondary}>
@@ -383,7 +393,7 @@ export const StatsDisplay: React.FC<StatsDisplayProps> = ({
             </Text>
           </Text>
         </SubStatRow>
-        <SubStatRow title="Tool Time:">
+        <SubStatRow title={t('工具耗时：', 'Tool Time:')}>
           <Text color={theme.text.primary}>
             {formatDuration(computed.totalToolTime)}{' '}
             <Text color={theme.text.secondary}>
