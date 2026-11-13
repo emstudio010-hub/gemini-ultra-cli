@@ -343,11 +343,22 @@ export function acceptReviewedAgentWorktree(
   reviewedTree?: string,
 ): void {
   if (!readAgentWorktree(root, id)) return;
-  if (!reviewedTree || agentWorktreeTree(root, id) !== reviewedTree)
+  if (!reviewedTree)
     throw new Error(
       'Isolated files changed during or after independent review; preserve them and review the current worktree again.',
     );
-  acceptAgentWorktree(root, id);
+  // Approve the immutable tree actually used to build the patch. A separate
+  // check followed by acceptAgentWorktree could export and approve a newer tree.
+  const state = exportAgentWorktree(root, id);
+  if (
+    state.result !== reviewedTree ||
+    agentWorktreeTree(root, id) !== reviewedTree
+  )
+    throw new Error(
+      'Isolated files changed during or after independent review; preserve them and review the current worktree again.',
+    );
+  state.acceptedTree = reviewedTree;
+  save(root, state);
 }
 /** No force deletion. A changed worktree must be exported and applied first. */
 export function removeAgentWorktree(root: string, id: string): AgentWorktree {
