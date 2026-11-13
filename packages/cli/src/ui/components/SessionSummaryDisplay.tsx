@@ -8,11 +8,9 @@ import type React from 'react';
 import { StatsDisplay } from './StatsDisplay.js';
 import { useSessionStats } from '../contexts/SessionContext.js';
 import { useConfig } from '../contexts/ConfigContext.js';
-import {
-  escapeShellArg,
-  isWindows,
-  type ShellType,
-} from '@google/gemini-cli-core';
+import { isWindows } from '@google/gemini-cli-core';
+import { useLocale } from '../hooks/useLocale.js';
+import { sessionResumeCommands } from '../utils/sessionResume.js';
 
 interface SessionSummaryDisplayProps {
   duration: string;
@@ -23,28 +21,27 @@ export const SessionSummaryDisplay: React.FC<SessionSummaryDisplayProps> = ({
 }) => {
   const { stats } = useSessionStats();
   const config = useConfig();
-  const shell: ShellType = isWindows() ? 'powershell' : 'bash';
+  const chinese = useLocale() === 'zh';
+  const t = (zh: string, en: string) => (chinese ? zh : en);
 
   const worktreeSettings = config.getWorktreeSettings();
 
-  const escapedSessionId = escapeShellArg(stats.sessionId, shell);
-  const footerSessionId =
-    isWindows() &&
-    !escapedSessionId.startsWith('"') &&
-    !escapedSessionId.startsWith("'")
-      ? `"${escapedSessionId}"`
-      : escapedSessionId;
-  let footer = `To resume this session: gemini --resume ${footerSessionId}`;
+  const commands = sessionResumeCommands(
+    stats.sessionId,
+    worktreeSettings?.path,
+    isWindows(),
+  );
+  let footer = `${t('恢复此会话：', 'To resume this session:')} ${commands.resume}`;
 
-  if (worktreeSettings) {
+  if (commands.resumeWorktree && commands.removeWorktree) {
     footer =
-      `To resume work in this worktree: cd ${escapeShellArg(worktreeSettings.path, shell)} && gemini --resume ${footerSessionId}\n` +
-      `To remove manually: git worktree remove ${escapeShellArg(worktreeSettings.path, shell)}`;
+      `${t('恢复此工作树中的会话：', 'To resume work in this worktree:')} ${commands.resumeWorktree}\n` +
+      `${t('手动移除此工作树：', 'To remove manually:')} ${commands.removeWorktree}`;
   }
 
   return (
     <StatsDisplay
-      title="Agent powering down. Goodbye!"
+      title={t('会话已结束，再见！', 'Agent powering down. Goodbye!')}
       duration={duration}
       footer={footer}
     />

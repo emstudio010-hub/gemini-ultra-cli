@@ -5,7 +5,12 @@
  */
 
 import { renderWithProviders } from '../../test-utils/render.js';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { act } from 'react';
+import { waitFor } from '../../test-utils/async.js';
 import { SessionSummaryDisplay } from './SessionSummaryDisplay.js';
 import * as SessionContext from '../contexts/SessionContext.js';
 import { useConfig } from '../contexts/ConfigContext.js';
@@ -14,6 +19,7 @@ import {
   ToolCallDecision,
   isWindows,
   type WorktreeSettings,
+  I18nManager,
 } from '@google/gemini-cli-core';
 
 vi.mock('@google/gemini-cli-core', async (importOriginal) => {
@@ -79,6 +85,7 @@ const renderWithMockedStats = async (
 };
 
 describe('<SessionSummaryDisplay />', () => {
+  let localeRoot: string;
   const emptyMetrics: SessionMetrics = {
     models: {},
     tools: {
@@ -101,8 +108,68 @@ describe('<SessionSummaryDisplay />', () => {
   };
 
   beforeEach(() => {
+    localeRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'ultra-summary-locale-'),
+    );
+    vi.stubEnv(
+      'GEMINI_ULTRA_LOCALE_FILE',
+      path.join(localeRoot, 'locale.json'),
+    );
+    I18nManager.getInstance().setLocale('en');
     isWindowsMock.mockReturnValue(false);
   });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    fs.rmSync(localeRoot, { recursive: true, force: true });
+  });
+
+  it.each([false, true])(
+    'switches farewell and resume instructions in both languages with worktree=%s',
+    async (worktree) => {
+      isWindowsMock.mockReturnValue(true);
+      const state = worktree
+        ? {
+            name: 'fixture',
+            path: 'C:\\fixture\\[session] with space',
+            baseSha: 'fixture-base',
+          }
+        : undefined;
+      const screen = await renderWithMockedStats(
+        emptyMetrics,
+        'fixture-session',
+        state,
+      );
+      try {
+        expect(screen.lastFrame()).toContain('Agent powering down. Goodbye!');
+        await act(async () => I18nManager.getInstance().setLocale('zh'));
+        await waitFor(() =>
+          expect(screen.lastFrame()).toContain('会话已结束，再见！'),
+        );
+        const chinese = screen.lastFrame();
+        expect(chinese).toContain(
+          worktree ? '恢复此工作树中的会话：' : '恢复此会话：',
+        );
+        expect(chinese).toContain('gemini-ultra --resume "fixture-session"');
+        expect(chinese).not.toContain('To resume');
+        if (worktree) {
+          expect(chinese).toContain('Set-Location -LiteralPath');
+          expect(chinese).toContain('手动移除此工作树：');
+          expect(chinese).not.toContain('&&');
+        }
+        await act(async () => I18nManager.getInstance().setLocale('en'));
+        await waitFor(() =>
+          expect(screen.lastFrame()).toContain('Agent powering down. Goodbye!'),
+        );
+        expect(screen.lastFrame()).toContain(
+          worktree
+            ? 'To resume work in this worktree:'
+            : 'To resume this session:',
+        );
+      } finally {
+        screen.unmount();
+      }
+    },
+  );
 
   it('renders the summary display with a title', async () => {
     const metrics: SessionMetrics = {
@@ -146,7 +213,7 @@ describe('<SessionSummaryDisplay />', () => {
       const output = lastFrame();
 
       // Standard UUID characters are NOT wrapped in double quotes on non-Windows.
-      expect(output).toContain('gemini --resume 1234-abcd-5678-efgh');
+      expect(output).toContain('gemini-ultra --resume 1234-abcd-5678-efgh');
       unmount();
     });
 
@@ -159,7 +226,7 @@ describe('<SessionSummaryDisplay />', () => {
       const output = lastFrame();
 
       // escapeShellArg (using shell-quote for bash) will wrap special characters in double quotes.
-      expect(output).toContain('gemini --resume "\'; rm -rf / #"');
+      expect(output).toContain('gemini-ultra --resume "\'; rm -rf / #"');
       unmount();
     });
 
@@ -174,7 +241,7 @@ describe('<SessionSummaryDisplay />', () => {
       const output = lastFrame();
 
       // PowerShell doesn't wrap UUID in quotes by default, but we wrap it in double quotes on Windows.
-      expect(output).toContain('gemini --resume "1234-abcd-5678-efgh"');
+      expect(output).toContain('gemini-ultra --resume "1234-abcd-5678-efgh"');
       unmount();
     });
 
@@ -190,7 +257,7 @@ describe('<SessionSummaryDisplay />', () => {
 
       // PowerShell wraps in single quotes and escapes internal single quotes by doubling them.
       // Since it's already quoted, we don't add redundant double quotes.
-      expect(output).toContain("gemini --resume '''; rm -rf / #'");
+      expect(output).toContain("gemini-ultra --resume '''; rm -rf / #'");
       unmount();
     });
   });
@@ -212,10 +279,10 @@ describe('<SessionSummaryDisplay />', () => {
 
       expect(output).toContain('To resume work in this worktree:');
       expect(output).toContain(
-        'cd /path/to/foo-bar && gemini --resume test-session',
+        'cd -- /path/to/foo-bar && gemini-ultra --resume test-session',
       );
       expect(output).toContain(
-        'To remove manually: git worktree remove /path/to/foo-bar',
+        'To remove manually: git worktree remove -- /path/to/foo-bar',
       );
       unmount();
     });
