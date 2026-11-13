@@ -28,7 +28,7 @@ function isEnter(key: { name?: string; sequence?: string }): boolean {
 }
 
 interface ProviderConfigDialogProps {
-  onClose: () => void;
+  onClose: (activateSelection?: boolean) => void;
 }
 
 type MenuPage =
@@ -80,6 +80,18 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
     mgr.listProviders(),
   );
   const activeProvider = mgr.getActiveProvider();
+  const openedSelection = useRef({
+    providerId: activeProvider?.id,
+    model: mgr.getActiveModel(),
+  });
+  const explicitlyActivated = useRef(false);
+  const closeDialog = () => {
+    const activateSelection =
+      explicitlyActivated.current ||
+      mgr.getActiveProvider()?.id !== openedSelection.current.providerId ||
+      mgr.getActiveModel() !== openedSelection.current.model;
+    onClose(activateSelection);
+  };
 
   const [page, setPage] = useState<MenuPage>(() =>
     providers.length === 0 ? 'edit-basics' : 'main-menu',
@@ -302,7 +314,7 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
           catalogRequest.current?.abort();
           setIsFetching(false);
           if (page === 'main-menu') {
-            onClose();
+            closeDialog();
             return true;
           }
           setPage('main-menu');
@@ -394,7 +406,7 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
               setStatusMessage('');
               setPage('select-reasoning-replay');
             } else if (selected === 'exit') {
-              onClose();
+              closeDialog();
             }
             return true;
           }
@@ -417,6 +429,7 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
             const prov = providers[listCursor];
             if (prov) {
               mgr.setActiveSelection(prov.id, prov.defaultModel);
+              explicitlyActivated.current = true;
               setFocusedProviderId(prov.id);
               setStatusMessage(
                 t(
@@ -668,6 +681,7 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
                 defaultModel: cleanModels[0],
                 setActive: true,
               });
+              explicitlyActivated.current = true;
               setProviders(mgr.listProviders());
               setFocusedProviderId(newP.id);
               setStatusMessage(

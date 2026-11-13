@@ -14,6 +14,7 @@ import {
 } from '@google/gemini-cli-core';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { providerCommand } from './providerCommand.js';
+import { isValidElement } from 'react';
 
 let root: string;
 let file: string;
@@ -41,6 +42,7 @@ function setup() {
       agentContext: { config: { setModel } as unknown as Config },
     },
   });
+  context.ui.removeComponent = vi.fn();
   const mgr = ProviderManager.getInstance();
   for (const name of ['First', 'Second'])
     mgr.upsertProvider({
@@ -56,6 +58,39 @@ const run = (
   context: ReturnType<typeof createMockCommandContext>,
   args: string,
 ) => providerCommand.action!(context, args);
+
+it('keeps a temporary model when closing provider configuration without activating a selection', async () => {
+  const { context, setModel, sessionModel } = setup();
+  setModel('second:session-only');
+  setModel.mockClear();
+  const result = await run(context, '');
+  expect(result?.type).toBe('custom_dialog');
+  if (
+    result?.type !== 'custom_dialog' ||
+    !isValidElement<{ onClose: (activate?: boolean) => void }>(result.component)
+  )
+    throw new Error('Expected provider dialog');
+  result.component.props.onClose(false);
+  expect(setModel).not.toHaveBeenCalled();
+  expect(sessionModel()).toBe('second:session-only');
+  expect(context.ui.reloadCommands).toHaveBeenCalled();
+  expect(context.ui.removeComponent).toHaveBeenCalled();
+});
+
+it('synchronizes an explicitly activated selection even if it matches the saved default', async () => {
+  const { context, setModel, sessionModel } = setup();
+  setModel('second:session-only');
+  setModel.mockClear();
+  const result = await run(context, '');
+  if (
+    result?.type !== 'custom_dialog' ||
+    !isValidElement<{ onClose: (activate?: boolean) => void }>(result.component)
+  )
+    throw new Error('Expected provider dialog');
+  result.component.props.onClose(true);
+  expect(setModel).toHaveBeenCalledWith('first:shared-model');
+  expect(sessionModel()).toBe('first:shared-model');
+});
 
 it('reports a stale save locally and reloads current settings when reopening the provider dialog', async () => {
   const { mgr, context, setModel } = setup();

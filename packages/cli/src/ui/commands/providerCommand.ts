@@ -263,8 +263,9 @@ export const providerCommand: SlashCommand = {
     return {
       type: 'custom_dialog',
       component: React.createElement(ProviderConfigDialog, {
-        onClose: () => {
-          syncSession(context);
+        onClose: (activateSelection?: boolean) => {
+          if (activateSelection) syncSession(context);
+          else context.ui.reloadCommands();
           context.ui.removeComponent();
         },
       }),

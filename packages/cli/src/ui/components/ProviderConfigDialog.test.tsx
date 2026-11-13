@@ -28,6 +28,87 @@ afterEach(() => {
   fs.rmSync(root, { recursive: true, force: true });
 });
 
+it.each([
+  'escape',
+  'exit',
+  'parameter-edit',
+  'activate-same',
+  'model-removal',
+] as const)(
+  'only requests live route synchronization after actual selection intent or change: %s',
+  async (operation) => {
+    const manager = ProviderManager.getInstance();
+    const provider = manager.upsertProvider({
+      name: 'Fixture',
+      baseUrl: 'https://fixture.invalid/v1',
+      apiKey: 'FAKE_DIALOG_ONLY',
+      models: ['primary', 'other'],
+      defaultModel: 'primary',
+    });
+    const before = fs.readFileSync(path.join(root, 'providers.json'));
+    const onClose = vi.fn();
+    const view = await renderWithProviders(
+      <ProviderConfigDialog onClose={onClose} />,
+    );
+    const key = async (sequence: string) =>
+      act(async () => {
+        view.stdin.write(sequence);
+        await view.waitUntilReady();
+      });
+    try {
+      if (operation === 'exit') {
+        await key('\u001b[A');
+        await key('\r');
+      } else if (operation === 'parameter-edit') {
+        for (let index = 0; index < 8; index++) await key('\u001b[B');
+        await key('\r');
+        await waitFor(() => expect(view.lastFrame()).toContain('Output Limit'));
+        await key('2048');
+        await key('\r');
+        await waitFor(() =>
+          expect(view.lastFrame()).toContain('Output limit updated'),
+        );
+        await key('\u001b');
+      } else if (operation === 'activate-same') {
+        await key('\r');
+        await key('\r');
+        await waitFor(() =>
+          expect(view.lastFrame()).toContain('Activated provider'),
+        );
+        await key('\u001b');
+      } else if (operation === 'model-removal') {
+        await key('\u001b[B');
+        await key('\u001b[B');
+        await key('\r');
+        await waitFor(() =>
+          expect(view.lastFrame()).toContain('Model Checklist'),
+        );
+        await key(' ');
+        await key('\r');
+        await waitFor(() => expect(view.lastFrame()).toContain('Models saved'));
+        await key('\u001b');
+      } else await key('\u001b');
+      await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+      expect(onClose).toHaveBeenCalledWith(
+        operation === 'activate-same' || operation === 'model-removal',
+      );
+      if (operation === 'parameter-edit')
+        expect(manager.getProviderById(provider.id)?.maxOutputTokens).toBe(
+          2048,
+        );
+      if (operation === 'escape' || operation === 'exit')
+        expect(fs.readFileSync(path.join(root, 'providers.json'))).toEqual(
+          before,
+        );
+      expect(manager.getActiveModel()).toBe(
+        operation === 'model-removal' ? 'other' : 'primary',
+      );
+    } finally {
+      view.unmount();
+    }
+  },
+);
+
 it.each(['delete', 'save-models', 'refresh-models'] as const)(
   'keeps a same-name provider intact when the open %s target ID has been deleted',
   async (operation) => {

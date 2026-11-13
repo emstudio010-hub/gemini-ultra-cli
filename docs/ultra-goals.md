@@ -1579,3 +1579,8 @@ WI-177/E-407至408/F-134：旧Teamwork/Boost共享工作区最终审核期间文
 ## 2026-11-13 复核范围双语状态
 
 WI-178/E-409至410/F-135：CLI/SwarmBoard原不显示文件范围和历史snapshot性质，Workflow预算耗尽掩盖native-file-check原因。现共享只读显示未声明/[]成员报告/N文件及历史快照，status完整清单、Board前2路径/最近2复核员且指向status，显示原始保存原因；四条固定诊断中文呈现/英文与未知正文保持，Grill-me不附文件审核。3不同定向检查通过（Board双语切换/文件已删除仍显示历史/留言刷新/Esc/状态字节保持、历史Swarm和Workflow查看对照），CLI严格编译/五文件lint格式通过，core未改不重复。Windows编译status handler+真实保存状态/最小context，11次双语查看/18条件通过、5779ms/退出0/0网络模型/0交付文件读取，预算耗尽原因可见、控制路径转义、记录逐次不变。首验证器禁fetch误拦Yoga data WASM，first日志保留后仅允许data:，最终1嵌入式data/0HTTP；非ConPTY/浏览器/当前文件批准或复杂模型质量验收。个人配置/旧E-294及E-364失败SHA/安装83保持，无打包重装版本CI或付费重跑，goal active。详见docs/ultra-review-scope-ui-handoff.md。
+
+
+## 2026-11-13 供应商窗口临时模型保留
+
+WI-179/E-411至412/F-136：原/provider退出无条件syncSession覆盖/model或-m临时模型。现窗口记录打开时保存选择及明确激活意图，关闭布尔仅在显式激活/保存选择变化时同步；无动作Esc/菜单退出/仅参数编辑保持临时模型，显式重选原默认仍激活，目录/直接use/add/Auth初始化原语义保持。首旧及首修后测试缺removeComponent mock，补fixture后用精确旧b067源码受控复现1真实失败并finally恢复当前源字节；最终9不同相关检查、CLI严格编译/四文件lint格式通过。Windows实际源码ConPTY -m临时second→provider查看保持→显式选first→model临时second→输出上限2048保存但不改临时→中文provider查看→model重开/quit，11步13条件通过、17313ms/实际CLI与验证器退出0/0HTTP模型，settings字节保持、保存默认first保持。验证器首启动观测过早/第二行为通过但ConPTY helper句柄未退出留证并按身份清理；finally释放PTY后完整退出，末console-list helper AttachConsole failed诊断保留，不冒称PTY库全链无问题。个人配置/旧E-294及E-364失败SHA/安装83保持，无打包重装版本CI/付费重跑；未覆盖最后供应商删除路由恢复/真实推理/其他平台，goal active。详见docs/ultra-provider-session-close-handoff.md。
