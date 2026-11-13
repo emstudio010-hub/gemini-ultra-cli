@@ -1659,3 +1659,8 @@ WI-193/E-439至440/F-150：CommandService原allSettled等待忽略signal的loade
 ## 2026-11-13 演练台资源按需加载
 
 WI-194/E-441至442/F-151：普通命令/会话连接经drillCockpit静态导入页面/locale/Morphicons三模块，源码共82,063字节。现两个HTTP资源入口才动态import，headers前await/原错误处理保持，UI/访问校验不变。Windows新进程原生module.load观察真实BuiltinCommandLoader56命令，旧开页面前已加载3；修后普通命令/start均0，页面首次仅page+locale/图标首次再bundle，各一次；并发HTTP页面/图标逐字节同before（nonce仅比较时规范化）、JS可解析、headers/token/origin保持，13条件通过、7419ms/退出0/0任务模型外部付费，fixture清理成功。CLI严格编译/单文件lint格式通过；2导入移动直接实际对照，未新建单元或跑全量冒烟。整个验证单次before9215/after7419不作为启动基准，最终bundled资源边界待统一包验收。个人配置/旧E-294与E-364失败SHA/安装83保持，无打包重装版本CI或付费重跑，goal active。详见docs/ultra-cockpit-lazy-handoff.md。
+
+
+## 2026-11-13 技能名称去重
+
+WI-195/E-443至444/F-152：SkillManager原merge/active区分大小写而lookup/disable不区分，旧2复现失败。统一lowercase身份键，胜出原name/body/location/顺序/来源优先级保持；删除既有unused silentConflicts，未改权限或扫描。11实际通过/1旧skipped，core/CLI严格编译/3文件lint格式通过；旧测试读175个人根导致4数量失败，测试隔离额外根后通过，未改个人技能。Windows真实四目录SKILL.md+extension及SkillCommandLoader：trust优先级正确/同名一项、toolArgs保留原WrItEr、完整body/activate/disable/reset正确，10条件通过、5153ms/退出0/0模型外部付费，fixture清理成功。非发现并发清空问题/启动基准/真实模型或最终包验收。个人配置/旧E-294与E-364失败SHA/安装83保持，无打包重装版本CI或付费重跑，goal active。详见docs/ultra-skill-name-identity-handoff.md。

@@ -15,6 +15,11 @@ import { loadSkillsFromDir, type SkillDefinition } from './skillLoader.js';
 import { coreEvents } from '../utils/events.js';
 import { debugLogger } from '../utils/debugLogger.js';
 
+// Discovery fixtures must not scan the operator's additional local skill roots.
+vi.mock('./skillOrchestrator.js', () => ({
+  getMultiSourceSkillDirs: () => [],
+}));
+
 vi.mock('./skillLoader.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./skillLoader.js')>();
   return {

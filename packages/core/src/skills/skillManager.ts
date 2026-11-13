@@ -70,10 +70,20 @@ export class SkillManager {
     }
 
     // 3. User skills
-    const userDirs = [...new Set([Storage.getUserSkillsDir(), Storage.getUserAgentSkillsDir(), ...getMultiSourceSkillDirs()])];
-    const skillGroups = await mapWithConcurrency(userDirs, 3, loadSkillsFromDir);
+    const userDirs = [
+      ...new Set([
+        Storage.getUserSkillsDir(),
+        Storage.getUserAgentSkillsDir(),
+        ...getMultiSourceSkillDirs(),
+      ]),
+    ];
+    const skillGroups = await mapWithConcurrency(
+      userDirs,
+      3,
+      loadSkillsFromDir,
+    );
     // Merge in the original precedence order, regardless of read completion order.
-    for (const skills of skillGroups) this.addSkillsWithPrecedence(skills, true);
+    for (const skills of skillGroups) this.addSkillsWithPrecedence(skills);
 
     // 4. Workspace skills (highest precedence)
     if (!isTrusted) {
@@ -118,16 +128,14 @@ export class SkillManager {
     this.addSkillsWithPrecedence(skills);
   }
 
-  private addSkillsWithPrecedence(
-    newSkills: SkillDefinition[],
-    silentConflicts = false,
-  ): void {
+  private addSkillsWithPrecedence(newSkills: SkillDefinition[]): void {
     const skillMap = new Map<string, SkillDefinition>(
-      this.skills.map((s) => [s.name, s]),
+      this.skills.map((s) => [s.name.toLowerCase(), s]),
     );
 
     for (const newSkill of newSkills) {
-      const existingSkill = skillMap.get(newSkill.name);
+      const identity = newSkill.name.toLowerCase();
+      const existingSkill = skillMap.get(identity);
       if (existingSkill && existingSkill.location !== newSkill.location) {
         if (existingSkill.isBuiltin) {
           debugLogger.warn(
@@ -140,7 +148,7 @@ export class SkillManager {
           );
         }
       }
-      skillMap.set(newSkill.name, newSkill);
+      skillMap.set(identity, newSkill);
     }
 
     this.skills = Array.from(skillMap.values());
@@ -201,13 +209,13 @@ export class SkillManager {
    * Activates a skill by name.
    */
   activateSkill(name: string): void {
-    this.activeSkillNames.add(name);
+    this.activeSkillNames.add(name.toLowerCase());
   }
 
   /**
    * Checks if a skill is active.
    */
   isSkillActive(name: string): boolean {
-    return this.activeSkillNames.has(name);
+    return this.activeSkillNames.has(name.toLowerCase());
   }
 }
