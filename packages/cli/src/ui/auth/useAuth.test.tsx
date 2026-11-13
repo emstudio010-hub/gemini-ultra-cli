@@ -156,6 +156,74 @@ describe('useAuth', () => {
       );
     });
 
+    it.each(['error', 'selection', 'unmount', 'retry'] as const)(
+      'cancels the pending core authentication on %s',
+      async (action) => {
+        const settings = createSettings(AuthType.LOGIN_WITH_GOOGLE);
+        const screen = await renderHook(() =>
+          useAuthCommand(settings, mockConfig),
+        );
+        const old = deferredRefreshAuth;
+        const signal = vi.mocked(mockConfig.refreshAuth).mock.calls[0]?.[4];
+        let aborted = false;
+        signal?.addEventListener('abort', () => {
+          aborted = true;
+        });
+        try {
+          await act(async () => {
+            if (action === 'error')
+              screen.result.current.onAuthError('USER_CANCELLED');
+            else if (action === 'unmount') screen.unmount();
+            else
+              screen.result.current.setAuthState(
+                action === 'retry'
+                  ? AuthState.Unauthenticated
+                  : AuthState.Updating,
+              );
+            // Cancellation must reach core before React effect cleanup.
+            expect(aborted).toBe(true);
+          });
+          expect(signal?.reason).toBeInstanceOf(AuthRefreshSupersededError);
+          if (action === 'retry') {
+            const nextSignal = vi.mocked(mockConfig.refreshAuth).mock
+              .calls[1]?.[4];
+            expect(nextSignal).toBeInstanceOf(AbortSignal);
+            expect(nextSignal).not.toBe(signal);
+            expect(nextSignal?.aborted).toBe(false);
+          }
+          await act(async () => old.reject(new Error('OLD_AUTH_ERROR')));
+          if (action !== 'unmount') {
+            expect(screen.result.current.authError).toBe(
+              action === 'error' ? 'USER_CANCELLED' : null,
+            );
+          }
+        } finally {
+          if (action !== 'unmount') screen.unmount();
+        }
+      },
+    );
+
+    it('does not abort a completed core authentication when the UI leaves waiting', async () => {
+      const settings = createSettings(AuthType.LOGIN_WITH_GOOGLE);
+      const screen = await renderHook(() =>
+        useAuthCommand(settings, mockConfig),
+      );
+      const signal = vi.mocked(mockConfig.refreshAuth).mock.calls[0]?.[4];
+      try {
+        await act(async () => deferredRefreshAuth.resolve());
+        expect(screen.result.current.authState).toBe(AuthState.Authenticated);
+        expect(signal).toBeInstanceOf(AbortSignal);
+        expect(signal?.aborted).toBe(false);
+        await act(async () =>
+          screen.result.current.setAuthState(AuthState.Updating),
+        );
+        expect(signal?.aborted).toBe(false);
+      } finally {
+        screen.unmount();
+      }
+      expect(signal?.aborted).toBe(false);
+    });
+
     it.each(['resolve', 'reject'] as const)(
       'ignores a late auth %s after cancelling before effect cleanup',
       async (outcome) => {
@@ -420,6 +488,10 @@ describe('useAuth', () => {
         });
         expect(config.refreshAuth).toHaveBeenCalledWith(
           AuthType.LOGIN_WITH_GOOGLE,
+          undefined,
+          undefined,
+          undefined,
+          expect.any(AbortSignal),
         );
         expect(screen.result.current.authState).toBe(AuthState.Authenticated);
       } finally {
@@ -479,6 +551,10 @@ describe('useAuth', () => {
         try {
           expect(config.refreshAuth).toHaveBeenCalledWith(
             AuthType.LOGIN_WITH_GOOGLE,
+            undefined,
+            undefined,
+            undefined,
+            expect.any(AbortSignal),
           );
           expect(screen.result.current.authState).toBe(AuthState.Authenticated);
         } finally {
@@ -566,7 +642,13 @@ describe('useAuth', () => {
         deferredRefreshAuth.resolve();
       });
 
-      expect(mockConfig.refreshAuth).toHaveBeenCalledWith(AuthType.USE_GEMINI);
+      expect(mockConfig.refreshAuth).toHaveBeenCalledWith(
+        AuthType.USE_GEMINI,
+        undefined,
+        undefined,
+        undefined,
+        expect.any(AbortSignal),
+      );
       expect(result.current.authState).toBe(AuthState.Authenticated);
       expect(result.current.apiKeyDefaultValue).toBe('stored-key');
     });
@@ -582,7 +664,13 @@ describe('useAuth', () => {
         deferredRefreshAuth.resolve();
       });
 
-      expect(mockConfig.refreshAuth).toHaveBeenCalledWith(AuthType.USE_GEMINI);
+      expect(mockConfig.refreshAuth).toHaveBeenCalledWith(
+        AuthType.USE_GEMINI,
+        undefined,
+        undefined,
+        undefined,
+        expect.any(AbortSignal),
+      );
       expect(result.current.authState).toBe(AuthState.Authenticated);
       expect(result.current.apiKeyDefaultValue).toBe('env-key');
     });
@@ -598,7 +686,13 @@ describe('useAuth', () => {
         deferredRefreshAuth.resolve();
       });
 
-      expect(mockConfig.refreshAuth).toHaveBeenCalledWith(AuthType.USE_GEMINI);
+      expect(mockConfig.refreshAuth).toHaveBeenCalledWith(
+        AuthType.USE_GEMINI,
+        undefined,
+        undefined,
+        undefined,
+        expect.any(AbortSignal),
+      );
       expect(result.current.authState).toBe(AuthState.Authenticated);
       expect(result.current.apiKeyDefaultValue).toBe('env-key');
     });
@@ -636,6 +730,10 @@ describe('useAuth', () => {
 
       expect(mockConfig.refreshAuth).toHaveBeenCalledWith(
         AuthType.LOGIN_WITH_GOOGLE,
+        undefined,
+        undefined,
+        undefined,
+        expect.any(AbortSignal),
       );
       expect(result.current.authState).toBe(AuthState.Authenticated);
       expect(result.current.authError).toBeNull();

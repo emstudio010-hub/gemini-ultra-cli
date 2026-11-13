@@ -54,7 +54,12 @@ export const useAuthCommand = (
   initialAuthError: string | null = null,
   initialAccountSuspensionInfo: AccountSuspensionInfo | null = null,
 ) => {
-  const lifecycle = useRef({
+  const lifecycle = useRef<{
+    authAttempt: number;
+    keyRead: number;
+    mounted: boolean;
+    controller?: AbortController;
+  }>({
     authAttempt: 0,
     keyRead: 0,
     mounted: true,
@@ -72,14 +77,21 @@ export const useAuthCommand = (
     string | undefined
   >(undefined);
 
+  const cancelPendingAuth = useCallback(() => {
+    const controller = lifecycle.controller;
+    lifecycle.controller = undefined;
+    controller?.abort(new AuthRefreshSupersededError());
+  }, [lifecycle]);
+
   useEffect(() => {
     lifecycle.mounted = true;
     return () => {
       lifecycle.mounted = false;
       lifecycle.authAttempt++;
       lifecycle.keyRead++;
+      cancelPendingAuth();
     };
-  }, [lifecycle]);
+  }, [lifecycle, cancelPendingAuth]);
 
   const setAuthState = useCallback(
     (value: SetStateAction<AuthState>) => {
@@ -87,12 +99,13 @@ export const useAuthCommand = (
       // the old effect after a cancel, timeout, or explicit auth selection.
       lifecycle.authAttempt++;
       lifecycle.keyRead++;
+      cancelPendingAuth();
       if (lifecycle.mounted) {
         setAuthRevision((revision) => revision + 1);
         setAuthStateValue(value);
       }
     },
-    [lifecycle],
+    [lifecycle, cancelPendingAuth],
   );
 
   const onAuthError = useCallback(
@@ -141,6 +154,8 @@ export const useAuthCommand = (
   useEffect(() => {
     if (authState !== AuthState.Unauthenticated) return;
     const attempt = ++lifecycle.authAttempt;
+    const controller = new AbortController();
+    lifecycle.controller = controller;
     let active = true;
     const authType = settings.merged.security.auth.selectedType;
     const isCurrent = () =>
@@ -210,7 +225,21 @@ export const useAuthCommand = (
           mayReuseReadyAuth &&
           config.isAuthReady?.() === true &&
           config.getContentGeneratorConfig()?.authType === authType;
-        if (!reuseReadyAuth) await config.refreshAuth(authType);
+        try {
+          if (!reuseReadyAuth)
+            await config.refreshAuth(
+              authType,
+              undefined,
+              undefined,
+              undefined,
+              controller.signal,
+            );
+        } finally {
+          // A settled authentication owns its ongoing admin polling in core.
+          // Leaving the UI's waiting state must only cancel pending work.
+          if (lifecycle.controller === controller)
+            lifecycle.controller = undefined;
+        }
         if (!isCurrent()) return;
 
         debugLogger.log(`Authenticated via "${authType}".`);
@@ -246,6 +275,7 @@ export const useAuthCommand = (
     return () => {
       active = false;
       if (lifecycle.authAttempt === attempt) lifecycle.authAttempt++;
+      if (lifecycle.controller === controller) cancelPendingAuth();
     };
   }, [
     settings,
@@ -258,6 +288,7 @@ export const useAuthCommand = (
     reloadApiKey,
     onKeyLoadError,
     lifecycle,
+    cancelPendingAuth,
   ]);
 
   return {
