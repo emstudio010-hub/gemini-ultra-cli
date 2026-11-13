@@ -488,7 +488,7 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
    * Attempts final submission within one grace period. A rejected submission
    * may be repaired once after a protocol stop, without executing more work.
    *
-   * @returns The final result string if recovery was successful, or `null` if it failed.
+   * @returns A completed submission or explicitly unaccepted draft, or `null`.
    */
   private async executeFinalWarningTurn(
     chat: GeminiChat,
@@ -499,7 +499,7 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
       | AgentTerminateMode.ERROR_NO_COMPLETE_TASK_CALL,
     externalSignal: AbortSignal, // The original signal passed to run()
     onWaitingForConfirmation?: (waiting: boolean) => void,
-  ): Promise<string | null> {
+  ): Promise<{ text: string; completed: boolean } | null> {
     this.emitActivity('THOUGHT_CHUNK', {
       text: `Execution limit reached (${reason}). Attempting one final recovery turn with a grace period.`,
     });
@@ -568,7 +568,10 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
           text: 'Final result captured during grace period.',
         });
         success = true;
-        return turnResult.finalResult ?? 'Task completed during grace period.';
+        return {
+          text: turnResult.finalResult ?? 'Task completed during grace period.',
+          completed: true,
+        };
       }
 
       // Any other outcome (continue, error, non-GOAL stop) is a failure.
@@ -577,7 +580,9 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
         context: 'recovery_turn',
         errorType: SubagentActivityErrorType.GENERIC,
       });
-      return null;
+      return turnResult.status === 'stop' && turnResult.finalResult
+        ? { text: turnResult.finalResult, completed: false }
+        : null;
     } catch (error) {
       // This catch block will likely catch the 'Grace period timed out' error.
       this.emitActivity('ERROR', {
@@ -837,15 +842,17 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
           finalResult = 'Agent execution was cancelled.';
         } else if (recoveryResult !== null) {
           if (
-            terminateReason === AgentTerminateMode.ERROR_NO_COMPLETE_TASK_CALL
+            terminateReason ===
+              AgentTerminateMode.ERROR_NO_COMPLETE_TASK_CALL &&
+            recoveryResult.completed
           ) {
             // A missing completion call can be corrected without hitting a limit.
             terminateReason = AgentTerminateMode.GOAL;
-            finalResult = recoveryResult;
+            finalResult = recoveryResult.text;
           } else {
             // A final summary preserves useful findings, but cannot undo the
             // time/turn limit that interrupted the investigation.
-            finalResult = `Agent stopped (${terminateReason}). Partial result:\n${recoveryResult}`;
+            finalResult = `Agent stopped (${terminateReason}). Partial result:\n${recoveryResult.text}`;
             this.saveSessionSummary(chat, finalResult);
           }
         } else {
@@ -927,7 +934,7 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
               terminateReason = AgentTerminateMode.ABORTED;
               finalResult = 'Agent execution was cancelled.';
             } else {
-              finalResult = `Agent stopped (${terminateReason}). Partial result:\n${recoveryResult}`;
+              finalResult = `Agent stopped (${terminateReason}). Partial result:\n${recoveryResult?.text}`;
               this.saveSessionSummary(chat, finalResult);
             }
 

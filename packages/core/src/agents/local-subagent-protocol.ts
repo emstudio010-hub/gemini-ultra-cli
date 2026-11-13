@@ -237,6 +237,12 @@ class LocalSubagentProtocol implements AgentProtocol {
       signal.aborted
     ) {
       this._finishStream('aborted');
+      this._resultResolve({
+        ...output,
+        result: '',
+        terminate_reason: AgentTerminateMode.ABORTED,
+      });
+      return;
     } else {
       this._finishStream(mapTerminateMode(output.terminate_reason));
     }

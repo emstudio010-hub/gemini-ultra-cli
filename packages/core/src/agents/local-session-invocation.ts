@@ -110,6 +110,7 @@ export class LocalSessionInvocation extends BaseToolInvocation<
    */
   async execute(options: ExecuteOptions): Promise<ToolResult> {
     const { abortSignal: signal, updateOutput } = options;
+    signal.throwIfAborted();
     let recentActivity: SubagentActivityItem[] = [];
 
     // Raw SubagentActivityEvent handler — preserves all existing progress display logic.
@@ -318,6 +319,7 @@ export class LocalSessionInvocation extends BaseToolInvocation<
       });
 
       const output = await session.getResult();
+      signal.throwIfAborted();
 
       if (output.terminate_reason === AgentTerminateMode.ABORTED) {
         const progress: SubagentProgress = {

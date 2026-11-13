@@ -440,6 +440,28 @@ describe('LocalSubagentSession (protocol)', () => {
   // ---------------------------------------------------------------------------
 
   describe('getResult()', () => {
+    it('returns an aborted result instead of a late GOAL when cancellation wins', async () => {
+      const session = new LocalSubagentSession(
+        testDefinition,
+        mockContext,
+        mockMessageBus,
+      );
+      mockExecutorInstance.run.mockImplementationOnce(async () => {
+        await session.abort();
+        return { ...GOAL_OUTPUT, turn_count: 1, duration_ms: 12 };
+      });
+      await session.send({
+        message: { content: [{ type: 'text', text: 'cancel late result' }] },
+      });
+      const result = await session.getResult();
+      expect(result).toMatchObject({
+        result: '',
+        terminate_reason: AgentTerminateMode.ABORTED,
+        turn_count: 1,
+        duration_ms: 12,
+      });
+    });
+
     it('resolves with OutputObject on GOAL termination', async () => {
       const session = new LocalSubagentSession(
         testDefinition,

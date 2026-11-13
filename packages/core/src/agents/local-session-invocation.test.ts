@@ -15,6 +15,7 @@ import {
   type LocalAgentDefinition,
   type AgentInputs,
   type SubagentActivityEvent,
+  isSubagentProgress,
 } from './types.js';
 import { LocalSessionInvocation } from './local-session-invocation.js';
 import { LocalSubagentSession } from './local-subagent-protocol.js';
@@ -23,6 +24,7 @@ import { createMockMessageBus } from '../test-utils/mock-message-bus.js';
 import { MessageBusType } from '../confirmation-bus/types.js';
 import type { AgentLoopContext } from '../config/agent-loop-context.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
+import type { ToolLiveOutput } from '../tools/tools.js';
 
 vi.mock('./local-subagent-protocol.js');
 
@@ -572,6 +574,54 @@ describe('LocalSessionInvocation', () => {
           status: 'error',
         }),
       );
+    });
+
+    it('refuses a pre-cancelled session without constructing or starting it', async () => {
+      setupMockSession({});
+      const reason = new Error('Already cancelled');
+      const invocation = new LocalSessionInvocation(
+        testDefinition,
+        mockContext,
+        { query: 'do not start' },
+        mockMessageBus,
+      );
+      await expect(
+        invocation.execute({ abortSignal: AbortSignal.abort(reason) }),
+      ).rejects.toBe(reason);
+      expect(MockLocalSubagentSession).not.toHaveBeenCalled();
+    });
+
+    it('rejects a late successful session result with the original cancellation reason', async () => {
+      const session = setupMockSession({});
+      const controller = new AbortController();
+      const reason = new Error('Cancelled before result delivery');
+      session.getResult.mockImplementationOnce(async () => {
+        controller.abort(reason);
+        return {
+          result: 'LATE_SUCCESS',
+          terminate_reason: AgentTerminateMode.GOAL,
+        };
+      });
+      const updateOutput = vi.fn<(progress: ToolLiveOutput) => void>();
+      const invocation = new LocalSessionInvocation(
+        testDefinition,
+        mockContext,
+        { query: 'cancel result' },
+        mockMessageBus,
+      );
+      await expect(
+        invocation.execute({ abortSignal: controller.signal, updateOutput }),
+      ).rejects.toBe(reason);
+      expect(updateOutput).toHaveBeenLastCalledWith(
+        expect.objectContaining({ state: SubagentState.CANCELLED }),
+      );
+      expect(
+        updateOutput.mock.calls.some(
+          ([progress]) =>
+            isSubagentProgress(progress) &&
+            progress.state === SubagentState.COMPLETED,
+        ),
+      ).toBe(false);
     });
 
     it('preserves cancellation with a plain Error signal reason', async () => {

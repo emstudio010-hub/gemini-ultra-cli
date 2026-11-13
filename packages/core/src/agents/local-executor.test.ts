@@ -701,6 +701,74 @@ describe('LocalAgentExecutor', () => {
     });
   });
 
+  describe('incomplete recovery drafts', () => {
+    it.each(['turn-limit', 'missing-completion'] as const)(
+      'retains an interrupted recovery draft without promoting %s to GOAL or requesting another turn',
+      async (reason) => {
+        const executor = await LocalAgentExecutor.create(
+          createTestDefinition([LS_TOOL_NAME], {
+            maxTurns: reason === 'turn-limit' ? 1 : 5,
+          }),
+          mockConfig,
+        );
+        mockModelResponse(
+          reason === 'turn-limit'
+            ? [{ id: 'work', name: LS_TOOL_NAME, args: { path: '.' } }]
+            : [],
+          undefined,
+          'Initial visible answer',
+        );
+        if (reason === 'turn-limit') {
+          mockScheduleAgentTools.mockImplementationOnce(
+            async (_config, requests) =>
+              requests.map((request: ToolCallRequestInfo) => ({
+                status: 'success',
+                request,
+                response: {
+                  resultDisplay: 'Existing work result',
+                  responseParts: [
+                    {
+                      functionResponse: {
+                        name: request.name,
+                        id: request.callId,
+                        response: { output: 'Read complete' },
+                      },
+                    },
+                  ],
+                },
+              })),
+          );
+        }
+        mockSendMessageStream.mockResolvedValueOnce({
+          async *[Symbol.asyncIterator]() {
+            yield {
+              type: StreamEventType.CHUNK,
+              value: createMockResponseChunk([
+                { text: 'RECOVERY_VISIBLE_DRAFT' },
+              ]),
+            };
+            throw new Error('Recovery response output token limit reached');
+          },
+        });
+        const output = await executor.run(
+          { goal: 'Keep the unaccepted recovery output' },
+          signal,
+        );
+        expect(output.terminate_reason).toBe(
+          reason === 'turn-limit'
+            ? AgentTerminateMode.MAX_TURNS
+            : AgentTerminateMode.ERROR_NO_COMPLETE_TASK_CALL,
+        );
+        expect(output.result).toContain('RECOVERY_VISIBLE_DRAFT');
+        expect(output.result).toContain('Unaccepted partial visible response');
+        expect(output.result).toContain(
+          'Recovery response output token limit reached',
+        );
+        expect(mockSendMessageStream).toHaveBeenCalledTimes(2);
+      },
+    );
+  });
+
   describe('create (Initialization and Validation)', () => {
     it('should explicitly map execution context properties to prevent unintended propagation', async () => {
       const definition = createTestDefinition([LS_TOOL_NAME]);
