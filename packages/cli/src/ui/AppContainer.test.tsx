@@ -612,6 +612,25 @@ describe('AppContainer State Management', () => {
   });
 
   describe('State Initialization', () => {
+    it('routes manual API key submissions through the shared auth lifecycle', async () => {
+      const submit = vi.fn().mockResolvedValue(undefined);
+      mockedUseAuthCommand.mockReturnValue({
+        authState: 'awaiting_api_key_input',
+        setAuthState: vi.fn(),
+        authError: null,
+        onAuthError: vi.fn(),
+        handleApiKeySubmit: submit,
+      });
+      const { unmount } = await act(async () => renderAppContainer());
+      try {
+        expect(capturedUIActions.handleApiKeySubmit).toBe(submit);
+        await capturedUIActions.handleApiKeySubmit('FAKE_FIXTURE_KEY');
+        expect(submit).toHaveBeenCalledExactlyOnceWith('FAKE_FIXTURE_KEY');
+      } finally {
+        unmount();
+      }
+    });
+
     it('calls validateAuthMethod and onAuthError if validation fails', async () => {
       const mockOnAuthError = vi.fn();
       mockedUseAuthCommand.mockReturnValue({

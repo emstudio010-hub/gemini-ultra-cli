@@ -19,6 +19,7 @@ import type { LoadedSettings } from '../../config/settings.js';
 
 // Mock dependencies
 const mockLoadApiKey = vi.fn();
+const mockSaveApiKey = vi.fn();
 const mockValidateAuthMethod = vi.fn();
 
 vi.mock('@google/gemini-cli-core', async (importOriginal) => {
@@ -27,6 +28,7 @@ vi.mock('@google/gemini-cli-core', async (importOriginal) => {
   return {
     ...actual,
     loadApiKey: () => mockLoadApiKey(),
+    saveApiKey: (key: string) => mockSaveApiKey(key),
   };
 });
 
@@ -153,6 +155,225 @@ describe('useAuth', () => {
           new Promise((resolve, reject) => {
             deferredRefreshAuth = { resolve, reject };
           }),
+      );
+    });
+
+    describe('manual API key submission', () => {
+      const openKeyInput = async () => {
+        mockLoadApiKey.mockResolvedValue(null);
+        const settings = createSettings(AuthType.USE_GEMINI);
+        const screen = await renderHook(() =>
+          useAuthCommand(settings, mockConfig),
+        );
+        expect(screen.result.current.authState).toBe(
+          AuthState.AwaitingApiKeyInput,
+        );
+        mockLoadApiKey.mockClear();
+        return screen;
+      };
+
+      it.each(['resolve', 'reject'] as const)(
+        'does not start auth after cancelled key save %s',
+        async (outcome) => {
+          let release!: () => void;
+          mockSaveApiKey.mockImplementationOnce(
+            () =>
+              new Promise<void>((resolve, reject) => {
+                release = () =>
+                  outcome === 'resolve'
+                    ? resolve()
+                    : reject(new Error('FAKE_PRIVATE_DETAIL'));
+              }),
+          );
+          const screen = await openKeyInput();
+          try {
+            let pending!: Promise<void>;
+            await act(async () => {
+              pending =
+                screen.result.current.handleApiKeySubmit('FAKE_OLD_KEY');
+              await Promise.resolve();
+            });
+            expect(mockSaveApiKey).toHaveBeenCalledOnce();
+            await act(async () => {
+              screen.result.current.setAuthState(AuthState.Updating);
+              release();
+              await pending;
+            });
+            expect(mockLoadApiKey).not.toHaveBeenCalled();
+            expect(mockConfig.refreshAuth).not.toHaveBeenCalled();
+            expect(screen.result.current.authState).toBe(AuthState.Updating);
+            expect(screen.result.current.authError).toBeNull();
+          } finally {
+            screen.unmount();
+          }
+        },
+      );
+
+      it('does not start auth or display a key after a cancelled key reload', async () => {
+        const screen = await openKeyInput();
+        let release!: () => void;
+        mockLoadApiKey.mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              release = () => resolve('FAKE_LATE_KEY');
+            }),
+        );
+        try {
+          let pending!: Promise<void>;
+          await act(async () => {
+            pending = screen.result.current.handleApiKeySubmit('FAKE_KEY');
+            await Promise.resolve();
+            await Promise.resolve();
+          });
+          expect(mockLoadApiKey).toHaveBeenCalledOnce();
+          await act(async () => {
+            screen.result.current.setAuthState(AuthState.Updating);
+            release();
+            await pending;
+          });
+          expect(mockConfig.refreshAuth).not.toHaveBeenCalled();
+          expect(screen.result.current.apiKeyDefaultValue).not.toBe(
+            'FAKE_LATE_KEY',
+          );
+          expect(screen.result.current.authError).toBeNull();
+        } finally {
+          screen.unmount();
+        }
+      });
+
+      it('serializes saves and only authenticates the latest submitted key', async () => {
+        const screen = await openKeyInput();
+        let release!: () => void;
+        const saved: string[] = [];
+        mockSaveApiKey.mockImplementationOnce(
+          (key: string) =>
+            new Promise<void>((resolve) => {
+              release = () => {
+                saved.push(key);
+                resolve();
+              };
+            }),
+        );
+        mockSaveApiKey.mockImplementationOnce(async (key: string) => {
+          saved.push(key);
+        });
+        mockLoadApiKey.mockImplementation(async () => saved.at(-1) ?? null);
+        vi.mocked(mockConfig.refreshAuth).mockResolvedValue(undefined);
+        try {
+          let old!: Promise<void>;
+          let latest!: Promise<void>;
+          await act(async () => {
+            old = screen.result.current.handleApiKeySubmit('FAKE_OLD');
+            await Promise.resolve();
+            latest = screen.result.current.handleApiKeySubmit('FAKE_NEW');
+            await Promise.resolve();
+          });
+          expect(mockSaveApiKey).toHaveBeenCalledTimes(1);
+          await act(async () => {
+            release();
+            await Promise.all([old, latest]);
+          });
+          expect(saved).toEqual(['FAKE_OLD', 'FAKE_NEW']);
+          expect(mockConfig.refreshAuth).toHaveBeenCalledExactlyOnceWith(
+            AuthType.USE_GEMINI,
+            undefined,
+            undefined,
+            undefined,
+            expect.any(AbortSignal),
+          );
+          expect(screen.result.current.authState).toBe(AuthState.Authenticated);
+          expect(screen.result.current.apiKeyDefaultValue).toBe('FAKE_NEW');
+          expect(
+            vi.mocked(mockConfig.refreshAuth).mock.calls[0]?.[4]?.aborted,
+          ).toBe(false);
+        } finally {
+          screen.unmount();
+        }
+      });
+
+      it('skips a queued save after cancellation and ignores its pending predecessor', async () => {
+        const screen = await openKeyInput();
+        let release!: () => void;
+        mockSaveApiKey.mockImplementationOnce(
+          () =>
+            new Promise<void>((resolve) => {
+              release = resolve;
+            }),
+        );
+        try {
+          let old!: Promise<void>;
+          let queued!: Promise<void>;
+          await act(async () => {
+            old = screen.result.current.handleApiKeySubmit('FAKE_OLD');
+            await Promise.resolve();
+            queued = screen.result.current.handleApiKeySubmit('FAKE_QUEUED');
+            screen.result.current.setAuthState(AuthState.Updating);
+            release();
+            await Promise.all([old, queued]);
+          });
+          expect(mockSaveApiKey).toHaveBeenCalledExactlyOnceWith('FAKE_OLD');
+          expect(mockLoadApiKey).not.toHaveBeenCalled();
+          expect(mockConfig.refreshAuth).not.toHaveBeenCalled();
+        } finally {
+          screen.unmount();
+        }
+      });
+
+      it.each(['cancel', 'unmount'] as const)(
+        'cancels manual core auth on %s without accepting its late completion',
+        async (action) => {
+          const screen = await openKeyInput();
+          try {
+            let pending!: Promise<void>;
+            await act(async () => {
+              pending = screen.result.current.handleApiKeySubmit('FAKE_KEY');
+              await Promise.resolve();
+              await Promise.resolve();
+            });
+            const signal = vi.mocked(mockConfig.refreshAuth).mock.calls[0]?.[4];
+            expect(signal).toBeInstanceOf(AbortSignal);
+            await act(async () => {
+              if (action === 'unmount') screen.unmount();
+              else screen.result.current.setAuthState(AuthState.Updating);
+              expect(signal?.aborted).toBe(true);
+              deferredRefreshAuth.resolve();
+              await pending;
+            });
+            if (action === 'cancel')
+              expect(screen.result.current.authState).toBe(AuthState.Updating);
+          } finally {
+            screen.unmount();
+          }
+        },
+      );
+
+      it.each(['save', 'auth'] as const)(
+        'reports %s failure without revealing private details',
+        async (stage) => {
+          const screen = await openKeyInput();
+          if (stage === 'save')
+            mockSaveApiKey.mockRejectedValueOnce(
+              new Error('FAKE_PRIVATE_DETAIL'),
+            );
+          else
+            vi.mocked(mockConfig.refreshAuth).mockRejectedValueOnce(
+              new Error('FAKE_PRIVATE_DETAIL'),
+            );
+          try {
+            await act(async () =>
+              screen.result.current.handleApiKeySubmit('FAKE_PRIVATE_KEY'),
+            );
+            expect(screen.result.current.authState).toBe(AuthState.Updating);
+            expect(screen.result.current.authError).toContain(
+              stage === 'save' ? 'save or read' : 'sign-in did not complete',
+            );
+            expect(screen.result.current.authError).not.toContain(
+              'FAKE_PRIVATE',
+            );
+          } finally {
+            screen.unmount();
+          }
+        },
       );
     });
 

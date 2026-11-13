@@ -16,6 +16,7 @@ import {
   AuthType,
   type Config,
   loadApiKey,
+  saveApiKey,
   debugLogger,
   isAccountSuspendedError,
   ProjectIdRequiredError,
@@ -65,6 +66,7 @@ export const useAuthCommand = (
     mounted: true,
   }).current;
   const mayReuseInitialAuth = useRef(!initialAuthError);
+  const keySaveQueue = useRef<Promise<void>>(Promise.resolve());
   const [authState, setAuthStateValue] = useState<AuthState>(
     initialAuthError ? AuthState.Updating : AuthState.Unauthenticated,
   );
@@ -138,6 +140,85 @@ export const useAuthCommand = (
       return key;
     },
     [lifecycle],
+  );
+
+  const handleApiKeySubmit = useCallback(
+    async (apiKey: string) => {
+      if (!lifecycle.mounted || authState !== AuthState.AwaitingApiKeyInput)
+        return;
+      const attempt = ++lifecycle.authAttempt;
+      lifecycle.keyRead++;
+      cancelPendingAuth();
+      const controller = new AbortController();
+      lifecycle.controller = controller;
+      const isCurrent = () =>
+        lifecycle.mounted &&
+        lifecycle.authAttempt === attempt &&
+        !controller.signal.aborted &&
+        settings.merged.security.auth.selectedType === AuthType.USE_GEMINI;
+      let authenticating = false;
+      try {
+        if (!isCurrent()) return;
+        setAuthError(null);
+        if (!apiKey.trim()) {
+          onAuthError(
+            I18nManager.getInstance().t(
+              'API 密钥不能为空或仅包含空白字符。',
+              'API key cannot be empty or whitespace only.',
+            ),
+          );
+          return;
+        }
+        // Credential storage cannot cancel an in-flight write. Serialize this
+        // UI's writes so an older completion cannot overwrite a newer key.
+        const save = keySaveQueue.current.then(async () => {
+          if (isCurrent()) await saveApiKey(apiKey);
+        });
+        keySaveQueue.current = save.catch(() => undefined);
+        await save;
+        if (!isCurrent()) return;
+        await reloadApiKey(isCurrent);
+        if (!isCurrent()) return;
+        authenticating = true;
+        await config.refreshAuth(
+          AuthType.USE_GEMINI,
+          undefined,
+          undefined,
+          undefined,
+          controller.signal,
+        );
+        if (!isCurrent()) return;
+        // Core owns successful authentication and its subsequent polling.
+        lifecycle.controller = undefined;
+        setAuthState(AuthState.Authenticated);
+      } catch (error) {
+        if (!isCurrent() || error instanceof AuthRefreshSupersededError) return;
+        onAuthError(
+          authenticating
+            ? I18nManager.getInstance().t(
+                '密钥已保存，但认证未完成。请检查密钥、网络或选择其他认证方式。',
+                'The key was saved, but sign-in did not complete. Check the key and network or choose another authentication method.',
+              )
+            : I18nManager.getInstance().t(
+                '无法保存或读取 API 密钥。请重试或选择其他认证方式。',
+                'Could not save or read the API key. Try again or choose another authentication method.',
+              ),
+        );
+      } finally {
+        if (lifecycle.controller === controller)
+          lifecycle.controller = undefined;
+      }
+    },
+    [
+      lifecycle,
+      authState,
+      settings,
+      cancelPendingAuth,
+      onAuthError,
+      reloadApiKey,
+      config,
+      setAuthState,
+    ],
   );
 
   useEffect(() => {
@@ -298,6 +379,7 @@ export const useAuthCommand = (
     onAuthError,
     apiKeyDefaultValue,
     reloadApiKey,
+    handleApiKeySubmit,
     accountSuspensionInfo,
     setAccountSuspensionInfo,
   };

@@ -14,6 +14,8 @@ import {
   type TextBuffer,
 } from '../components/shared/text-buffer.js';
 import { clearApiKey } from '@google/gemini-cli-core';
+import { act } from 'react';
+import { KeypressPriority } from '../contexts/KeypressContext.js';
 
 // Mocks
 vi.mock('@google/gemini-cli-core', async (importOriginal) => {
@@ -83,6 +85,49 @@ describe('ApiAuthDialog', () => {
     );
     expect(lastFrame()).toMatchSnapshot();
     unmount();
+  });
+
+  it('preserves typed input when a saved default arrives later', async () => {
+    const screen = await renderWithProviders(
+      <ApiAuthDialog onSubmit={onSubmit} onCancel={onCancel} />,
+    );
+    try {
+      mockBuffer.text = 'FAKE_USER_INPUT';
+      await act(async () =>
+        screen.rerender(
+          <ApiAuthDialog
+            onSubmit={onSubmit}
+            onCancel={onCancel}
+            defaultValue="FAKE_LATE_DEFAULT"
+          />,
+        ),
+      );
+      expect(mockBuffer.setText).not.toHaveBeenCalledWith('FAKE_LATE_DEFAULT');
+      expect(mockBuffer.text).toBe('FAKE_USER_INPUT');
+    } finally {
+      screen.unmount();
+    }
+  });
+
+  it('fills an untouched input when its saved default arrives later', async () => {
+    const screen = await renderWithProviders(
+      <ApiAuthDialog onSubmit={onSubmit} onCancel={onCancel} />,
+    );
+    try {
+      await act(async () =>
+        screen.rerender(
+          <ApiAuthDialog
+            onSubmit={onSubmit}
+            onCancel={onCancel}
+            defaultValue="FAKE_LATE_DEFAULT"
+          />,
+        ),
+      );
+      expect(mockBuffer.setText).toHaveBeenCalledWith('FAKE_LATE_DEFAULT');
+      expect(mockBuffer.text).toBe('FAKE_LATE_DEFAULT');
+    } finally {
+      screen.unmount();
+    }
   });
 
   it('renders with a defaultValue', async () => {
@@ -157,6 +202,11 @@ describe('ApiAuthDialog', () => {
     // Call 0 is ApiAuthDialog (isActive: true)
     // Call 1 is TextInput (isActive: true, priority: true)
     const keypressHandler = mockedUseKeypress.mock.calls[0][0];
+
+    expect(mockedUseKeypress.mock.calls[0][1]).toEqual({
+      isActive: true,
+      priority: KeypressPriority.Critical,
+    });
 
     keypressHandler({
       name: 'c',

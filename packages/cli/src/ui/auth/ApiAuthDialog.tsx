@@ -15,6 +15,7 @@ import { clearApiKey, debugLogger } from '@google/gemini-cli-core';
 import { useKeypress } from '../hooks/useKeypress.js';
 import { Command } from '../key/keyMatchers.js';
 import { useKeyMatchers } from '../hooks/useKeyMatchers.js';
+import { KeypressPriority } from '../contexts/KeypressContext.js';
 
 interface ApiAuthDialogProps {
   onSubmit: (apiKey: string) => void;
@@ -56,11 +57,23 @@ export function ApiAuthDialog({
     singleLine: true,
   });
 
+  const appliedDefault = useRef(defaultValue);
+  const edited = useRef(false);
+  useEffect(() => {
+    if (buffer.text !== appliedDefault.current) edited.current = true;
+    if (defaultValue !== appliedDefault.current) {
+      appliedDefault.current = defaultValue;
+      if (!edited.current) buffer.setText(defaultValue);
+    }
+  }, [buffer, defaultValue]);
+
   const handleSubmit = (value: string) => {
+    edited.current = true;
     onSubmit(value);
   };
 
   const handleClear = () => {
+    edited.current = true;
     pendingPromise.current?.cancel();
 
     let isCancelled = false;
@@ -94,7 +107,7 @@ export function ApiAuthDialog({
       }
       return false;
     },
-    { isActive: true },
+    { isActive: true, priority: KeypressPriority.Critical },
   );
 
   return (

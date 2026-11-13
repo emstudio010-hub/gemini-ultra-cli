@@ -66,7 +66,6 @@ import {
   type ResumedSessionData,
   recordExitFail,
   ShellExecutionService,
-  saveApiKey,
   debugLogger,
   isValidEditorType,
   coreEvents,
@@ -948,7 +947,7 @@ export const AppContainer = (props: AppContainerProps) => {
     authError,
     onAuthError,
     apiKeyDefaultValue,
-    reloadApiKey,
+    handleApiKeySubmit,
     accountSuspensionInfo,
     setAccountSuspensionInfo,
   } = useAuthCommand(
@@ -1083,29 +1082,6 @@ Logging in with Google... Restarting Gemini CLI to continue.
       setAuthState(AuthState.Authenticated);
     },
     [settings, config, setAuthState, onAuthError, setAuthContext],
-  );
-
-  const handleApiKeySubmit = useCallback(
-    async (apiKey: string) => {
-      try {
-        onAuthError(null);
-        if (!apiKey.trim()) {
-          onAuthError('API key cannot be empty or whitespace only.');
-          return;
-        }
-
-        await saveApiKey(apiKey);
-        await reloadApiKey();
-        await config.refreshAuth(AuthType.USE_GEMINI);
-        setAuthState(AuthState.Authenticated);
-      } catch (e) {
-        if (e instanceof AuthRefreshSupersededError) return;
-        onAuthError(
-          `Failed to save API key: ${e instanceof Error ? e.message : String(e)}`,
-        );
-      }
-    },
-    [setAuthState, onAuthError, reloadApiKey, config],
   );
 
   const handleApiKeyCancel = useCallback(() => {
