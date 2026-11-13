@@ -1599,3 +1599,8 @@ WI-181/E-415至416/F-138：新建供应商协议确认原自动拉目录、删�
 ## 2026-11-13 终止帧草稿保留
 
 WI-182/E-417至418/F-139：Chat流在delta.content与finish_reason=length同帧时先抛错丢最后正文，旧2复现失败/1推理对照过。现length分支只yield该帧可见正文后抛原错，不处理推理/工具、不标完成；原执行器以未验收草稿保留。最终4不同相关检查、core/CLI严格编译/两文件lint格式通过。Windows真实Config/gateway/公开Manage/注册researcher/AgentTool/LocalAgentExecutor/GeminiChat/SSE/Swarm，唯一终止帧含长正文+私有推理+完整completion/write调用：14条件通过、5216ms/退出0/1loopback，正文/长归档/导出保持，私有推理/伪完成不入报告，0工具写入、paused/blocked/1请求1轮1失败，finish拒绝。未提高上限/改预算或重试，端点10240非本轮源码硬编码根因，旧E-294/E-364真实失败SHA与false保持，不声称输出截断/事实质量解决。个人配置/安装83保持，无打包重装版本CI或付费重跑，goal active。详见docs/ultra-terminal-length-draft-handoff.md。
+
+
+## 2026-11-13 Gemini截断完成门禁
+
+WI-183/E-419至420/F-140：外接Gemini原有finishReason即完成，MAX_TOKENS+完整调用可误接受；旧流式/非流式2复现失败。现两入口明确拒绝MAX，流式仅保留可见终止正文，原始call parts暂存至正常终止，EOF/超限不释放早期调用，STOP正常；原生Google认证未改。12不同相关检查、core/CLI严格编译/两文件最终lint格式通过，首SDK Part/schema类型编译问题以推断类型修正留证。Windows真实Config/gateway/公开Manage/注册researcher/AgentTool/LocalAgentExecutor/GeminiChat/Gemini SSE/Swarm，首响应早期complete+终止MAX长正文/推理/write→paused/blocked/1请求1轮1失败，草稿/归档/导出保持、0执行/误完成，显式cancel独立fixture后新STOP对照正常；17条件通过、5367ms/退出0/2loopback/0外部。未提高token/重试/改旧真实失败，E-294/E-364 SHA/false及个人配置/安装83保持，无打包重装版本CI或付费重跑；非真实模型质量/原生认证/所有finishReason或最终包验收，goal active。详见docs/ultra-gemini-length-gate-handoff.md。

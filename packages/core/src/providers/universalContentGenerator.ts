@@ -1353,6 +1353,14 @@ export class UniversalContentGenerator implements ContentGenerator {
     const raw = parseProviderValue(value, geminiSchema, 'Gemini');
     if (raw.error)
       throw new Error(`Gemini error: ${JSON.stringify(raw.error)}`);
+    if (
+      raw.candidates?.some(
+        (candidate) => candidate.finishReason === FinishReason.MAX_TOKENS,
+      )
+    )
+      throw new Error(
+        'Gemini output token limit reached; response is incomplete.',
+      );
     return Object.assign(new GenerateContentResponse(), raw);
   }
 
@@ -1377,12 +1385,60 @@ export class UniversalContentGenerator implements ContentGenerator {
       );
     }
     let completed = false;
+    type Candidate = NonNullable<
+      ReturnType<typeof geminiSchema.parse>['candidates']
+    >[number];
+    type CandidatePart = NonNullable<
+      NonNullable<Candidate['content']>['parts']
+    >[number];
+    const pendingCalls = new Map<number, CandidatePart[]>();
     for await (const { data } of this.readSse(res, abortController)) {
       const raw = parseProviderJson(data, geminiSchema, 'Gemini stream');
       if (raw.error)
         throw new Error(`Gemini stream error: ${JSON.stringify(raw.error)}`);
+      if (
+        raw.candidates?.some(
+          (candidate) => candidate.finishReason === FinishReason.MAX_TOKENS,
+        )
+      ) {
+        const visible =
+          raw.candidates?.[0]?.content?.parts?.filter(
+            (part) =>
+              typeof part.text === 'string' &&
+              !part.thought &&
+              !part.functionCall &&
+              !part.functionResponse,
+          ) ?? [];
+        if (visible.length)
+          yield this.buildGeminiResponse(visible, undefined, false);
+        throw new Error(
+          'Gemini output token limit reached; response is incomplete.',
+        );
+      }
       if (raw.candidates?.some((candidate) => candidate.finishReason))
         completed = true;
+      // Hold complete SDK call parts until protocol completion, matching the
+      // other adapters. A later MAX_TOKENS/EOF must not release earlier calls.
+      raw.candidates = raw.candidates?.map((candidate, index) => {
+        const parts = candidate.content?.parts ?? [];
+        const calls = pendingCalls.get(index) ?? [];
+        calls.push(...parts.filter((part) => !!part.functionCall));
+        pendingCalls.set(index, calls);
+        return {
+          ...candidate,
+          ...(candidate.content || (completed && calls.length)
+            ? {
+                content: {
+                  ...candidate.content,
+                  parts: [
+                    ...parts.filter((part) => !part.functionCall),
+                    ...(completed ? calls : []),
+                  ],
+                },
+              }
+            : {}),
+        };
+      });
       yield Object.assign(new GenerateContentResponse(), raw);
       if (completed) break;
     }

@@ -638,6 +638,139 @@ describe('Provider stream completion and recovery', () => {
     },
   );
 
+  it.each([false, true])(
+    'rejects Gemini token exhaustion even with syntactically complete calls, stream=%s',
+    async (streaming) => {
+      const manager = ProviderManager.getInstance();
+      manager.upsertProvider({
+        ...manager.getActiveProvider()!,
+        protocol: 'gemini',
+      });
+      const response = {
+        candidates: [
+          {
+            content: {
+              role: 'model',
+              parts: [
+                { text: 'GEMINI_VISIBLE_UNACCEPTED' },
+                { text: 'PRIVATE_REASONING', thought: true },
+                {
+                  functionCall: {
+                    id: 'fake-complete',
+                    name: 'complete_task',
+                    args: { result: { response: 'UNACCEPTED_GOAL' } },
+                  },
+                },
+              ],
+            },
+            finishReason: 'MAX_TOKENS',
+          },
+        ],
+      };
+      vi.stubGlobal(
+        'fetch',
+        vi
+          .fn()
+          .mockResolvedValue(
+            new Response(
+              streaming ? frame(response) : JSON.stringify(response),
+            ),
+          ),
+      );
+      const chunks: GenerateContentResponse[] = [];
+      await expect(
+        (async () => {
+          if (!streaming)
+            return generator.generateContent(
+              request,
+              'gemini-length',
+              LlmRole.SUBAGENT,
+            );
+          const stream = await generator.generateContentStream(
+            request,
+            'gemini-length',
+            LlmRole.SUBAGENT,
+          );
+          for await (const chunk of stream) chunks.push(chunk);
+          return undefined;
+        })(),
+      ).rejects.toThrow('Gemini output token limit reached');
+      expect(chunks.flatMap((chunk) => chunk.functionCalls ?? [])).toEqual([]);
+      const parts = chunks.flatMap(
+        (chunk) => chunk.candidates?.[0]?.content?.parts ?? [],
+      );
+      expect(parts.map((part) => part.text ?? '').join('')).toBe(
+        streaming ? 'GEMINI_VISIBLE_UNACCEPTED' : '',
+      );
+      expect(parts.some((part) => part.thought)).toBe(false);
+      expect(fetch).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each(['MAX_TOKENS', 'EOF', 'STOP'] as const)(
+    'holds earlier Gemini tool calls until a successful ending: %s',
+    async (ending) => {
+      const manager = ProviderManager.getInstance();
+      manager.upsertProvider({
+        ...manager.getActiveProvider()!,
+        protocol: 'gemini',
+      });
+      const call = {
+        id: 'early-call',
+        name: 'read_file',
+        args: { path: 'fixture.md' },
+      };
+      const first = {
+        candidates: [
+          {
+            content: {
+              role: 'model',
+              parts: [{ text: 'EARLY_VISIBLE' }, { functionCall: call }],
+            },
+          },
+        ],
+      };
+      const last = {
+        candidates: [
+          {
+            content: { role: 'model', parts: [{ text: 'FINAL_VISIBLE' }] },
+            finishReason: ending,
+          },
+        ],
+      };
+      const body = new Uint8Array([
+        ...frame(first),
+        ...(ending === 'EOF' ? [] : frame(last)),
+      ]);
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(body)));
+      const stream = await generator.generateContentStream(
+        request,
+        'gemini-gated-calls',
+        LlmRole.SUBAGENT,
+      );
+      const initial = await stream.next();
+      expect(initial.value?.functionCalls ?? []).toEqual([]);
+      const chunks: GenerateContentResponse[] = [];
+      const consume = async () => {
+        for await (const chunk of stream) chunks.push(chunk);
+      };
+      if (ending === 'STOP') {
+        await consume();
+        expect(chunks.flatMap((chunk) => chunk.functionCalls ?? [])).toEqual([
+          call,
+        ]);
+      } else {
+        await expect(consume()).rejects.toThrow(
+          ending === 'EOF' ? 'before completion' : 'output token limit',
+        );
+        expect(chunks.flatMap((chunk) => chunk.functionCalls ?? [])).toEqual(
+          [],
+        );
+      }
+      expect(fetch).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it('rejects incomplete streams and can complete the following request', async () => {
     vi.stubGlobal(
       'fetch',
