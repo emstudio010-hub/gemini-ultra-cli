@@ -6,6 +6,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { createHash } from 'node:crypto';
 import { SandboxPolicyManager } from '../policy/sandboxPolicyManager.js';
 import { inspect } from 'node:util';
 import process from 'node:process';
@@ -204,6 +205,7 @@ import type {
 } from '../code_assist/types.js';
 import type { HierarchicalMemory } from './memory.js';
 import { getCodeAssistServer } from '../code_assist/codeAssist.js';
+import type { CodeAssistServer } from '../code_assist/server.js';
 import {
   getExperiments,
   type Experiments,
@@ -790,6 +792,48 @@ export interface ConfigParameters {
   };
   vertexAiRouting?: VertexAiRoutingConfig;
   logRagSnippets?: boolean;
+}
+
+interface StartupAuthMetadata {
+  client: CodeAssistServer['client'];
+  signature: string;
+  authType: AuthType | undefined;
+  sessionId: string;
+  targetDir: string;
+  finishedAt: number;
+  experiments: Experiments | undefined;
+  quota: RetrieveUserQuotaResponse | undefined;
+  quotaFetchedAt: number;
+}
+
+// One-shot, in-process startup data. Never add clients or credentials to Config
+// serialization or transfer a generator that is bound to another Config.
+const startupAuthMetadata = new WeakMap<Config, StartupAuthMetadata>();
+const startupAuthHandoffs = new WeakMap<
+  Config,
+  { source: Config; metadata: StartupAuthMetadata }
+>();
+
+function authMetadataIdentity(server: CodeAssistServer | undefined) {
+  if (!server?.projectId || !server.client) return undefined;
+  try {
+    return {
+      client: server.client,
+      signature: createHash('sha256')
+        .update(
+          JSON.stringify([
+            server.projectId,
+            server.getMethodUrl('listExperiments'),
+            server.httpOptions,
+            server.client.credentials,
+          ]),
+        )
+        .digest('hex'),
+    };
+  } catch {
+    // An optimization must not prevent normal authentication.
+    return undefined;
+  }
 }
 
 export class Config implements McpContext, AgentLoopContext {
@@ -1624,6 +1668,9 @@ export class Config implements McpContext, AgentLoopContext {
     baseUrl?: string,
     customHeaders?: Record<string, string>,
   ) {
+    const handoff = startupAuthHandoffs.get(this);
+    startupAuthHandoffs.delete(this);
+    startupAuthMetadata.delete(this);
     this.authReady = false;
     // Reset availability service when switching auth
     this.modelAvailabilityService.reset();
@@ -1666,38 +1713,62 @@ export class Config implements McpContext, AgentLoopContext {
     this.contentGeneratorConfig = newContentGeneratorConfig;
 
     const codeAssistServer = getCodeAssistServer(this);
-    const quotaController = new AbortController();
-    const quotaTimeout = codeAssistServer?.projectId
-      ? setTimeout(
-          () =>
-            quotaController.abort(
-              new Error('Bootstrap quota refresh timed out'),
-            ),
-          10_000,
-        )
-      : undefined;
-    const quotaPromise = codeAssistServer?.projectId
-      ? this.refreshUserQuota(quotaController.signal).finally(() =>
-          clearTimeout(quotaTimeout),
-        )
-      : Promise.resolve();
-
-    this.experimentsPromise = getExperiments(codeAssistServer)
-      .then((experiments) => {
-        this.setExperiments(experiments);
-        return experiments;
-      })
-      .catch((e) => {
-        debugLogger.error('Failed to fetch experiments', e);
-        return undefined;
-      });
-
-    const [experiments] = await Promise.all([
-      this.experimentsPromise,
-      quotaPromise.catch((e) => {
-        debugLogger.error('Failed to fetch user quota', e);
-      }),
-    ]);
+    const identity = authMetadataIdentity(codeAssistServer);
+    const previous = handoff?.metadata;
+    const age = previous ? Date.now() - previous.finishedAt : Infinity;
+    const canReuseMetadata =
+      previous &&
+      handoff.source.isAuthReady() &&
+      startupAuthMetadata.get(handoff.source) === previous &&
+      previous.authType === authMethod &&
+      previous.sessionId === this.getSessionId() &&
+      previous.sessionId === handoff.source.getSessionId() &&
+      previous.targetDir === this.getTargetDir() &&
+      age >= 0 &&
+      age <= 30_000 &&
+      previous.client === identity?.client &&
+      previous.signature === identity?.signature;
+    let experiments: Experiments | undefined;
+    let quota: RetrieveUserQuotaResponse | undefined;
+    if (canReuseMetadata) {
+      experiments = structuredClone(previous.experiments);
+      quota = structuredClone(previous.quota);
+      this.experimentsPromise = Promise.resolve(experiments);
+      if (experiments) this.setExperiments(experiments);
+      if (quota) this.applyUserQuota(quota, previous.quotaFetchedAt);
+    } else {
+      const quotaController = new AbortController();
+      const quotaTimeout = codeAssistServer?.projectId
+        ? setTimeout(
+            () =>
+              quotaController.abort(
+                new Error('Bootstrap quota refresh timed out'),
+              ),
+            10_000,
+          )
+        : undefined;
+      const quotaPromise = codeAssistServer?.projectId
+        ? this.refreshUserQuota(quotaController.signal).finally(() =>
+            clearTimeout(quotaTimeout),
+          )
+        : Promise.resolve(undefined);
+      this.experimentsPromise = getExperiments(codeAssistServer)
+        .then((value) => {
+          this.setExperiments(value);
+          return value;
+        })
+        .catch((e) => {
+          debugLogger.error('Failed to fetch experiments', e);
+          return undefined;
+        });
+      [experiments, quota] = await Promise.all([
+        this.experimentsPromise,
+        quotaPromise.catch((e) => {
+          debugLogger.error('Failed to fetch user quota', e);
+          return undefined;
+        }),
+      ]);
+    }
 
     const requestTimeoutMs = this.getRequestTimeoutMs();
     if (requestTimeoutMs !== undefined) {
@@ -1747,6 +1818,32 @@ export class Config implements McpContext, AgentLoopContext {
       this.setModel(PREVIEW_GEMINI_FLASH_MODEL);
     }
     this.authReady = true;
+    const completedIdentity = authMetadataIdentity(codeAssistServer);
+    if (completedIdentity) {
+      startupAuthMetadata.set(this, {
+        ...completedIdentity,
+        authType: this.contentGeneratorConfig.authType,
+        sessionId: this.getSessionId(),
+        targetDir: this.getTargetDir(),
+        finishedAt: canReuseMetadata ? previous.finishedAt : Date.now(),
+        experiments: structuredClone(experiments),
+        quota: structuredClone(quota),
+        quotaFetchedAt: this.lastQuotaFetchTime,
+      });
+    }
+  }
+
+  reuseStartupAuthMetadataFrom(source: Config): void {
+    startupAuthHandoffs.delete(this);
+    const metadata = startupAuthMetadata.get(source);
+    if (
+      source !== this &&
+      source.isAuthReady() &&
+      !this.isAuthReady() &&
+      metadata
+    ) {
+      startupAuthHandoffs.set(this, { source, metadata });
+    }
   }
 
   isAuthReady(): boolean {
@@ -1897,6 +1994,8 @@ export class Config implements McpContext, AgentLoopContext {
   }
 
   setSessionId(sessionId: string): void {
+    startupAuthMetadata.delete(this);
+    startupAuthHandoffs.delete(this);
     const previousPlansDir = this.storage.isInitialized()
       ? this.storage.getPlansDir()
       : undefined;
@@ -2380,6 +2479,73 @@ export class Config implements McpContext, AgentLoopContext {
     }
   }
 
+  private applyUserQuota(
+    quota: RetrieveUserQuotaResponse,
+    fetchedAt = Date.now(),
+  ): void {
+    if (quota.buckets) {
+      this.lastRetrievedQuota = quota;
+      this.lastQuotaFetchTime = fetchedAt;
+
+      for (const bucket of quota.buckets) {
+        if (!bucket.modelId || bucket.remainingFraction == null) {
+          continue;
+        }
+
+        let modelId = bucket.modelId;
+        if (
+          modelId === LEGACY_CCPA_FLASH_MODEL ||
+          modelId === BASE_GEMINI_FLASH_MODEL ||
+          modelId === LATEST_GEMINI_FLASH_MODEL
+        ) {
+          modelId = this.hasLatestFlashGAAccess()
+            ? LATEST_GEMINI_FLASH_MODEL
+            : BASE_GEMINI_FLASH_MODEL;
+        } else if (
+          modelId === BASE_GEMINI_FLASH_LITE_MODEL ||
+          modelId === LATEST_GEMINI_FLASH_LITE_MODEL
+        ) {
+          modelId = this.hasLatestFlashLiteGAAccess()
+            ? LATEST_GEMINI_FLASH_LITE_MODEL
+            : BASE_GEMINI_FLASH_LITE_MODEL;
+        }
+
+        let remaining: number;
+        let limit: number;
+
+        if (bucket.remainingAmount) {
+          remaining = parseInt(bucket.remainingAmount, 10);
+          limit =
+            bucket.remainingFraction > 0
+              ? Math.round(remaining / bucket.remainingFraction)
+              : (this.modelQuotas.get(modelId)?.limit ?? 0);
+        } else {
+          // Server only sent remainingFraction — use a normalized scale.
+          limit = 100;
+          remaining = Math.round(bucket.remainingFraction * limit);
+        }
+
+        if (!isNaN(remaining) && Number.isFinite(limit) && limit > 0) {
+          this.modelQuotas.set(modelId, {
+            remaining,
+            limit,
+            resetTime: bucket.resetTime,
+          });
+        }
+      }
+    }
+
+    const hasAccess =
+      quota.buckets?.some(
+        (b) => b.modelId && isPreviewModel(b.modelId, this),
+      ) ?? false;
+    this.setHasAccessToPreviewModel(hasAccess);
+
+    if (quota.buckets) {
+      this.emitQuotaChangedEvent();
+    }
+  }
+
   async refreshUserQuota(
     signal?: AbortSignal,
   ): Promise<RetrieveUserQuotaResponse | undefined> {
@@ -2396,67 +2562,7 @@ export class Config implements McpContext, AgentLoopContext {
           : codeAssistServer.retrieveUserQuota(request),
       );
 
-      if (quota.buckets) {
-        this.lastRetrievedQuota = quota;
-        this.lastQuotaFetchTime = Date.now();
-
-        for (const bucket of quota.buckets) {
-          if (!bucket.modelId || bucket.remainingFraction == null) {
-            continue;
-          }
-
-          let modelId = bucket.modelId;
-          if (
-            modelId === LEGACY_CCPA_FLASH_MODEL ||
-            modelId === BASE_GEMINI_FLASH_MODEL ||
-            modelId === LATEST_GEMINI_FLASH_MODEL
-          ) {
-            modelId = this.hasLatestFlashGAAccess()
-              ? LATEST_GEMINI_FLASH_MODEL
-              : BASE_GEMINI_FLASH_MODEL;
-          } else if (
-            modelId === BASE_GEMINI_FLASH_LITE_MODEL ||
-            modelId === LATEST_GEMINI_FLASH_LITE_MODEL
-          ) {
-            modelId = this.hasLatestFlashLiteGAAccess()
-              ? LATEST_GEMINI_FLASH_LITE_MODEL
-              : BASE_GEMINI_FLASH_LITE_MODEL;
-          }
-
-          let remaining: number;
-          let limit: number;
-
-          if (bucket.remainingAmount) {
-            remaining = parseInt(bucket.remainingAmount, 10);
-            limit =
-              bucket.remainingFraction > 0
-                ? Math.round(remaining / bucket.remainingFraction)
-                : (this.modelQuotas.get(modelId)?.limit ?? 0);
-          } else {
-            // Server only sent remainingFraction — use a normalized scale.
-            limit = 100;
-            remaining = Math.round(bucket.remainingFraction * limit);
-          }
-
-          if (!isNaN(remaining) && Number.isFinite(limit) && limit > 0) {
-            this.modelQuotas.set(modelId, {
-              remaining,
-              limit,
-              resetTime: bucket.resetTime,
-            });
-          }
-        }
-      }
-
-      const hasAccess =
-        quota.buckets?.some(
-          (b) => b.modelId && isPreviewModel(b.modelId, this),
-        ) ?? false;
-      this.setHasAccessToPreviewModel(hasAccess);
-
-      if (quota.buckets) {
-        this.emitQuotaChangedEvent();
-      }
+      this.applyUserQuota(quota);
 
       return quota;
     } catch (e) {

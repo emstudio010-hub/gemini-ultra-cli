@@ -1239,6 +1239,190 @@ describe('Server Config (config.ts)', () => {
     });
   });
 
+  describe('startup auth metadata handoff', () => {
+    let previousFactory: typeof createContentGeneratorConfig | undefined;
+
+    beforeEach(() => {
+      previousFactory = vi
+        .mocked(createContentGeneratorConfig)
+        .getMockImplementation();
+      vi.mocked(createContentGeneratorConfig).mockImplementation(
+        async (_config, authType) => ({ authType }),
+      );
+    });
+    afterEach(() => {
+      if (previousFactory)
+        vi.mocked(createContentGeneratorConfig).mockImplementation(
+          previousFactory,
+        );
+      else vi.mocked(createContentGeneratorConfig).mockReset();
+      vi.mocked(getCodeAssistServer).mockReturnValue(undefined);
+      vi.useRealTimers();
+    });
+
+    function setup(overrides: Partial<ConfigParameters> = {}) {
+      const client = { credentials: { refresh_token: 'FAKE_FIXTURE_TOKEN' } };
+      const backend = () => ({
+        client,
+        projectId: 'fixture-project',
+        httpOptions: { headers: { 'x-fixture': 'one' } },
+        getMethodUrl: () =>
+          'https://fixture.invalid/v1internal:listExperiments',
+        retrieveUserQuota: vi.fn().mockResolvedValue({
+          buckets: [{ modelId: DEFAULT_GEMINI_MODEL, remainingFraction: 0.8 }],
+        }),
+        fetchAdminControls: vi
+          .fn()
+          .mockResolvedValue({ adminControlsApplicable: false }),
+      });
+      const source = new Config(baseParams);
+      const target = new Config({ ...baseParams, ...overrides });
+      const first = backend();
+      const second = backend();
+      vi.mocked(getCodeAssistServer).mockImplementation((config) =>
+        config === source
+          ? (first as unknown as CodeAssistServer)
+          : (second as unknown as CodeAssistServer),
+      );
+      return { source, target, first, second, client };
+    }
+
+    it('reuses startup values once while rebuilding the generator and retaining admin checks', async () => {
+      const { source, target, first, second } = setup();
+      vi.mocked(getExperiments).mockResolvedValue({
+        experimentIds: [42],
+        flags: { [ExperimentFlags.ENABLE_ADMIN_CONTROLS]: { boolValue: true } },
+      });
+      await source.refreshAuth(AuthType.LOGIN_WITH_GOOGLE);
+      target.reuseStartupAuthMetadataFrom(source);
+      source.getLastRetrievedQuota()!.buckets![0].remainingFraction = 0.1;
+      await target.refreshAuth(AuthType.LOGIN_WITH_GOOGLE);
+      expect(createContentGenerator).toHaveBeenCalledTimes(2);
+      expect(first.retrieveUserQuota).toHaveBeenCalledOnce();
+      expect(second.retrieveUserQuota).not.toHaveBeenCalled();
+      expect(getExperiments).toHaveBeenCalledOnce();
+      expect(first.fetchAdminControls).toHaveBeenCalledOnce();
+      expect(second.fetchAdminControls).toHaveBeenCalledOnce();
+      expect(target.getQuotaRemaining()).toBe(80);
+      expect(target.getQuotaLimit()).toBe(100);
+      expect(
+        target.getLastRetrievedQuota()!.buckets![0].remainingFraction,
+      ).toBe(0.8);
+      expect(target.getExperiments()?.experimentIds).toEqual([42]);
+      expect(target.isAuthReady()).toBe(true);
+      await target.refreshAuth(AuthType.LOGIN_WITH_GOOGLE);
+      expect(second.retrieveUserQuota).toHaveBeenCalledOnce();
+      expect(getExperiments).toHaveBeenCalledTimes(2);
+    });
+
+    it('carries an unknown startup result once without retrying it or preventing explicit refresh', async () => {
+      const { source, target, first, second } = setup();
+      first.retrieveUserQuota.mockRejectedValueOnce(
+        new Error('Fixture quota unavailable'),
+      );
+      vi.mocked(getExperiments).mockRejectedValueOnce(
+        new Error('Fixture experiments unavailable'),
+      );
+      await source.refreshAuth(AuthType.LOGIN_WITH_GOOGLE);
+      target.reuseStartupAuthMetadataFrom(source);
+      await target.refreshAuth(AuthType.LOGIN_WITH_GOOGLE);
+      expect(second.retrieveUserQuota).not.toHaveBeenCalled();
+      expect(getExperiments).toHaveBeenCalledOnce();
+      expect(target.getLastRetrievedQuota()).toBeUndefined();
+      expect(target.getExperiments()).toBeUndefined();
+      await target.refreshUserQuota();
+      await target.getExperimentsAsync();
+      expect(second.retrieveUserQuota).toHaveBeenCalledOnce();
+      expect(getExperiments).toHaveBeenCalledTimes(2);
+    });
+
+    it('retains the original quota fetch time rather than treating the handoff as a new fetch', async () => {
+      vi.useFakeTimers();
+      const { source, target, second } = setup();
+      await source.refreshAuth(AuthType.LOGIN_WITH_GOOGLE);
+      await vi.advanceTimersByTimeAsync(2000);
+      target.reuseStartupAuthMetadataFrom(source);
+      await target.refreshAuth(AuthType.LOGIN_WITH_GOOGLE);
+      await vi.advanceTimersByTimeAsync(9000);
+      await target.refreshUserQuotaIfStale(10_000);
+      expect(second.retrieveUserQuota).toHaveBeenCalledOnce();
+    });
+
+    it('does not extend the metadata age by handing it through another startup config', async () => {
+      vi.useFakeTimers();
+      const { source, target, second } = setup();
+      await source.refreshAuth(AuthType.LOGIN_WITH_GOOGLE);
+      await vi.advanceTimersByTimeAsync(20_000);
+      target.reuseStartupAuthMetadataFrom(source);
+      await target.refreshAuth(AuthType.LOGIN_WITH_GOOGLE);
+      expect(second.retrieveUserQuota).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(15_000);
+      const finalConfig = new Config(baseParams);
+      finalConfig.reuseStartupAuthMetadataFrom(target);
+      await finalConfig.refreshAuth(AuthType.LOGIN_WITH_GOOGLE);
+      expect(second.retrieveUserQuota).toHaveBeenCalledOnce();
+    });
+
+    it.each([
+      'session',
+      'directory',
+      'client',
+      'credentials',
+      'project',
+      'endpoint',
+      'headers',
+      'expired',
+      'auth-method',
+      'reauthenticated-source',
+      'failed-source',
+    ] as const)(
+      'refuses a startup metadata handoff with a changed %s',
+      async (change) => {
+        vi.useFakeTimers();
+        const { source, target, second, client } = setup(
+          change === 'session'
+            ? { sessionId: 'other-session' }
+            : change === 'directory'
+              ? { targetDir: TARGET_DIR + '/other' }
+              : {},
+        );
+        await source.refreshAuth(AuthType.LOGIN_WITH_GOOGLE);
+        target.reuseStartupAuthMetadataFrom(source);
+        if (change === 'client')
+          second.client = {
+            credentials: { refresh_token: 'FAKE_FIXTURE_TOKEN' },
+          };
+        if (change === 'credentials')
+          client.credentials.refresh_token = 'FAKE_ROTATED_TOKEN';
+        if (change === 'project') second.projectId = 'other-project';
+        if (change === 'endpoint')
+          second.getMethodUrl = () =>
+            'https://other.invalid/v1internal:listExperiments';
+        if (change === 'headers')
+          second.httpOptions.headers['x-fixture'] = 'two';
+        if (change === 'expired') await vi.advanceTimersByTimeAsync(30_001);
+        if (change === 'reauthenticated-source')
+          await source.refreshAuth(AuthType.LOGIN_WITH_GOOGLE);
+        if (change === 'failed-source') {
+          vi.mocked(createContentGeneratorConfig).mockRejectedValueOnce(
+            new Error('Fixture reauth failed'),
+          );
+          await expect(
+            source.refreshAuth(AuthType.LOGIN_WITH_GOOGLE),
+          ).rejects.toThrow('Fixture reauth failed');
+        }
+        const previousCalls = vi.mocked(getExperiments).mock.calls.length;
+        await target.refreshAuth(
+          change === 'auth-method'
+            ? AuthType.COMPUTE_ADC
+            : AuthType.LOGIN_WITH_GOOGLE,
+        );
+        expect(second.retrieveUserQuota).toHaveBeenCalledOnce();
+        expect(getExperiments).toHaveBeenCalledTimes(previousCalls + 1);
+      },
+    );
+  });
+
   it('Config constructor should store userMemory correctly', () => {
     const config = new Config(baseParams);
 

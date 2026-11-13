@@ -766,6 +766,7 @@ export async function main() {
       loadedSettings: settings,
     });
     loadConfigHandle?.end();
+    config.reuseStartupAuthMetadataFrom?.(partialConfig);
 
     // Initialize storage immediately after loading config to ensure that
     // storage-related operations (like listing or resuming sessions) have
