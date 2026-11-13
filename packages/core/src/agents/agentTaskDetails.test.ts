@@ -142,3 +142,77 @@ it('rejects mode mismatch and redirected project records before following a link
   ).toThrow('regular project files');
   expect(fs.readFileSync(foreign, 'utf8')).toContain(item.id);
 });
+
+it.each(['files', 'member-reports', 'undeclared'] as const)(
+  'shows saved workflow review scope %s without reading missing deliverables or archives',
+  (kind) => {
+    const item = workflow('boost');
+    const raw = JSON.parse(fs.readFileSync(item.file, 'utf8'));
+    if (kind !== 'undeclared')
+      raw.reviewFiles =
+        kind === 'files'
+          ? Array.from({ length: 10 }, (_, index) => `MISSING-${index}.md`)
+          : [];
+    if (kind !== 'undeclared')
+      raw.reviewedFiles = { directory: root, files: [] };
+    fs.writeFileSync(item.file, JSON.stringify(raw));
+    const before = contents(root);
+    const detail = readAgentTaskDetails(root, { mode: 'boost', id: item.id });
+    expect(detail).toMatchObject({
+      review: {
+        kind,
+        totalFiles: kind === 'files' ? 10 : 0,
+        omittedFiles: kind === 'files' ? 2 : 0,
+        snapshotSaved: kind !== 'undeclared',
+        currentFilesChecked: false,
+      },
+    });
+    expect(detail.kind === 'workflow' && detail.review?.files).toHaveLength(
+      kind === 'files' ? 8 : 0,
+    );
+    expect(JSON.stringify(detail)).not.toContain('MISSING-9.md');
+    expect(contents(root)).toEqual(before);
+  },
+);
+
+it('keeps auditor scope distinct from ordinary members and excludes file review from requirements interviews', () => {
+  const swarm = createSwarm(root, 'Saved scope');
+  const file = path.join(root, 'swarms', swarm.id, 'members.json');
+  const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const member = {
+    name: 'reader',
+    agent: 'researcher',
+    brief: 'Read',
+    state: 'waiting',
+    turns: 1,
+    result: 'Saved',
+  };
+  raw.members = [
+    member,
+    {
+      ...member,
+      name: 'auditor',
+      agent: 'workflow-auditor',
+      reviewFiles: ['<img src=x>.md'],
+      reviewedFiles: { directory: root, files: [] },
+    },
+  ];
+  fs.writeFileSync(file, JSON.stringify(raw));
+  const interview = workflow('grill-me');
+  const before = contents(root);
+  const detail = readAgentTaskDetails(root, { mode: 'swarm', id: swarm.id });
+  if (detail.kind !== 'swarm') throw new Error('Expected swarm');
+  expect(detail.members[0].review).toBeUndefined();
+  expect(detail.members[1].review).toMatchObject({
+    kind: 'files',
+    files: ['<img src=x>.md'],
+    snapshotSaved: true,
+    currentFilesChecked: false,
+  });
+  const grill = readAgentTaskDetails(root, {
+    mode: 'grill-me',
+    id: interview.id,
+  });
+  expect(grill.kind === 'workflow' && grill.review).toBeUndefined();
+  expect(contents(root)).toEqual(before);
+});

@@ -29,6 +29,27 @@ function regular(file: string, directory = false, maxBytes = 0): void {
     throw new Error('Task data must be bounded regular project files.');
 }
 
+/** Saved scope metadata only: no delivery-file reads or fresh acceptance. */
+function reviewScope(record: {
+  reviewFiles?: string[];
+  reviewedFiles?: unknown;
+}) {
+  const files = record.reviewFiles;
+  return {
+    kind:
+      files === undefined
+        ? 'undeclared'
+        : files.length
+          ? 'files'
+          : 'member-reports',
+    files: files?.slice(0, 8) ?? [],
+    totalFiles: files?.length ?? 0,
+    omittedFiles: Math.max(0, (files?.length ?? 0) - 8),
+    snapshotSaved: !!record.reviewedFiles,
+    currentFilesChecked: false,
+  };
+}
+
 /** Bounded, read-only view. Never activates a budget or consults latest bindings. */
 export function readAgentTaskDetails(root: string, selection: unknown) {
   const { mode, id } = agentTaskSelectionSchema.parse(selection);
@@ -88,6 +109,8 @@ export function readAgentTaskDetails(root: string, selection: unknown) {
         agent: member.agent,
         state: member.state,
         turns: member.turns,
+        review:
+          member.agent === 'workflow-auditor' ? reviewScope(member) : undefined,
         preview: member.result.slice(0, 1200),
         lastError: member.lastError?.slice(0, 1200),
         previewOnly: !!member.fullResult || member.result.length > 1200,
@@ -133,6 +156,7 @@ export function readAgentTaskDetails(root: string, selection: unknown) {
     objective: record.objective.slice(0, 2000),
     stage: record.stage.slice(0, 200),
     approved: record.approved,
+    review: mode === 'grill-me' ? undefined : reviewScope(record),
     warnings,
     usage,
     milestones: record.milestones.map((item) => ({
