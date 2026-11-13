@@ -213,6 +213,7 @@ import { AcknowledgedAgentsService } from '../agents/acknowledgedAgents.js';
 import { setGlobalProxy, updateGlobalFetchTimeouts } from '../utils/fetch.js';
 import { ExperimentFlags } from '../code_assist/experiments/flagNames.js';
 import { debugLogger } from '../utils/debugLogger.js';
+import { withAbortSignal } from '../utils/withAbortSignal.js';
 import { ragLogger } from '../utils/ragLogger.js';
 import { SkillManager, type SkillDefinition } from '../skills/skillManager.js';
 import { startupProfiler } from '../telemetry/startupProfiler.js';
@@ -2360,15 +2361,21 @@ export class Config implements McpContext, AgentLoopContext {
     }
   }
 
-  async refreshUserQuota(): Promise<RetrieveUserQuotaResponse | undefined> {
+  async refreshUserQuota(
+    signal?: AbortSignal,
+  ): Promise<RetrieveUserQuotaResponse | undefined> {
+    signal?.throwIfAborted();
     const codeAssistServer = getCodeAssistServer(this);
     if (!codeAssistServer || !codeAssistServer.projectId) {
       return undefined;
     }
     try {
-      const quota = await codeAssistServer.retrieveUserQuota({
-        project: codeAssistServer.projectId,
-      });
+      const request = { project: codeAssistServer.projectId };
+      const quota = await withAbortSignal(signal, () =>
+        signal
+          ? codeAssistServer.retrieveUserQuota(request, signal)
+          : codeAssistServer.retrieveUserQuota(request),
+      );
 
       if (quota.buckets) {
         this.lastRetrievedQuota = quota;
@@ -2434,6 +2441,7 @@ export class Config implements McpContext, AgentLoopContext {
 
       return quota;
     } catch (e) {
+      signal?.throwIfAborted();
       debugLogger.debug('Failed to retrieve user quota', e);
       return undefined;
     }

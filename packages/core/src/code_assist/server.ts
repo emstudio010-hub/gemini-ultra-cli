@@ -366,7 +366,16 @@ export class CodeAssistServer implements ContentGenerator {
 
   async retrieveUserQuota(
     req: RetrieveUserQuotaRequest,
+    signal?: AbortSignal,
   ): Promise<RetrieveUserQuotaResponse> {
+    signal?.throwIfAborted();
+    if (signal) {
+      return this.requestPost<RetrieveUserQuotaResponse>(
+        'retrieveUserQuota',
+        req,
+        signal,
+      );
+    }
     return this.requestPost<RetrieveUserQuotaResponse>(
       'retrieveUserQuota',
       req,

@@ -55,17 +55,62 @@ export function ModelDialog({ onClose }: ModelDialogProps): React.JSX.Element {
   );
   const [persistMode, setPersistMode] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
+  const [quotaStatus, setQuotaStatus] = useState<
+    'idle' | 'loading' | 'ready' | 'unavailable'
+  >('idle');
 
   useEffect(() => {
+    let active = true;
     async function checkAccess() {
       if (!config) return;
-      const noAccess = await config.getProModelNoAccess();
-      setHasAccessToProModel(!noAccess);
-      if (noAccess) {
-        setView('manual');
+      try {
+        const noAccess = await config.getProModelNoAccess();
+        if (!active) return;
+        setHasAccessToProModel(!noAccess);
+        if (noAccess) {
+          setView('manual');
+        }
+      } catch {
+        // Keep the synchronous access snapshot if optional loading fails.
       }
     }
     void checkAccess();
+    return () => {
+      active = false;
+    };
+  }, [config]);
+
+  useEffect(() => {
+    if (!config) return;
+    let disposed = false;
+    const controller = new AbortController();
+    const onAbort = () => {
+      if (!disposed) setQuotaStatus('unavailable');
+    };
+    controller.signal.addEventListener('abort', onAbort, { once: true });
+    setQuotaStatus('loading');
+    const timeout = setTimeout(
+      () => controller.abort(new Error('Model quota refresh timed out')),
+      10_000,
+    );
+    void (async () => {
+      try {
+        const quota = await config.refreshUserQuota(controller.signal);
+        if (!disposed && !controller.signal.aborted) {
+          setQuotaStatus(quota ? 'ready' : 'unavailable');
+        }
+      } catch {
+        if (!disposed) setQuotaStatus('unavailable');
+      } finally {
+        clearTimeout(timeout);
+      }
+    })();
+    return () => {
+      disposed = true;
+      clearTimeout(timeout);
+      controller.signal.removeEventListener('abort', onAbort);
+      controller.abort();
+    };
   }, [config]);
 
   // Determine the Preferred Model (read once when the dialog opens).
@@ -440,6 +485,20 @@ export function ModelDialog({ onClose }: ModelDialogProps): React.JSX.Element {
         buckets={config?.getLastRetrievedQuota()?.buckets}
         availableWidth={terminalWidth - 2}
       />
+      {quotaStatus === 'loading' ? (
+        <Text color={theme.text.secondary}>
+          {isZh ? '正在刷新配额…' : 'Refreshing quota…'}
+        </Text>
+      ) : quotaStatus === 'unavailable' &&
+        (selectedAuthType === AuthType.LOGIN_WITH_GOOGLE ||
+          selectedAuthType === AuthType.COMPUTE_ADC ||
+          config?.getLastRetrievedQuota()) ? (
+        <Text color={theme.text.secondary}>
+          {isZh
+            ? '未取得新配额，缓存未更新；可继续选择模型。'
+            : 'New quota unavailable; cache unchanged. You can still select a model.'}
+        </Text>
+      ) : null}
       <Box marginTop={1} flexDirection="column">
         <Text color={theme.text.secondary}>
           {view === 'manual' && hasAccessToProModel

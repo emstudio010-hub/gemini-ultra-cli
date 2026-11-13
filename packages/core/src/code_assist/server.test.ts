@@ -685,6 +685,27 @@ describe('CodeAssistServer', () => {
     expect(response).toEqual(mockResponse);
   });
 
+  it('forwards quota cancellation to HTTP and rejects a pre-cancelled request before dispatch', async () => {
+    const { server } = createTestServer();
+    const requestPost = vi
+      .spyOn(server, 'requestPost')
+      .mockResolvedValue({ buckets: [] });
+    const controller = new AbortController();
+    const req = { project: 'fixture-project' };
+    await server.retrieveUserQuota(req, controller.signal);
+    expect(requestPost).toHaveBeenCalledWith(
+      'retrieveUserQuota',
+      req,
+      controller.signal,
+    );
+    const reason = new Error('Closed quota dialog');
+    controller.abort(reason);
+    await expect(server.retrieveUserQuota(req, controller.signal)).rejects.toBe(
+      reason,
+    );
+    expect(requestPost).toHaveBeenCalledTimes(1);
+  });
+
   it('should call the retrieveUserQuota endpoint', async () => {
     const { server } = createTestServer();
     const mockResponse = {

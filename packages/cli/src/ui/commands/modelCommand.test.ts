@@ -31,12 +31,12 @@ describe('modelCommand', () => {
     });
   });
 
-  it('should call refreshUserQuota if config is available when opening dialog', async () => {
+  it('opens the dialog without starting or waiting for quota refresh', async () => {
     if (!modelCommand.action) {
       throw new Error('The model command must have an action.');
     }
 
-    const mockRefreshUserQuota = vi.fn();
+    const mockRefreshUserQuota = vi.fn(() => new Promise<never>(() => {}));
     mockContext.services.agentContext = {
       refreshUserQuota: mockRefreshUserQuota,
       get config() {
@@ -44,9 +44,17 @@ describe('modelCommand', () => {
       },
     } as unknown as Config;
 
-    await modelCommand.action(mockContext, '');
-
-    expect(mockRefreshUserQuota).toHaveBeenCalled();
+    let result: unknown;
+    const pending = Promise.resolve(modelCommand.action(mockContext, '')).then(
+      (value) => {
+        result = value;
+      },
+    );
+    await vi.waitFor(() =>
+      expect(result).toEqual({ type: 'dialog', dialog: 'model' }),
+    );
+    expect(mockRefreshUserQuota).not.toHaveBeenCalled();
+    await pending;
   });
 
   describe('manage subcommand', () => {
@@ -64,11 +72,11 @@ describe('modelCommand', () => {
       });
     });
 
-    it('should call refreshUserQuota if config is available', async () => {
+    it('opens manage immediately without waiting for quota refresh', async () => {
       const manageCommand = modelCommand.subCommands?.find(
         (c) => c.name === 'manage',
       );
-      const mockRefreshUserQuota = vi.fn();
+      const mockRefreshUserQuota = vi.fn(() => new Promise<never>(() => {}));
       mockContext.services.agentContext = {
         refreshUserQuota: mockRefreshUserQuota,
         get config() {
@@ -76,9 +84,17 @@ describe('modelCommand', () => {
         },
       } as unknown as Config;
 
-      await manageCommand!.action!(mockContext, '');
-
-      expect(mockRefreshUserQuota).toHaveBeenCalled();
+      let result: unknown;
+      const pending = Promise.resolve(
+        manageCommand!.action!(mockContext, ''),
+      ).then((value) => {
+        result = value;
+      });
+      await vi.waitFor(() =>
+        expect(result).toEqual({ type: 'dialog', dialog: 'model' }),
+      );
+      expect(mockRefreshUserQuota).not.toHaveBeenCalled();
+      await pending;
     });
   });
 

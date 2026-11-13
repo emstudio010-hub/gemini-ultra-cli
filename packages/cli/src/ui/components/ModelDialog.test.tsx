@@ -68,6 +68,7 @@ describe('<ModelDialog />', () => {
   const mockGetGemini31FlashLiteLaunchedSync = vi.fn();
   const mockGetProModelNoAccess = vi.fn();
   const mockGetProModelNoAccessSync = vi.fn();
+  const mockRefreshUserQuota = vi.fn<Config['refreshUserQuota']>();
 
   interface MockConfig extends Partial<Config> {
     setModel: (model: string, isTemporary?: boolean) => void;
@@ -99,6 +100,7 @@ describe('<ModelDialog />', () => {
     getProModelNoAccessSync: mockGetProModelNoAccessSync,
     getExperimentalGemma: () => false,
     getLastRetrievedQuota: () => ({ buckets: [] }),
+    refreshUserQuota: mockRefreshUserQuota,
     getSessionId: () => 'test-session-id',
   };
 
@@ -120,6 +122,7 @@ describe('<ModelDialog />', () => {
     mockGetGemini31LaunchedSync.mockReturnValue(false);
     mockGetProModelNoAccess.mockResolvedValue(false);
     mockGetProModelNoAccessSync.mockReturnValue(false);
+    mockRefreshUserQuota.mockResolvedValue({ buckets: [] });
 
     // Default implementation for getDisplayString
     mockGetDisplayString.mockImplementation((val: string) => {
@@ -155,6 +158,57 @@ describe('<ModelDialog />', () => {
     );
     return result;
   };
+
+  it('opens with cached quota while refreshing and renders new quota without closing the selector', async () => {
+    let buckets = [{ modelId: 'fixture-quota', remainingFraction: 0.5 }];
+    let release!: (value: { buckets: typeof buckets }) => void;
+    let signal: AbortSignal | undefined;
+    mockRefreshUserQuota.mockImplementationOnce((value) => {
+      signal = value;
+      return new Promise((resolve) => {
+        release = resolve;
+      });
+    });
+    const config = {
+      ...mockConfig,
+      getLastRetrievedQuota: () => ({ buckets }),
+    } as Config;
+    const screen = await renderComponent(config);
+    try {
+      expect(screen.lastFrame()).toContain('Select Model');
+      expect(screen.lastFrame()).toContain('50%');
+      expect(screen.lastFrame()).toContain('Refreshing quota');
+      expect(signal?.aborted).toBe(false);
+      await act(async () => {
+        buckets = [{ modelId: 'fixture-quota', remainingFraction: 0.15 }];
+        release({ buckets });
+      });
+      await waitFor(() => expect(screen.lastFrame()).toContain('85%'));
+      expect(screen.lastFrame()).not.toContain('Refreshing quota');
+      expect(mockRefreshUserQuota).toHaveBeenCalledTimes(1);
+    } finally {
+      screen.unmount();
+    }
+    expect(signal?.aborted).toBe(true);
+  });
+
+  it('cancels quota refresh on close and ignores its late completion', async () => {
+    let release!: (value: { buckets: [] }) => void;
+    let signal: AbortSignal | undefined;
+    mockRefreshUserQuota.mockImplementationOnce((value) => {
+      signal = value;
+      return new Promise((resolve) => {
+        release = resolve;
+      });
+    });
+    const screen = await renderComponent();
+    expect(screen.lastFrame()).toContain('Select Model');
+    screen.unmount();
+    expect(signal?.aborted).toBe(true);
+    await act(async () => release({ buckets: [] }));
+    expect(mockOnClose).not.toHaveBeenCalled();
+    expect(mockRefreshUserQuota).toHaveBeenCalledTimes(1);
+  });
 
   it.each([false, true])(
     'updates model dialog language without losing Remember or route (dynamic=%s)',

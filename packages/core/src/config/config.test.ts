@@ -3377,6 +3377,50 @@ describe('Config Quota & Preview Model Access', () => {
   });
 
   describe('refreshUserQuota', () => {
+    it('rejects pre-cancelled quota refresh before dispatch while keeping cached data', async () => {
+      const reason = new Error('Quota refresh already cancelled');
+      await expect(
+        config.refreshUserQuota(AbortSignal.abort(reason)),
+      ).rejects.toBe(reason);
+      expect(mockCodeAssistServer.retrieveUserQuota).not.toHaveBeenCalled();
+      expect(config.getLastRetrievedQuota()).toBeUndefined();
+    });
+
+    it('cancels quota waiting and prevents a late response from replacing a newer cache or preview access', async () => {
+      let release!: (value: {
+        buckets: Array<{ modelId: string; remainingFraction: number }>;
+      }) => void;
+      mockCodeAssistServer.retrieveUserQuota.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            release = resolve;
+          }),
+      );
+      const controller = new AbortController();
+      const reason = new Error('Dialog closed');
+      const pending = config.refreshUserQuota(controller.signal);
+      controller.abort(reason);
+      await expect(pending).rejects.toBe(reason);
+      expect(mockCodeAssistServer.retrieveUserQuota).toHaveBeenCalledWith(
+        { project: 'test-project' },
+        controller.signal,
+      );
+      const fresh = {
+        buckets: [{ modelId: 'gemini-2.5-pro', remainingFraction: 0.8 }],
+      };
+      mockCodeAssistServer.retrieveUserQuota.mockResolvedValueOnce(fresh);
+      await config.refreshUserQuota();
+      const events = mockCoreEvents.emitQuotaChanged.mock.calls.length;
+      release({
+        buckets: [{ modelId: 'gemini-3-pro-preview', remainingFraction: 0.1 }],
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(config.getLastRetrievedQuota()).toBe(fresh);
+      expect(config.getHasAccessToPreviewModel()).toBe(false);
+      expect(mockCoreEvents.emitQuotaChanged.mock.calls.length).toBe(events);
+    });
+
     it('should update hasAccessToPreviewModel to true if quota includes preview model', async () => {
       mockCodeAssistServer.retrieveUserQuota.mockResolvedValue({
         buckets: [
