@@ -459,10 +459,13 @@ function exhaustedBudget(swarm: Swarm): string | undefined {
   if (budget.turns >= budget.maxTurns) return 'member-turn';
   return undefined;
 }
+function budgetStopReason(limit: string): string {
+  return `Swarm ${limit} budget exhausted. Results retained. Use /swarm budget <requests> <failed-turns> <turns> to increase limits, then /swarm resume; or /swarm cancel.`;
+}
 function blockSwarm(root: string, swarm: Swarm, limit: string): void {
   if (swarm.phase !== 'active') return;
   swarm.phase = 'blocked';
-  swarm.stopReason = `Swarm ${limit} budget exhausted. Results retained. Use /swarm budget <requests> <failed-turns> <turns> to increase limits, then /swarm resume; or /swarm cancel.`;
+  swarm.stopReason = budgetStopReason(limit);
   for (const member of swarm.members)
     if (['working', 'queued'].includes(member.state)) member.state = 'paused';
   saveSwarm(root, swarm);
@@ -593,15 +596,22 @@ export function setSwarmBudget(
   if (swarm.phase === 'completed')
     throw new Error('A completed swarm cannot change its budget.');
   swarm.budget = budgetSchema.parse({ ...swarm.budget, ...limits });
-  saveSwarm(root, swarm);
-  appendPost(
+  const limit = exhaustedBudget(swarm);
+  const blocking = swarm.phase === 'active' && !!limit;
+  if (blocking) {
+    swarm.phase = 'blocked';
+    swarm.stopReason = budgetStopReason(limit);
+    for (const member of swarm.members)
+      if (['working', 'queued'].includes(member.state)) member.state = 'paused';
+  }
+  withPreparedPost(
     root,
     id,
     'coordinator',
-    `User set cumulative budget limits: ${JSON.stringify(limits)}. Counters were not reset.`,
+    `User set cumulative budget limits: ${JSON.stringify(limits)}. Counters were not reset.${blocking ? `\n${swarm.stopReason}` : ''}`,
+    () => saveSwarm(root, swarm),
   );
-  const limit = exhaustedBudget(swarm);
-  if (limit) blockSwarm(root, swarm, limit);
+  if (blocking) engines.get(engineKey(root, id))?.stopMembers();
 }
 
 /** Local slash-command assignment; never changes the process-wide active model. */
@@ -644,12 +654,12 @@ export function setSwarmModel(
       );
     swarm.roleModels[role] = model;
   }
-  saveSwarm(root, swarm);
-  appendPost(
+  withPreparedPost(
     root,
     id,
     'coordinator',
     `User selected model for ${target}: ${model ?? 'inherit'}. Applies to future turns; cumulative budgets are retained.`,
+    () => saveSwarm(root, swarm),
   );
 }
 
@@ -676,16 +686,18 @@ export class SwarmEngine {
         throw new Error(
           'This swarm belongs to another live CLI process; steer it from that session.',
         );
-      swarm.ownerPid = process.pid;
-      for (const member of swarm.members)
-        if (['working', 'queued'].includes(member.state))
-          member.state = 'paused';
-      saveSwarm(root, swarm);
-      appendPost(
+      withPreparedPost(
         root,
         id,
         'monitor',
         'Recovered after the owner process exited. Interrupted members are paused; explicitly mention them to resume.',
+        () => {
+          swarm.ownerPid = process.pid;
+          for (const member of swarm.members)
+            if (['working', 'queued'].includes(member.state))
+              member.state = 'paused';
+          saveSwarm(root, swarm);
+        },
       );
     }
   }
@@ -1423,16 +1435,17 @@ function resumeSwarmState(root: string, id: string): void {
     );
   const resumePost =
     'Explicitly resumed. Mention paused members to continue; killed names remain retired.';
-  preparePost(root, id, 'coordinator', resumePost);
-  // Do not transfer ownership or rewrite evidence before all refusal checks pass.
-  if (swarm.ownerPid !== process.pid)
-    for (const member of swarm.members)
-      if (['working', 'queued'].includes(member.state)) member.state = 'paused';
-  swarm.phase = 'active';
-  swarm.stopReason = '';
-  swarm.ownerPid = process.pid;
-  saveSwarm(root, swarm);
-  appendPost(root, id, 'coordinator', resumePost);
+  withPreparedPost(root, id, 'coordinator', resumePost, () => {
+    // Do not transfer ownership or rewrite evidence before all refusal checks pass.
+    if (swarm.ownerPid !== process.pid)
+      for (const member of swarm.members)
+        if (['working', 'queued'].includes(member.state))
+          member.state = 'paused';
+    swarm.phase = 'active';
+    swarm.stopReason = '';
+    swarm.ownerPid = process.pid;
+    saveSwarm(root, swarm);
+  });
   // Main dispatch accounting and coordinator tools resolve this binding.
   writeJson(path.join(root, 'swarms/latest.json'), {
     id: swarm.id,

@@ -249,7 +249,7 @@ it('retains local token estimation when the selected native token counter fails'
 });
 
 it.each(['generate', 'stream', 'tokens', 'capacity'] as const)(
-  'rejects an unavailable main provider prefix during %s without dispatch or spending the saved budget',
+  'keeps an unavailable main provider prefix local during %s without dispatch or spending the saved budget',
   async (operation) => {
     const record = createAgentWorkflow(
       root,
@@ -275,10 +275,15 @@ it.each(['generate', 'stream', 'tokens', 'capacity'] as const)(
           : operation === 'tokens'
             ? routed.countTokens(request)
             : routed.getModelContextWindow(request.model);
-    await expect(run()).rejects.toMatchObject({
-      name: 'ProviderRouteError',
-      message: expect.stringContaining('/provider list'),
-    });
+    if (operation === 'capacity') {
+      // Optional UI metadata remains readable while the user repairs the route.
+      await expect(run()).resolves.toBeUndefined();
+    } else {
+      await expect(run()).rejects.toMatchObject({
+        name: 'ProviderRouteError',
+        message: expect.stringContaining('/provider list'),
+      });
+    }
     expect(fetch).not.toHaveBeenCalled();
     expect(fallback.generateContent).not.toHaveBeenCalled();
     expect(fallback.generateContentStream).not.toHaveBeenCalled();
