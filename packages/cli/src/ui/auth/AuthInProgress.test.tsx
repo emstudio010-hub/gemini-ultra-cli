@@ -33,12 +33,15 @@ vi.mock('../hooks/useKeypress.js', () => ({
 vi.mock('../components/CliSpinner.js', () => ({
   CliSpinner: () => '[Spinner]',
 }));
+const locale = vi.hoisted(() => ({ value: 'en' as 'en' | 'zh' }));
+vi.mock('../hooks/useLocale.js', () => ({ useLocale: () => locale.value }));
 
 describe('AuthInProgress', () => {
   const onTimeout = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
+    locale.value = 'en';
     vi.useFakeTimers();
     vi.mocked(debugLogger.error).mockImplementation((...args) => {
       if (
@@ -123,5 +126,41 @@ describe('AuthInProgress', () => {
       vi.advanceTimersByTime(180000);
     });
     expect(onTimeout).not.toHaveBeenCalled();
+  });
+
+  it('switches waiting and timeout copy without restarting the pending timer', async () => {
+    const screen = await render(<AuthInProgress onTimeout={onTimeout} />);
+    const latestTimeout = vi.fn();
+    try {
+      await act(async () => {
+        vi.advanceTimersByTime(90000);
+      });
+      locale.value = 'zh';
+      await act(async () =>
+        screen.rerender(<AuthInProgress onTimeout={latestTimeout} />),
+      );
+      await act(async () => screen.waitUntilReady());
+      expect(screen.lastFrame()).toContain('正在等待认证');
+      expect(screen.lastFrame()).toContain('Esc 或 Ctrl+C 取消');
+      expect(screen.lastFrame()).not.toContain('Waiting for authentication');
+      await act(async () => {
+        vi.advanceTimersByTime(90000);
+      });
+      await act(async () => screen.waitUntilReady());
+      expect(onTimeout).not.toHaveBeenCalled();
+      expect(latestTimeout).toHaveBeenCalledOnce();
+      expect(screen.lastFrame()).toContain('认证超时，请重试。');
+      locale.value = 'en';
+      await act(async () =>
+        screen.rerender(<AuthInProgress onTimeout={latestTimeout} />),
+      );
+      await act(async () => screen.waitUntilReady());
+      expect(screen.lastFrame()).toContain(
+        'Authentication timed out. Please try again.',
+      );
+      expect(latestTimeout).toHaveBeenCalledOnce();
+    } finally {
+      screen.unmount();
+    }
   });
 });

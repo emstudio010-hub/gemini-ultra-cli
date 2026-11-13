@@ -45,6 +45,8 @@ vi.mock('../contexts/UIStateContext.js', async (importOriginal) => {
 
 const mockedUseKeypress = useKeypress as Mock;
 const mockedUseTextBuffer = useTextBuffer as Mock;
+const locale = vi.hoisted(() => ({ value: 'en' as 'en' | 'zh' }));
+vi.mock('../hooks/useLocale.js', () => ({ useLocale: () => locale.value }));
 
 describe('ApiAuthDialog', () => {
   const onSubmit = vi.fn();
@@ -54,6 +56,7 @@ describe('ApiAuthDialog', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    locale.value = 'en';
     onClear.mockReset().mockResolvedValue(true);
     vi.stubEnv('GEMINI_API_KEY', '');
     mockBuffer = {
@@ -81,6 +84,51 @@ describe('ApiAuthDialog', () => {
     );
     expect(lastFrame()).toMatchSnapshot();
     unmount();
+  });
+
+  it('switches key instructions between Chinese and English while preserving input', async () => {
+    const screen = await renderWithProviders(
+      <ApiAuthDialog
+        onSubmit={onSubmit}
+        onCancel={onCancel}
+        onClear={onClear}
+      />,
+    );
+    try {
+      mockBuffer.text = 'FAKE_TYPED_KEY';
+      mockBuffer.viewportVisualLines = ['FAKE_TYPED_KEY'];
+      locale.value = 'zh';
+      await act(async () =>
+        screen.rerender(
+          <ApiAuthDialog
+            onSubmit={onSubmit}
+            onCancel={onCancel}
+            onClear={onClear}
+          />,
+        ),
+      );
+      await screen.waitUntilReady();
+      expect(screen.lastFrame()).toContain('输入 Gemini API 密钥');
+      expect(screen.lastFrame()).toContain('Ctrl+C 清除已保存的密钥');
+      expect(screen.lastFrame()).not.toContain('Enter Gemini API Key');
+      expect(mockBuffer.text).toBe('FAKE_TYPED_KEY');
+      locale.value = 'en';
+      await act(async () =>
+        screen.rerender(
+          <ApiAuthDialog
+            onSubmit={onSubmit}
+            onCancel={onCancel}
+            onClear={onClear}
+          />,
+        ),
+      );
+      await screen.waitUntilReady();
+      expect(screen.lastFrame()).toContain('Enter Gemini API Key');
+      expect(mockBuffer.text).toBe('FAKE_TYPED_KEY');
+      expect(mockBuffer.setText).not.toHaveBeenCalled();
+    } finally {
+      screen.unmount();
+    }
   });
 
   it('preserves typed input when a saved default arrives later', async () => {

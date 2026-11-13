@@ -84,7 +84,10 @@ export function AuthDialog({
     ...(process.env['CLOUD_SHELL'] === 'true'
       ? [
           {
-            label: 'Use Cloud Shell user credentials',
+            label: t(
+              '使用 Cloud Shell 用户凭据',
+              'Use Cloud Shell user credentials',
+            ),
             value: AuthType.COMPUTE_ADC,
             key: AuthType.COMPUTE_ADC,
           },
@@ -92,7 +95,10 @@ export function AuthDialog({
       : process.env['GEMINI_CLI_USE_COMPUTE_ADC'] === 'true'
         ? [
             {
-              label: 'Use metadata server application default credentials',
+              label: t(
+                '使用元数据服务器的应用默认凭据',
+                'Use metadata server application default credentials',
+              ),
               value: AuthType.COMPUTE_ADC,
               key: AuthType.COMPUTE_ADC,
             },
@@ -268,7 +274,10 @@ export function AuthDialog({
         if (settings.merged.security.auth.selectedType === undefined) {
           // Prevent exiting if no auth method is set
           onAuthError(
-            'You must select an auth method to proceed. Press Ctrl+C twice to exit.',
+            t(
+              '请先选择认证方式。连续按两次 Ctrl+C 退出。',
+              'You must select an auth method to proceed. Press Ctrl+C twice to exit.',
+            ),
           );
           return true;
         }
@@ -328,7 +337,10 @@ export function AuthDialog({
         alignItems="flex-start"
       >
         <Text color={theme.text.primary}>
-          Logging in with Google... Restarting Gemini CLI to continue.
+          {t(
+            '正在通过 Google 登录…重启 Gemini CLI 后继续。',
+            'Logging in with Google... Restarting Gemini CLI to continue.',
+          )}
         </Text>
       </Box>
     );
@@ -379,7 +391,10 @@ export function AuthDialog({
         </Box>
         <Box marginTop={1}>
           <Text color={theme.text.primary}>
-            Terms of Services and Privacy Notice for Gemini CLI
+            {t(
+              'Gemini CLI 服务条款和隐私声明',
+              'Terms of Services and Privacy Notice for Gemini CLI',
+            )}
           </Text>
         </Box>
         <Box marginTop={1}>

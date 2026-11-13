@@ -62,7 +62,6 @@ import {
   getErrorMessage,
   getAllGeminiMdFilenames,
   AuthType,
-  clearCachedCredentialFile,
   type ResumedSessionData,
   recordExitFail,
   ShellExecutionService,
@@ -72,7 +71,6 @@ import {
   CoreEvent,
   flattenMemory,
   type MemoryChangedPayload,
-  writeToStdout,
   disableMouseEvents,
   enterAlternateScreen,
   enableMouseEvents,
@@ -85,12 +83,7 @@ import {
   generateSummary,
   type ConsentRequestPayload,
   type AgentsDiscoveredPayload,
-  ChangeAuthRequestedError,
-  ProjectIdRequiredError,
-  AuthRefreshSupersededError,
   buildUserSteeringHintPrompt,
-  logBillingEvent,
-  ApiKeyUpdatedEvent,
   LegacyAgentProtocol,
   type InjectionSource,
 } from '@google/gemini-cli-core';
@@ -124,7 +117,7 @@ import { useGeminiStream } from './hooks/useGeminiStream.js';
 import { useAgentStream } from './hooks/useAgentStream.js';
 import { type BackgroundTask } from './hooks/useExecutionLifecycle.js';
 import { useVim } from './hooks/vim.js';
-import { type LoadableSettingScope, SettingScope } from '../config/settings.js';
+import { SettingScope } from '../config/settings.js';
 import { type InitializationResult } from '../core/initializer.js';
 import { startAutoMemoryIfEnabled } from '../utils/autoMemory.js';
 import { useFocus } from './hooks/useFocus.js';
@@ -1025,64 +1018,6 @@ export const AppContainer = (props: AppContainerProps) => {
       await handleDeleteSessionSync(session);
     },
     [handleDeleteSessionSync],
-  );
-
-  // Create handleAuthSelect wrapper for backward compatibility
-  const handleAuthSelect = useCallback(
-    async (authType: AuthType | undefined, scope: LoadableSettingScope) => {
-      if (authType) {
-        const previousAuthType =
-          config.getContentGeneratorConfig()?.authType ?? 'unknown';
-        if (authType === AuthType.LOGIN_WITH_GOOGLE) {
-          setAuthContext({ requiresRestart: true });
-        } else {
-          setAuthContext({});
-        }
-        await clearCachedCredentialFile();
-        settings.setValue(scope, 'security.auth.selectedType', authType);
-
-        try {
-          config.setRemoteAdminSettings(undefined);
-          await config.refreshAuth(authType);
-          setAuthState(AuthState.Authenticated);
-          logBillingEvent(
-            config,
-            new ApiKeyUpdatedEvent(previousAuthType, authType),
-          );
-        } catch (e) {
-          if (
-            e instanceof ChangeAuthRequestedError ||
-            e instanceof AuthRefreshSupersededError
-          ) {
-            return;
-          }
-          if (e instanceof ProjectIdRequiredError) {
-            // OAuth succeeded but account setup requires project ID
-            // Show the error message directly without "Failed to authenticate" prefix
-            onAuthError(getErrorMessage(e));
-            return;
-          }
-          onAuthError(
-            `Failed to authenticate: ${e instanceof Error ? e.message : String(e)}`,
-          );
-          return;
-        }
-
-        if (
-          authType === AuthType.LOGIN_WITH_GOOGLE &&
-          config.isBrowserLaunchSuppressed()
-        ) {
-          writeToStdout(`
-----------------------------------------------------------------
-Logging in with Google... Restarting Gemini CLI to continue.
-----------------------------------------------------------------
-          `);
-          await relaunchApp();
-        }
-      }
-      setAuthState(AuthState.Authenticated);
-    },
-    [settings, config, setAuthState, onAuthError, setAuthContext],
   );
 
   const handleApiKeyCancel = useCallback(() => {
@@ -3037,7 +2972,6 @@ Logging in with Google... Restarting Gemini CLI to continue.
       handleThemeSelect,
       closeThemeDialog,
       handleThemeHighlight,
-      handleAuthSelect,
       setAuthState,
       onAuthError,
       handleEditorSelect,
@@ -3140,7 +3074,6 @@ Logging in with Google... Restarting Gemini CLI to continue.
       handleThemeSelect,
       closeThemeDialog,
       handleThemeHighlight,
-      handleAuthSelect,
       setAuthState,
       onAuthError,
       handleEditorSelect,

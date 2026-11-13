@@ -16,6 +16,7 @@ import { useKeypress } from '../hooks/useKeypress.js';
 import { Command } from '../key/keyMatchers.js';
 import { useKeyMatchers } from '../hooks/useKeyMatchers.js';
 import { KeypressPriority } from '../contexts/KeypressContext.js';
+import { useLocale } from '../hooks/useLocale.js';
 
 interface ApiAuthDialogProps {
   onSubmit: (apiKey: string) => void;
@@ -33,6 +34,8 @@ export function ApiAuthDialog({
   defaultValue = '',
 }: ApiAuthDialogProps): React.JSX.Element {
   const keyMatchers = useKeyMatchers();
+  const locale = useLocale();
+  const t = (zh: string, en: string) => (locale === 'zh' ? zh : en);
   const { terminalWidth } = useUIState();
   const viewportWidth = terminalWidth - 8;
 
@@ -116,15 +119,17 @@ export function ApiAuthDialog({
       width="100%"
     >
       <Text bold color={theme.text.primary}>
-        Enter Gemini API Key
+        {t('输入 Gemini API 密钥', 'Enter Gemini API Key')}
       </Text>
       <Box marginTop={1} flexDirection="column">
         <Text color={theme.text.primary}>
-          Please enter your Gemini API key. It will be securely stored in your
-          system keychain.
+          {t(
+            '请输入 Gemini API 密钥。密钥将通过本机凭据存储安全保存。',
+            'Please enter your Gemini API key. It will be securely stored in your system keychain.',
+          )}
         </Text>
         <Text color={theme.text.secondary}>
-          You can get an API key from{' '}
+          {t('获取 API 密钥：', 'You can get an API key from ')}
           <Text color={theme.text.link}>
             https://aistudio.google.com/app/apikey
           </Text>
@@ -144,7 +149,7 @@ export function ApiAuthDialog({
               lifecycle.clear++;
               onCancel();
             }}
-            placeholder="Paste your API key here"
+            placeholder={t('在此粘贴 API 密钥', 'Paste your API key here')}
           />
         </Box>
       </Box>
@@ -155,7 +160,10 @@ export function ApiAuthDialog({
       )}
       <Box marginTop={1}>
         <Text color={theme.text.secondary}>
-          (Press Enter to submit, Esc to cancel, Ctrl+C to clear stored key)
+          {t(
+            '（Enter 提交，Esc 取消，Ctrl+C 清除已保存的密钥）',
+            '(Press Enter to submit, Esc to cancel, Ctrl+C to clear stored key)',
+          )}
         </Text>
       </Box>
     </Box>

@@ -70,6 +70,8 @@ vi.mock('../components/shared/RadioButtonSelect.js', () => ({
 const mockedUseKeypress = useKeypress as Mock;
 const mockedRadioButtonSelect = RadioButtonSelect as Mock;
 const mockedValidateAuthMethod = validateAuthMethodWithSettings as Mock;
+const locale = vi.hoisted(() => ({ value: 'en' as 'en' | 'zh' }));
+vi.mock('../hooks/useLocale.js', () => ({ useLocale: () => locale.value }));
 
 describe('AuthDialog', () => {
   let props: {
@@ -82,6 +84,7 @@ describe('AuthDialog', () => {
   };
   beforeEach(() => {
     vi.resetAllMocks();
+    locale.value = 'en';
     mockProviderManager.getActiveProvider.mockReturnValue({ id: 'fixture' });
     vi.stubEnv('CLOUD_SHELL', undefined as unknown as string);
     vi.stubEnv('GEMINI_CLI_USE_COMPUTE_ADC', undefined as unknown as string);
@@ -109,6 +112,42 @@ describe('AuthDialog', () => {
 
   afterEach(() => {
     vi.unstubAllEnvs();
+  });
+
+  it('switches selection instructions and Cloud Shell labels with the interface language', async () => {
+    vi.stubEnv('CLOUD_SHELL', 'true');
+    const screen = await renderWithProviders(<AuthDialog {...props} />);
+    try {
+      locale.value = 'zh';
+      await act(async () => screen.rerender(<AuthDialog {...props} />));
+      await screen.waitUntilReady();
+      expect(
+        mockedRadioButtonSelect.mock.calls.at(-1)?.[0].items,
+      ).toContainEqual({
+        label: '使用 Cloud Shell 用户凭据',
+        value: AuthType.COMPUTE_ADC,
+        key: AuthType.COMPUTE_ADC,
+      });
+      expect(screen.lastFrame()).toContain('Gemini CLI 服务条款和隐私声明');
+      mockedUseKeypress.mock.calls.at(-1)?.[0]({ name: 'escape' });
+      expect(props.onAuthError).toHaveBeenCalledWith(
+        '请先选择认证方式。连续按两次 Ctrl+C 退出。',
+      );
+      locale.value = 'en';
+      await act(async () => screen.rerender(<AuthDialog {...props} />));
+      await screen.waitUntilReady();
+      expect(
+        mockedRadioButtonSelect.mock.calls.at(-1)?.[0].items,
+      ).toContainEqual({
+        label: 'Use Cloud Shell user credentials',
+        value: AuthType.COMPUTE_ADC,
+        key: AuthType.COMPUTE_ADC,
+      });
+      expect(screen.lastFrame()).not.toContain('服务条款和隐私声明');
+      expect(props.settings.setValue).not.toHaveBeenCalled();
+    } finally {
+      screen.unmount();
+    }
   });
 
   describe('Environment Variable Effects on Auth Options', () => {

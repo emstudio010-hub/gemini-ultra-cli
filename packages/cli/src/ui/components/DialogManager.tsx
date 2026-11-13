@@ -40,6 +40,7 @@ import { NewAgentsNotification } from './NewAgentsNotification.js';
 import { AgentConfigDialog } from './AgentConfigDialog.js';
 import { PolicyUpdateDialog } from './PolicyUpdateDialog.js';
 import { LoginRestartDialog } from '../auth/LoginRestartDialog.js';
+import { useLocale } from '../hooks/useLocale.js';
 
 interface DialogManagerProps {
   addItem: UseHistoryManagerReturn['addItem'];
@@ -57,6 +58,7 @@ export const DialogManager = ({
   const uiState = useUIState();
   const quotaState = useQuotaState();
   const uiActions = useUIActions();
+  const locale = useLocale();
   const {
     constrainHeight,
     terminalHeight,
@@ -289,7 +291,9 @@ export const DialogManager = ({
     return (
       <AuthInProgress
         onTimeout={() => {
-          uiActions.onAuthError('Authentication cancelled.');
+          uiActions.onAuthError(
+            locale === 'zh' ? '认证已取消。' : 'Authentication cancelled.',
+          );
         }}
       />
     );
