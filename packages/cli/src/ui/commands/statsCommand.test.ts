@@ -61,6 +61,7 @@ describe('statsCommand', () => {
     mockContext.services.agentContext = {
       refreshUserQuota: vi.fn(),
       refreshAvailableCredits: vi.fn(),
+      getLastRetrievedQuota: vi.fn(),
       getUserTierName: vi.fn(),
       getUserPaidTier: vi.fn(),
       getModel: vi.fn(),
@@ -85,7 +86,7 @@ describe('statsCommand', () => {
     });
   });
 
-  it('should fetch and display quota if config is available', async () => {
+  it('should display cached quota without fetching if config is available', async () => {
     if (!statsCommand.action) throw new Error('Command has no action');
 
     const mockQuota = { buckets: [] };
@@ -100,6 +101,7 @@ describe('statsCommand', () => {
 
     mockContext.services.agentContext = {
       refreshUserQuota: mockRefreshUserQuota,
+      getLastRetrievedQuota: vi.fn().mockReturnValue(mockQuota),
       getUserTierName: mockGetUserTierName,
       getModel: mockGetModel,
       getQuotaRemaining: mockGetQuotaRemaining,
@@ -114,7 +116,7 @@ describe('statsCommand', () => {
 
     await statsCommand.action(mockContext, '');
 
-    expect(mockRefreshUserQuota).toHaveBeenCalled();
+    expect(mockRefreshUserQuota).not.toHaveBeenCalled();
     expect(mockContext.ui.addItem).toHaveBeenCalledWith(
       expect.objectContaining({
         quotas: mockQuota,
@@ -126,6 +128,46 @@ describe('statsCommand', () => {
       }),
     );
   });
+
+  it.each(['default', 'session'] as const)(
+    'renders %s statistics immediately when optional account refresh would never finish',
+    async (view) => {
+      const quota = { buckets: [] };
+      const before = JSON.stringify(quota);
+      const refresh = vi.fn(() => new Promise<never>(() => {}));
+      mockContext.services.agentContext = {
+        refreshUserQuota: refresh,
+        refreshAvailableCredits: refresh,
+        getLastRetrievedQuota: () => quota,
+        getUserTierName: () => 'Cached tier',
+        getUserPaidTier: () => undefined,
+        getModel: () => 'cached-model',
+        getQuotaRemaining: () => 25,
+        getQuotaLimit: () => 100,
+        getQuotaResetTime: () => '2026-11-20T00:00:00Z',
+        get config() {
+          return this;
+        },
+      } as unknown as Config;
+      const command =
+        view === 'default'
+          ? statsCommand
+          : statsCommand.subCommands?.find((item) => item.name === 'session');
+      if (!command?.action) throw new Error('Missing stats action');
+      const pending = command.action(mockContext, '');
+      expect(mockContext.ui.addItem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: MessageType.STATS,
+          currentModel: 'cached-model',
+          quotas: quota,
+          pooledRemaining: 25,
+        }),
+      );
+      expect(refresh).not.toHaveBeenCalled();
+      await pending;
+      expect(JSON.stringify(quota)).toBe(before);
+    },
+  );
 
   it('should display model stats when using the "model" subcommand', () => {
     const modelSubCommand = statsCommand.subCommands?.find(

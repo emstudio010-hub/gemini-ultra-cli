@@ -42,7 +42,7 @@ function getUserIdentity(context: CommandContext) {
   return { selectedAuthType, userEmail, tier, creditBalance };
 }
 
-async function defaultSessionView(context: CommandContext) {
+function defaultSessionView(context: CommandContext) {
   const now = new Date();
   const { sessionStartTime } = context.session.stats;
   if (!sessionStartTime) {
@@ -69,10 +69,9 @@ async function defaultSessionView(context: CommandContext) {
   };
 
   if (context.services.agentContext?.config) {
-    const [quota] = await Promise.all([
-      context.services.agentContext.config.refreshUserQuota(),
-      context.services.agentContext.config.refreshAvailableCredits(),
-    ]);
+    // Statistics are a local snapshot. Optional account refresh must not hold
+    // the command open or replace the credit snapshot captured above.
+    const quota = context.services.agentContext.config.getLastRetrievedQuota();
     if (quota) {
       statsItem.quotas = quota;
       statsItem.pooledRemaining =
@@ -143,7 +142,7 @@ export const statsCommand: SlashCommand = {
       await heatmapView(context, trimmed.slice('heatmap'.length));
       return;
     }
-    await defaultSessionView(context);
+    defaultSessionView(context);
   },
   subCommands: [
     {
@@ -152,8 +151,8 @@ export const statsCommand: SlashCommand = {
       kind: CommandKind.BUILT_IN,
       autoExecute: true,
       isSafeConcurrent: true,
-      action: async (context: CommandContext) => {
-        await defaultSessionView(context);
+      action: (context: CommandContext) => {
+        defaultSessionView(context);
       },
     },
     {
