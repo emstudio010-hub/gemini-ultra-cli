@@ -1664,3 +1664,8 @@ WI-194/E-441至442/F-151：普通命令/会话连接经drillCockpit静态导入�
 ## 2026-11-13 技能名称去重
 
 WI-195/E-443至444/F-152：SkillManager原merge/active区分大小写而lookup/disable不区分，旧2复现失败。统一lowercase身份键，胜出原name/body/location/顺序/来源优先级保持；删除既有unused silentConflicts，未改权限或扫描。11实际通过/1旧skipped，core/CLI严格编译/3文件lint格式通过；旧测试读175个人根导致4数量失败，测试隔离额外根后通过，未改个人技能。Windows真实四目录SKILL.md+extension及SkillCommandLoader：trust优先级正确/同名一项、toolArgs保留原WrItEr、完整body/activate/disable/reset正确，10条件通过、5153ms/退出0/0模型外部付费，fixture清理成功。非发现并发清空问题/启动基准/真实模型或最终包验收。个人配置/旧E-294与E-364失败SHA/安装83保持，无打包重装版本CI或付费重跑，goal active。详见docs/ultra-skill-name-identity-handoff.md。
+
+
+## 2026-11-13 技能刷新归属
+
+WI-196/E-445至446/F-153：技能刷新改为候选列表一次发布与revision归属，等待保留已发布目录，旧刷新/clear/add/filter/admin关闭后不回填，发布应用最新disabled清单；信任降级立即撤下旧可信项目目录。旧6复现失败；修后18实际通过/1旧skip，异步断言lint修正后单文件7通过；末次误用root导致setup路径错误零测试，原log保留，正确core目录重验通过。core/CLI严格编译、两文件lint/格式/diff退出0。Windows真实SKILL.md安全读取与SkillCommandLoader、5原生open前门闩/12条件通过、6747ms/退出0，原文件与会话active保持、临时根清理成功、0模型外部付费。非底层取消/全部文件错误事务/启动基准/最终包验收。个人配置/旧E-294与E-364失败SHA/安装83保持，无打包重装版本CI或付费重跑；goal active。详见docs/ultra-skill-refresh-ownership-handoff.md。

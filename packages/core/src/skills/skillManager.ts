@@ -19,11 +19,15 @@ export class SkillManager {
   private skills: SkillDefinition[] = [];
   private activeSkillNames: Set<string> = new Set();
   private adminSkillsEnabled = true;
+  private discoveryRevision = 0;
+  private disabledSkillNames?: string[];
+  private publishedWorkspaceTrusted = false;
 
   /**
    * Clears all discovered skills.
    */
   clearSkills(): void {
+    this.discoveryRevision++;
     this.skills = [];
   }
 
@@ -38,6 +42,7 @@ export class SkillManager {
    * Sets administrative settings for skills.
    */
   setAdminSettings(enabled: boolean): void {
+    if (!enabled) this.discoveryRevision++;
     this.adminSkillsEnabled = enabled;
   }
 
@@ -57,15 +62,20 @@ export class SkillManager {
     extensions: GeminiCLIExtension[] = [],
     isTrusted: boolean = false,
   ): Promise<void> {
-    this.clearSkills();
+    const revision = ++this.discoveryRevision;
+    if (!this.adminSkillsEnabled) return;
+    // A trust downgrade must remove the previously trusted workspace catalog
+    // immediately, rather than keeping it available during asynchronous reads.
+    if (this.publishedWorkspaceTrusted && !isTrusted) this.skills = [];
+    const discovered = new SkillManager();
 
     // 1. Built-in skills (lowest precedence)
-    await this.discoverBuiltinSkills();
+    await this.discoverBuiltinSkills(discovered);
 
     // 2. Extension skills
     for (const extension of extensions) {
       if (extension.isActive && extension.skills) {
-        this.addSkillsWithPrecedence(extension.skills);
+        discovered.addSkillsWithPrecedence(extension.skills);
       }
     }
 
@@ -83,32 +93,41 @@ export class SkillManager {
       loadSkillsFromDir,
     );
     // Merge in the original precedence order, regardless of read completion order.
-    for (const skills of skillGroups) this.addSkillsWithPrecedence(skills);
+    for (const skills of skillGroups)
+      discovered.addSkillsWithPrecedence(skills);
 
     // 4. Workspace skills (highest precedence)
     if (!isTrusted) {
       debugLogger.debug(
         'Workspace skills disabled because folder is not trusted.',
       );
-      return;
+    } else {
+      const projectSkills = await loadSkillsFromDir(
+        storage.getProjectSkillsDir(),
+      );
+      discovered.addSkillsWithPrecedence(projectSkills);
+
+      // 4.1 Workspace agent skills alias (.agents/skills)
+      const projectAgentSkills = await loadSkillsFromDir(
+        storage.getProjectAgentSkillsDir(),
+      );
+      discovered.addSkillsWithPrecedence(projectAgentSkills);
     }
-
-    const projectSkills = await loadSkillsFromDir(
-      storage.getProjectSkillsDir(),
-    );
-    this.addSkillsWithPrecedence(projectSkills);
-
-    // 4.1 Workspace agent skills alias (.agents/skills)
-    const projectAgentSkills = await loadSkillsFromDir(
-      storage.getProjectAgentSkillsDir(),
-    );
-    this.addSkillsWithPrecedence(projectAgentSkills);
+    // Publish one complete generation. Slow old refreshes and explicit clears
+    // must never restore stale commands or partially replace the live catalog.
+    if (revision !== this.discoveryRevision || !this.adminSkillsEnabled) return;
+    if (this.disabledSkillNames)
+      discovered.setDisabledSkills(this.disabledSkillNames);
+    this.skills = discovered.skills;
+    this.publishedWorkspaceTrusted = isTrusted;
   }
 
   /**
    * Discovers built-in skills.
    */
-  private async discoverBuiltinSkills(): Promise<void> {
+  private async discoverBuiltinSkills(
+    target: SkillManager = this,
+  ): Promise<void> {
     const __dirname = path.dirname(fileURLToPath(import.meta.url));
     const builtinDir = path.join(__dirname, 'builtin');
 
@@ -118,13 +137,14 @@ export class SkillManager {
       skill.isBuiltin = true;
     }
 
-    this.addSkillsWithPrecedence(builtinSkills);
+    target.addSkillsWithPrecedence(builtinSkills);
   }
 
   /**
    * Adds skills to the manager programmatically.
    */
   addSkills(skills: SkillDefinition[]): void {
+    this.discoveryRevision++;
     this.addSkillsWithPrecedence(skills);
   }
 
@@ -180,6 +200,7 @@ export class SkillManager {
    * Filters discovered skills by name.
    */
   filterSkills(predicate: (skill: SkillDefinition) => boolean): void {
+    this.discoveryRevision++;
     this.skills = this.skills.filter(predicate);
   }
 
@@ -187,6 +208,7 @@ export class SkillManager {
    * Sets the list of disabled skill names.
    */
   setDisabledSkills(disabledNames: string[]): void {
+    this.disabledSkillNames = [...disabledNames];
     const lowercaseDisabledNames = disabledNames.map((n) => n.toLowerCase());
     for (const skill of this.skills) {
       skill.disabled = lowercaseDisabledNames.includes(
