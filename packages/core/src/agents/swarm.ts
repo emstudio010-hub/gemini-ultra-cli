@@ -23,6 +23,12 @@ import { swarmContextSnapshot, swarmMemberContext } from './swarmContext.js';
 import { SwarmBudgetError } from './swarmBudgetError.js';
 import { I18nManager } from '../i18n/i18nManager.js';
 import {
+  reviewFilesSchema,
+  reviewedFilesSchema,
+  captureReviewFiles,
+  reviewFilesUnchanged,
+} from './swarmReviewFiles.js';
+import {
   inAgentWorktree,
   readAgentWorktree,
   acceptReviewedAgentWorktree,
@@ -48,6 +54,8 @@ const memberSchema = z.object({
   lastError: z.string().max(12000).optional(),
   verifiedRevision: z.number().int().optional(),
   verifiedTree: z.string().optional(),
+  reviewFiles: reviewFilesSchema.optional(),
+  reviewedFiles: reviewedFilesSchema.optional(),
   model: agentModelSpecSchema.optional(),
   modelsUsed: z.array(z.string().max(512)).max(16).default([]),
 });
@@ -88,6 +96,7 @@ const swarmSchema = z.object({
     .record(z.string().regex(/^[a-z][a-z0-9-]{0,31}$/), agentModelSpecSchema)
     .default({}),
   worktreeRequired: z.boolean().default(false),
+  workspace: z.string().min(1).optional(),
 });
 const ownerSchema = z.object({
   id: z.string().uuid(),
@@ -669,15 +678,42 @@ export class SwarmEngine {
       );
     }
   }
-  add(name: string, agent: SwarmMember['agent'], brief: string): void {
+  bindWorkspace(directory: string): void {
+    const workspace = fs.realpathSync.native(directory);
+    const swarm = readSwarm(this.root, this.id);
+    owns(swarm.ownerPid);
+    if (swarm.workspace && path.relative(swarm.workspace, workspace) !== '')
+      throw new Error(
+        'This swarm is bound to another workspace; use its original workspace.',
+      );
+    if (!swarm.workspace) {
+      swarm.workspace = workspace;
+      saveSwarm(this.root, swarm);
+    }
+  }
+  add(
+    name: string,
+    agent: SwarmMember['agent'],
+    brief: string,
+    reviewFiles?: string[],
+  ): void {
     const swarm = this.activeState();
     assertAgentAuthorization(agent);
+    if (reviewFiles && agent !== 'workflow-auditor')
+      throw new Error(
+        'review_files is only available for independent auditors.',
+      );
+    if (agent === 'workflow-auditor' && swarm.workspace && !reviewFiles)
+      throw new Error(
+        'Adding an independent auditor requires review_files listing the artifacts to verify.',
+      );
     const member = memberSchema.parse({
       name,
       agent,
       brief,
       state: 'waiting',
       model: swarm.memberModels[name],
+      reviewFiles,
     });
     if (
       ['all', 'coordinator', 'monitor'].includes(name) ||
@@ -697,6 +733,27 @@ export class SwarmEngine {
       `@${name} Public brief (${agent}): ${brief}`.slice(0, 4000),
     );
     this.wake(name);
+  }
+  setReviewFiles(name: string, reviewFiles: string[]): void {
+    const swarm = this.activeState();
+    const member = swarm.members.find((entry) => entry.name === name);
+    if (
+      !member ||
+      member.agent !== 'workflow-auditor' ||
+      member.state === 'killed'
+    )
+      throw new Error(
+        'Review files can only be assigned to an existing independent auditor.',
+      );
+    if (this.running.has(name))
+      throw new Error(
+        'Wait for this auditor to settle before changing its review files.',
+      );
+    member.reviewFiles = reviewFilesSchema.parse(reviewFiles);
+    member.verifiedRevision = undefined;
+    member.verifiedTree = undefined;
+    member.reviewedFiles = undefined;
+    saveSwarm(this.root, swarm);
   }
   post(sender: string, text: string): void {
     const swarm = this.activeState();
@@ -798,11 +855,18 @@ export class SwarmEngine {
       const verdict = parseReviewVerdict(
         readSwarmResultText(this.root, this.id, member),
       );
-      return verdict?.success && verdict.data.passed;
+      if (!verdict?.success || !verdict.data.passed) return false;
+      if (!swarm.workspace) return true;
+      const directory =
+        readAgentWorktree(this.root, this.id)?.directory ?? swarm.workspace;
+      return (
+        !!member.reviewedFiles &&
+        reviewFilesUnchanged(directory, member.reviewedFiles)
+      );
     });
     if (!verifier)
       throw new Error(
-        'A current independent verifier verdict is required before finishing.',
+        'A current independent verifier verdict and unchanged reviewed files are required before finishing.',
       );
     for (const member of swarm.members)
       readSwarmResultText(this.root, this.id, member);
@@ -829,6 +893,23 @@ export class SwarmEngine {
     const swarm = this.activeState();
     const member = swarm.members.find((entry) => entry.name === name);
     if (!member || member.state === 'killed') return;
+    if (
+      member.agent === 'workflow-auditor' &&
+      swarm.workspace &&
+      member.reviewFiles === undefined
+    ) {
+      member.state = 'paused';
+      member.verifiedRevision = undefined;
+      member.verifiedTree = undefined;
+      member.reviewedFiles = undefined;
+      recordMemberFailure(
+        member,
+        'This saved auditor requires explicit review_files before resuming. Assign its deliverable file list, or [] only for member-report-only tasks, then explicitly @mention it.',
+      );
+      saveSwarm(this.root, swarm);
+      appendPost(this.root, this.id, name, `paused: ${member.lastError}`);
+      return;
+    }
     const limit = exhaustedBudget(swarm);
     if (limit) {
       blockSwarm(this.root, swarm, limit);
@@ -908,11 +989,23 @@ export class SwarmEngine {
       member.state = 'working';
       member.verifiedRevision = undefined;
       member.verifiedTree = undefined;
+      member.reviewedFiles = undefined;
       if (member.agent !== 'workflow-auditor') swarm.revision++;
       const revision = swarm.revision;
       const reviewedTree =
         member.agent === 'workflow-auditor'
           ? agentWorktreeTree(this.root, this.id)
+          : undefined;
+      const reviewDirectory =
+        readAgentWorktree(this.root, this.id)?.directory ?? swarm.workspace;
+      const reviewedFiles =
+        member.agent === 'workflow-auditor' &&
+        swarm.workspace &&
+        reviewDirectory
+          ? captureReviewFiles(
+              reviewDirectory,
+              reviewFilesSchema.parse(member.reviewFiles),
+            )
           : undefined;
       saveSwarm(this.root, swarm);
       let memberSignal = signal;
@@ -1007,8 +1100,20 @@ export class SwarmEngine {
             throw new Error(
               'Isolated files changed during independent review; inspect the current worktree again.',
             );
-          member.verifiedRevision = revision;
-          member.verifiedTree = reviewedTree;
+          if (
+            reviewedFiles &&
+            !reviewFilesUnchanged(reviewDirectory!, reviewedFiles)
+          ) {
+            member.state = 'paused';
+            recordMemberFailure(
+              member,
+              'Reviewed files changed or became unavailable during independent review. Raw reviewer output is retained; inspect the current files before a new review.',
+            );
+          } else {
+            member.verifiedRevision = revision;
+            member.verifiedTree = reviewedTree;
+            member.reviewedFiles = reviewedFiles;
+          }
         }
       }
       if (
@@ -1041,6 +1146,7 @@ export class SwarmEngine {
       );
       member.verifiedRevision = undefined;
       member.verifiedTree = undefined;
+      member.reviewedFiles = undefined;
       if (!hadResult) member.modelsUsed = modelsUsed;
       // Peer cancellation and a blocked task do not spend another failure allowance.
       if (swarm.phase === 'active' && !signal.aborted)
@@ -1067,6 +1173,7 @@ export function getSwarmEngine(
   root: string,
   id: string,
   runner: SwarmAgentRunner,
+  workspace?: string,
 ): SwarmEngine {
   const key = engineKey(root, id);
   let engine = engines.get(key);
@@ -1074,6 +1181,7 @@ export function getSwarmEngine(
     engine = new SwarmEngine(root, id, runner);
     engines.set(key, engine);
   }
+  if (workspace) engine.bindWorkspace(workspace);
   return engine;
 }
 export function isSwarmRunning(root: string, id: string): boolean {

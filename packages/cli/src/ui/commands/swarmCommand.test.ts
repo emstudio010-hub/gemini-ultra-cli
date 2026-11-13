@@ -46,6 +46,9 @@ it('prepares a redteam role model locally and advertises it to the coordinator',
     type: 'submit_prompt',
     content: expect.stringContaining('redteam-analyst'),
   });
+  expect(result).toMatchObject({
+    content: expect.stringContaining('review_files'),
+  });
   expect(latestSwarm(root)?.budget.requests).toBe(0);
 });
 afterEach(() => {

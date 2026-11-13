@@ -32,6 +32,7 @@ interface ManageParams {
   agent?: SwarmMember['agent'];
   brief?: string;
   text?: string;
+  review_files?: string[];
 }
 class ManageInvocation extends BaseToolInvocation<ManageParams, ToolResult> {
   constructor(
@@ -52,27 +53,47 @@ class ManageInvocation extends BaseToolInvocation<ManageParams, ToolResult> {
     const root = this.context.config.storage.getProjectTempDir();
     const id = this.params.swarm_id;
     if (this.params.action !== 'status') {
-      const engine = getSwarmEngine(root, id, async (agent, prompt, signal) => {
-        if (
-          this.context.config.getAgentRegistry().getDefinition(agent)?.kind !==
-          'local'
-        )
-          throw new Error('Required local member role is unavailable.');
-        const result = await new AgentTool(this.context, this.messageBus)
-          .build({ agent_name: agent, prompt })
-          .execute({ abortSignal: signal });
-        return localAgentOutcome(result, agent !== 'workflow-auditor');
-      });
+      const engine = getSwarmEngine(
+        root,
+        id,
+        async (agent, prompt, signal) => {
+          if (
+            this.context.config.getAgentRegistry().getDefinition(agent)
+              ?.kind !== 'local'
+          )
+            throw new Error('Required local member role is unavailable.');
+          const result = await new AgentTool(this.context, this.messageBus)
+            .build({ agent_name: agent, prompt })
+            .execute({ abortSignal: signal });
+          return localAgentOutcome(result, agent !== 'workflow-auditor');
+        },
+        this.context.config.getTargetDir(),
+      );
       switch (this.params.action) {
         case 'add':
           if (!this.params.name || !this.params.agent || !this.params.brief)
             throw new Error(
               'add requires name, agent and brief including owned scope and acceptance criteria.',
             );
-          engine.add(this.params.name, this.params.agent, this.params.brief);
+          engine.add(
+            this.params.name,
+            this.params.agent,
+            this.params.brief,
+            this.params.review_files,
+          );
           break;
         case 'post':
           if (!this.params.text) throw new Error('post requires text.');
+          if (this.params.review_files) {
+            if (
+              !this.params.name ||
+              !this.params.text.includes(`@${this.params.name}`)
+            )
+              throw new Error(
+                'To reassign review_files, post must name and explicitly @mention the auditor.',
+              );
+            engine.setReviewFiles(this.params.name, this.params.review_files);
+          }
           engine.post('coordinator', this.params.text);
           break;
         case 'wait':
@@ -125,6 +146,14 @@ export class ManageSwarmTool extends BaseDeclarativeTool<
             enum: swarmRoleSchema.options,
           },
           brief: { type: 'string', maxLength: 8000 },
+          review_files: {
+            type: 'array',
+            items: { type: 'string', minLength: 1, maxLength: 1024 },
+            maxItems: 64,
+            uniqueItems: true,
+            description:
+              'Required when adding a workflow-auditor. List every deliverable and evidence file it must inspect inside the task workspace; checked before/after review and before finish, at most 64 MiB total. Use [] only for member-report-only tasks with no workspace-file deliverables; that scope does not approve workspace files. On post, provide name and explicitly @mention that auditor to assign a new list. In worktree mode, resolve paths inside that worktree.',
+          },
           text: { type: 'string', maxLength: 4000 },
         },
         required: ['swarm_id', 'action'],

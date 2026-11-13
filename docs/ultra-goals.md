@@ -1559,3 +1559,8 @@ WI-173/E-399至400/F-130：全packages核对legacy AppContainer handleAuthSelect
 ## 2026-11-13 Swarm无效复核保留与完成门禁
 
 WI-174/E-401至402/F-131：原Swarm JSON.parse抛出可丢当前复核正文，空白summary/evidence可标通过；finish信任旧revision标记。现安全解析/统一trim非空校验，invalid成员paused/原文及长归档保持/一次失败无自动重试，预算交接不冒称通过；finish重读原文，旧空白通过标记拒绝且状态不改。旧5复现失败/2合法对照过，最终9新+6相关对照共15不同场景通过，core/CLI严格源码编译/两文件最终lint格式通过；首const lint及聚合显示旧14常量修正留证。Windows真实Config/gateway/注册auditor/AgentTool/LocalAgentExecutor/complete_task/SSE/Swarm+导出，空白complete_task实际GOAL却被Swarm拒绝、正文保持，合法对照及旧marker拒绝；长格式错误仅runner边界0请求验证。最终19条件通过、4956ms/退出0/2loopback模型协议/0外部，finish补强前成功另保留。非真实模型独立阅读/复杂逆向质量或共享目录所有文件指纹验收；E-294/E-364仍失败且SHA保持，个人配置/安装83保持。无打包重装版本CI/付费重跑，goal active。详见docs/ultra-swarm-verdict-handoff.md。
+
+
+## 2026-11-13 Swarm文件复核一致性
+
+WI-175/E-403至404/F-132：原共享工作区文件变化不推进成员revision，旧通过仍可能完成；现公开工具绑定workspace，auditor显式review_files，最多64文件/64MiB，在开轮/通过/finish核对SHA与字节，managed worktree内解析。审查中变化paused/原文保持/一次失败，之后变化拒finish且状态字节保持；无关文件不影响。已有auditor可post带name/list/@name显式重审，旧缺清单wake修前实际多跑一轮，现暂停且不计轮/请求/失败。显式[]只批准member报告范围，无workspace低层旧API保留。最终23不同相关检查通过、core/CLI严格编译/九文件lint格式通过；managed worktree真实Windows git路径通过，源checkout保持。Windows真实公开工具/注册auditor/AgentTool/LocalAgentExecutor/complete_task/SSE/文件指纹16条件通过、7926ms/退出0/2loopback请求/0外部，宿主审查中/后改动均拦截，恢复精确版本完成。首验证器行为通过但重复释放导致退出1留证，send保护后通过，最终wake补强后再验。非实际模型独立阅读/清单完整性/文件系统锁/跨进程原子性或复杂真实任务质量验收；个人配置/旧E-294与E-364失败SHA/安装83保持，无打包重装版本CI或付费重跑，goal active。详见docs/ultra-swarm-review-files-handoff.md。

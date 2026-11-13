@@ -22,6 +22,12 @@ import {
 import { makeFakeConfig } from '../test-utils/config.js';
 import { createAgentWorkflow, runAgentWorkflow } from './agentWorkflows.js';
 import { withAgentWorkingDirectory } from '../config/scoped-config.js';
+import {
+  createSwarm,
+  getSwarmEngine,
+  readSwarm,
+  requireSwarmWorktree,
+} from './swarm.js';
 
 let scratch: string;
 let source: string;
@@ -228,6 +234,53 @@ it('keeps simultaneous scoped working directories independent', async () => {
   );
   expect(values).toEqual([a, b]);
   expect(config.getTargetDir()).toBe(source);
+});
+
+it('binds Swarm review files to the managed worktree rather than the source checkout', async () => {
+  const task = createSwarm(root, 'Review the isolated file version');
+  const worktree = prepareAgentWorktree(root, task.id, source);
+  requireSwarmWorktree(root, task.id);
+  fs.writeFileSync(
+    path.join(worktree.directory, 'seed.txt'),
+    'reviewed isolated version\n',
+  );
+  const config = makeFakeConfig({ targetDir: source, cwd: source });
+  const engine = getSwarmEngine(
+    root,
+    task.id,
+    async () => {
+      expect(config.getTargetDir()).toBe(worktree.directory);
+      return {
+        completed: true,
+        text: JSON.stringify({
+          passed: true,
+          summary: 'Checked isolated seed.txt',
+          evidence: ['seed.txt'],
+        }),
+      };
+    },
+    source,
+  );
+  engine.add('reviewer', 'workflow-auditor', 'Inspect isolated seed.txt', [
+    'seed.txt',
+  ]);
+  await engine.wait(new AbortController().signal);
+  expect(readSwarm(root, task.id).members[0].reviewedFiles?.directory).toBe(
+    fs.realpathSync.native(worktree.directory),
+  );
+  fs.writeFileSync(
+    path.join(worktree.directory, 'seed.txt'),
+    'changed isolated version\n',
+  );
+  expect(() => engine.finish()).toThrow(/unchanged reviewed files/);
+  expect(fs.readFileSync(path.join(source, 'seed.txt'), 'utf8')).toBe('base\n');
+  fs.writeFileSync(
+    path.join(worktree.directory, 'seed.txt'),
+    'reviewed isolated version\n',
+  );
+  engine.finish();
+  expect(readSwarm(root, task.id).phase).toBe('completed');
+  expect(fs.readFileSync(path.join(source, 'seed.txt'), 'utf8')).toBe('base\n');
 });
 
 it('refuses missing required manifests and files changed during independent review', async () => {

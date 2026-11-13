@@ -118,6 +118,7 @@ it('routes a pre-cancelled manage_swarm wait through existing member cleanup', a
     config: {
       storage: { getProjectTempDir: () => root },
       getApprovalMode: () => ApprovalMode.DEFAULT,
+      getTargetDir: () => root,
     },
   } as unknown as AgentLoopContext;
   const tool = new ManageSwarmTool(context, createMockMessageBus());
