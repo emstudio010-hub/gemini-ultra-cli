@@ -16,29 +16,35 @@ import {
   type Mock,
 } from 'vitest';
 import { AuthDialog } from './AuthDialog.js';
-import { AuthType, type Config, debugLogger } from '@google/gemini-cli-core';
+import {
+  AuthType,
+  type Config,
+  debugLogger,
+  clearCachedCredentialFile,
+} from '@google/gemini-cli-core';
 import { SettingScope, type LoadedSettings } from '../../config/settings.js';
 import { AuthState } from '../types.js';
 import { RadioButtonSelect } from '../components/shared/RadioButtonSelect.js';
 import { useKeypress } from '../hooks/useKeypress.js';
 import { validateAuthMethodWithSettings } from './useAuth.js';
-import { runExitCleanup } from '../../utils/cleanup.js';
 import { Text } from 'ink';
-import { RELAUNCH_EXIT_CODE } from '../../utils/processUtils.js';
+import * as processUtils from '../../utils/processUtils.js';
 
 // Mocks
+const mockProviderManager = vi.hoisted(() => ({
+  getActiveProvider: vi.fn(),
+  setActiveSelection: vi.fn(),
+}));
+
 vi.mock('@google/gemini-cli-core', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('@google/gemini-cli-core')>();
   return {
     ...actual,
     clearCachedCredentialFile: vi.fn(),
+    ProviderManager: { getInstance: () => mockProviderManager },
   };
 });
-
-vi.mock('../../utils/cleanup.js', () => ({
-  runExitCleanup: vi.fn(),
-}));
 
 vi.mock('./useAuth.js', () => ({
   validateAuthMethodWithSettings: vi.fn(),
@@ -64,7 +70,6 @@ vi.mock('../components/shared/RadioButtonSelect.js', () => ({
 const mockedUseKeypress = useKeypress as Mock;
 const mockedRadioButtonSelect = RadioButtonSelect as Mock;
 const mockedValidateAuthMethod = validateAuthMethodWithSettings as Mock;
-const mockedRunExitCleanup = runExitCleanup as Mock;
 
 describe('AuthDialog', () => {
   let props: {
@@ -77,6 +82,7 @@ describe('AuthDialog', () => {
   };
   beforeEach(() => {
     vi.resetAllMocks();
+    mockProviderManager.getActiveProvider.mockReturnValue({ id: 'fixture' });
     vi.stubEnv('CLOUD_SHELL', undefined as unknown as string);
     vi.stubEnv('GEMINI_CLI_USE_COMPUTE_ADC', undefined as unknown as string);
     vi.stubEnv('GEMINI_DEFAULT_AUTH_TYPE', undefined as unknown as string);
@@ -214,6 +220,163 @@ describe('AuthDialog', () => {
   });
 
   describe('handleAuthSelect', () => {
+    it.each([null, 'OLD_VALIDATION_ERROR'])(
+      'ignores validation result %s after highlighting another auth method',
+      async (error) => {
+        let release!: (error: string | null) => void;
+        mockedValidateAuthMethod.mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              release = resolve;
+            }),
+        );
+        const { unmount } = await renderWithProviders(
+          <AuthDialog {...props} />,
+        );
+        const callbacks = mockedRadioButtonSelect.mock.calls[0][0];
+        try {
+          const pending = callbacks.onSelect(AuthType.LOGIN_WITH_GOOGLE);
+          callbacks.onHighlight(AuthType.USE_GEMINI);
+          vi.mocked(props.onAuthError).mockClear();
+          await act(async () => {
+            release(error);
+            await pending;
+          });
+          expect(props.onAuthError).not.toHaveBeenCalled();
+          expect(clearCachedCredentialFile).not.toHaveBeenCalled();
+          expect(props.settings.setValue).not.toHaveBeenCalled();
+          expect(props.setAuthState).not.toHaveBeenCalled();
+        } finally {
+          unmount();
+        }
+      },
+    );
+
+    it.each(['resolve', 'reject'] as const)(
+      'ignores old credential cleanup %s after selecting a newer auth method',
+      async (outcome) => {
+        let release!: () => void;
+        mockedValidateAuthMethod.mockResolvedValue(null);
+        vi.mocked(clearCachedCredentialFile).mockImplementationOnce(
+          () =>
+            new Promise((resolve, reject) => {
+              release = () =>
+                outcome === 'resolve'
+                  ? resolve()
+                  : reject(new Error('OLD_CREDENTIAL_ERROR'));
+            }),
+        );
+        const { unmount } = await renderWithProviders(
+          <AuthDialog {...props} />,
+        );
+        const { onSelect } = mockedRadioButtonSelect.mock.calls[0][0];
+        try {
+          const old = onSelect(AuthType.LOGIN_WITH_GOOGLE);
+          await act(async () => {
+            await Promise.resolve();
+          });
+          expect(clearCachedCredentialFile).toHaveBeenCalledOnce();
+          await act(async () => onSelect(AuthType.USE_GEMINI));
+          vi.mocked(props.onAuthError).mockClear();
+          vi.mocked(props.setAuthContext).mockClear();
+          await act(async () => {
+            release();
+            await old;
+          });
+          expect(props.settings.setValue).toHaveBeenCalledExactlyOnceWith(
+            SettingScope.User,
+            'security.auth.selectedType',
+            AuthType.USE_GEMINI,
+          );
+          expect(props.setAuthState).toHaveBeenCalledExactlyOnceWith(
+            AuthState.AwaitingApiKeyInput,
+          );
+          expect(props.onAuthError).not.toHaveBeenCalled();
+          expect(props.setAuthContext).not.toHaveBeenCalled();
+          expect(
+            mockProviderManager.setActiveSelection,
+          ).toHaveBeenCalledExactlyOnceWith(undefined);
+        } finally {
+          unmount();
+        }
+      },
+    );
+
+    it('ignores validation finishing after the selection dialog unmounts', async () => {
+      let release!: () => void;
+      mockedValidateAuthMethod.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            release = () => resolve(null);
+          }),
+      );
+      const { unmount } = await renderWithProviders(<AuthDialog {...props} />);
+      const pending = mockedRadioButtonSelect.mock.calls[0][0].onSelect(
+        AuthType.LOGIN_WITH_GOOGLE,
+      );
+      unmount();
+      await act(async () => {
+        release();
+        await pending;
+      });
+      expect(clearCachedCredentialFile).not.toHaveBeenCalled();
+      expect(props.settings.setValue).not.toHaveBeenCalled();
+      expect(props.onAuthError).not.toHaveBeenCalled();
+    });
+
+    it('invalidates pending selection validation when Escape keeps the previous auth method', async () => {
+      props.settings.merged.security.auth.selectedType = AuthType.GATEWAY;
+      let release!: () => void;
+      mockedValidateAuthMethod.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            release = () => resolve(null);
+          }),
+      );
+      const { unmount } = await renderWithProviders(<AuthDialog {...props} />);
+      try {
+        const pending = mockedRadioButtonSelect.mock.calls[0][0].onSelect(
+          AuthType.LOGIN_WITH_GOOGLE,
+        );
+        mockedUseKeypress.mock.calls[0][0]({ name: 'escape' });
+        await act(async () => {
+          release();
+          await pending;
+        });
+        expect(props.setAuthState).toHaveBeenCalledExactlyOnceWith(
+          AuthState.Unauthenticated,
+        );
+        expect(props.settings.setValue).not.toHaveBeenCalled();
+        expect(clearCachedCredentialFile).not.toHaveBeenCalled();
+      } finally {
+        unmount();
+      }
+    });
+
+    it('cancels a scheduled Google relaunch when the selection dialog unmounts', async () => {
+      vi.useFakeTimers();
+      const relaunchSpy = vi
+        .spyOn(processUtils, 'relaunchApp')
+        .mockResolvedValue(undefined);
+      vi.mocked(props.config.isBrowserLaunchSuppressed).mockReturnValue(true);
+      mockedValidateAuthMethod.mockResolvedValue(null);
+      const { unmount } = await renderWithProviders(<AuthDialog {...props} />);
+      try {
+        await act(async () =>
+          mockedRadioButtonSelect.mock.calls[0][0].onSelect(
+            AuthType.LOGIN_WITH_GOOGLE,
+          ),
+        );
+        unmount();
+        await act(async () => vi.advanceTimersByTimeAsync(150));
+        expect(relaunchSpy).not.toHaveBeenCalled();
+      } finally {
+        unmount();
+        relaunchSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
     it('calls onAuthError if validation fails', async () => {
       mockedValidateAuthMethod.mockResolvedValue('Invalid method');
       const { unmount } = await renderWithProviders(<AuthDialog {...props} />);
@@ -472,30 +635,30 @@ describe('AuthDialog', () => {
       unmount();
     });
 
-    it('exits process for Sign in with Google when browser is suppressed', async () => {
+    it('requests supervisor relaunch for Sign in with Google when browser is suppressed', async () => {
       vi.useFakeTimers();
-      const exitSpy = vi
-        .spyOn(process, 'exit')
-        .mockImplementation(() => undefined as never);
-      const logSpy = vi.spyOn(debugLogger, 'log').mockImplementation(() => {});
+      const relaunchSpy = vi
+        .spyOn(processUtils, 'relaunchApp')
+        .mockResolvedValue(undefined);
       vi.mocked(props.config.isBrowserLaunchSuppressed).mockReturnValue(true);
       mockedValidateAuthMethod.mockResolvedValue(null);
 
       const { unmount } = await renderWithProviders(<AuthDialog {...props} />);
       const { onSelect: handleAuthSelect } =
         mockedRadioButtonSelect.mock.calls[0][0];
-      await act(async () => {
-        await handleAuthSelect(AuthType.LOGIN_WITH_GOOGLE);
-        await vi.runAllTimersAsync();
-      });
-
-      expect(mockedRunExitCleanup).toHaveBeenCalled();
-      expect(exitSpy).toHaveBeenCalledWith(RELAUNCH_EXIT_CODE);
-
-      exitSpy.mockRestore();
-      logSpy.mockRestore();
-      vi.useRealTimers();
-      unmount();
+      try {
+        await act(async () => {
+          await handleAuthSelect(AuthType.LOGIN_WITH_GOOGLE);
+          await vi.advanceTimersByTimeAsync(150);
+        });
+        expect(relaunchSpy).toHaveBeenCalledExactlyOnceWith({
+          overrideAuthType: AuthType.LOGIN_WITH_GOOGLE,
+        });
+      } finally {
+        unmount();
+        relaunchSpy.mockRestore();
+        vi.useRealTimers();
+      }
     });
 
     it('catches errors thrown during onSelect and forwards them to onAuthError', async () => {

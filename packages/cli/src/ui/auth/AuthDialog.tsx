@@ -5,7 +5,7 @@
  */
 
 import type React from 'react';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Box, Text } from 'ink';
 import { theme } from '../semantic-colors.js';
 import { RadioButtonSelect } from '../components/shared/RadioButtonSelect.js';
@@ -48,6 +48,23 @@ export function AuthDialog({
 }: AuthDialogProps): React.JSX.Element {
   const [exiting, setExiting] = useState(false);
   const [showProviderForm, setShowProviderForm] = useState(false);
+  const lifecycle = useRef<{
+    mounted: boolean;
+    selection: number;
+    restartTimer?: ReturnType<typeof setTimeout>;
+  }>({ mounted: true, selection: 0 }).current;
+  const invalidateSelection = useCallback(() => {
+    lifecycle.selection++;
+    clearTimeout(lifecycle.restartTimer);
+    lifecycle.restartTimer = undefined;
+  }, [lifecycle]);
+  useEffect(() => {
+    lifecycle.mounted = true;
+    return () => {
+      lifecycle.mounted = false;
+      invalidateSelection();
+    };
+  }, [lifecycle, invalidateSelection]);
   const locale = useLocale();
   const t = (zh: string, en: string) => (locale === 'zh' ? zh : en);
   let items = [
@@ -130,26 +147,19 @@ export function AuthDialog({
   }
 
   const onSelect = useCallback(
-    async (authType: AuthType | undefined, scope: LoadableSettingScope) => {
-      if (exiting) {
+    async (
+      authType: AuthType | undefined,
+      scope: LoadableSettingScope,
+      isCurrent: () => boolean,
+    ) => {
+      if (exiting || !isCurrent()) {
         return;
       }
       if (authType) {
-        if (
-          authType !== AuthType.GATEWAY &&
-          ProviderManager.getInstance().getActiveProvider()
-        )
-          ProviderManager.getInstance().setActiveSelection(undefined);
         const needsRestart =
           authType === AuthType.LOGIN_WITH_GOOGLE ||
           (authType === AuthType.USE_VERTEX_AI &&
             process.env['CLOUD_SHELL'] === 'true');
-
-        if (needsRestart) {
-          setAuthContext({ requiresRestart: true });
-        } else {
-          setAuthContext({});
-        }
 
         const currentAuthType = settings.merged.security?.auth?.selectedType;
         if (
@@ -159,6 +169,7 @@ export function AuthDialog({
           try {
             await clearCachedCredentialFile();
           } catch (error) {
+            if (!isCurrent()) return;
             debugLogger.error('Failed to clear cached credentials:', error);
             onAuthError(
               'Failed to clear cached credentials: ' +
@@ -170,14 +181,24 @@ export function AuthDialog({
           }
         }
 
+        if (!isCurrent()) return;
+        if (
+          authType !== AuthType.GATEWAY &&
+          ProviderManager.getInstance().getActiveProvider()
+        )
+          ProviderManager.getInstance().setActiveSelection(undefined);
+        setAuthContext(needsRestart ? { requiresRestart: true } : {});
         settings.setValue(scope, 'security.auth.selectedType', authType);
         if (
           authType === AuthType.LOGIN_WITH_GOOGLE &&
           config.isBrowserLaunchSuppressed()
         ) {
           setExiting(true);
-          setTimeout(() => {
+          lifecycle.restartTimer = setTimeout(() => {
+            if (!isCurrent()) return;
+            lifecycle.restartTimer = undefined;
             void relaunchApp({ overrideAuthType: authType }).catch((err) => {
+              if (!isCurrent()) return;
               debugLogger.error('Failed to trigger supervisor relaunch:', err);
               process.exit(1);
             });
@@ -195,10 +216,23 @@ export function AuthDialog({
       }
       setAuthState(AuthState.Unauthenticated);
     },
-    [settings, config, setAuthState, exiting, setAuthContext, onAuthError],
+    [
+      settings,
+      config,
+      setAuthState,
+      exiting,
+      setAuthContext,
+      onAuthError,
+      lifecycle,
+    ],
   );
 
   const handleAuthSelect = async (authMethod: AuthType) => {
+    if (exiting || !lifecycle.mounted) return;
+    invalidateSelection();
+    const selection = lifecycle.selection;
+    const isCurrent = () =>
+      lifecycle.mounted && lifecycle.selection === selection;
     if (authMethod === AuthType.GATEWAY) {
       setShowProviderForm(true);
       return;
@@ -207,13 +241,15 @@ export function AuthDialog({
       authMethod,
       settings,
     ).catch((e) => (e instanceof Error ? e.message : String(e)));
+    if (!isCurrent()) return;
     if (error) {
       onAuthError(error);
     } else {
       onAuthError(null);
       try {
-        await onSelect(authMethod, SettingScope.User);
+        await onSelect(authMethod, SettingScope.User, isCurrent);
       } catch (e) {
+        if (!isCurrent()) return;
         onAuthError(e instanceof Error ? e.message : String(e));
       }
     }
@@ -222,6 +258,8 @@ export function AuthDialog({
   useKeypress(
     (key) => {
       if (key.name === 'escape') {
+        invalidateSelection();
+        const selection = lifecycle.selection;
         // Prevent exit if there is an error message.
         // This means they user is not authenticated yet.
         if (authError) {
@@ -235,18 +273,24 @@ export function AuthDialog({
           return true;
         }
         // eslint-disable-next-line @typescript-eslint/no-floating-promises
-        onSelect(undefined, SettingScope.User);
+        onSelect(
+          undefined,
+          SettingScope.User,
+          () => lifecycle.mounted && lifecycle.selection === selection,
+        );
         return true;
       }
       return false;
     },
-    { isActive: !showProviderForm },
+    { isActive: !showProviderForm && !exiting },
   );
 
   if (showProviderForm)
     return (
       <ProviderConfigDialog
         onClose={() => {
+          if (!lifecycle.mounted) return;
+          invalidateSelection();
           setShowProviderForm(false);
           const manager = ProviderManager.getInstance();
           const provider = manager.getActiveProvider();
@@ -318,6 +362,7 @@ export function AuthDialog({
             initialIndex={initialAuthIndex}
             onSelect={handleAuthSelect}
             onHighlight={() => {
+              invalidateSelection();
               onAuthError(null);
             }}
           />
