@@ -12,8 +12,22 @@ import { getMultiSourceSkillDirs } from './skillOrchestrator.js';
 import type { GeminiCLIExtension } from '../config/config.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import { mapWithConcurrency } from '../utils/asyncPool.js';
+import { withAbortSignal } from '../utils/withAbortSignal.js';
+import { I18nManager } from '../i18n/i18nManager.js';
 // coreEvents removed to eliminate UI skill conflict warnings
 export { type SkillDefinition };
+
+export class SkillDiscoveryTimeoutError extends Error {
+  override name = 'SkillDiscoveryTimeoutError';
+  constructor() {
+    super(
+      I18nManager.getInstance().t(
+        '技能发现超过 10 秒，已停止本次加载。请检查技能目录，并运行 /skills reload 重试。',
+        'Skill discovery exceeded 10 seconds; this load stopped. Check skill directories and retry with /skills reload.',
+      ),
+    );
+  }
+}
 
 export class SkillManager {
   private skills: SkillDefinition[] = [];
@@ -22,12 +36,20 @@ export class SkillManager {
   private discoveryRevision = 0;
   private disabledSkillNames?: string[];
   private publishedWorkspaceTrusted = false;
+  private discoveryController?: AbortController;
+
+  private invalidateDiscovery(): number {
+    this.discoveryRevision++;
+    this.discoveryController?.abort();
+    this.discoveryController = undefined;
+    return this.discoveryRevision;
+  }
 
   /**
    * Clears all discovered skills.
    */
   clearSkills(): void {
-    this.discoveryRevision++;
+    this.invalidateDiscovery();
     this.skills = [];
   }
 
@@ -42,7 +64,7 @@ export class SkillManager {
    * Sets administrative settings for skills.
    */
   setAdminSettings(enabled: boolean): void {
-    if (!enabled) this.discoveryRevision++;
+    if (!enabled) this.invalidateDiscovery();
     this.adminSkillsEnabled = enabled;
   }
 
@@ -61,63 +83,92 @@ export class SkillManager {
     storage: Storage,
     extensions: GeminiCLIExtension[] = [],
     isTrusted: boolean = false,
+    signal?: AbortSignal,
   ): Promise<void> {
-    const revision = ++this.discoveryRevision;
+    signal?.throwIfAborted();
+    const revision = this.invalidateDiscovery();
     if (!this.adminSkillsEnabled) return;
-    // A trust downgrade must remove the previously trusted workspace catalog
-    // immediately, rather than keeping it available during asynchronous reads.
-    if (this.publishedWorkspaceTrusted && !isTrusted) this.skills = [];
-    const discovered = new SkillManager();
-
-    // 1. Built-in skills (lowest precedence)
-    await this.discoverBuiltinSkills(discovered);
-
-    // 2. Extension skills
-    for (const extension of extensions) {
-      if (extension.isActive && extension.skills) {
-        discovered.addSkillsWithPrecedence(extension.skills);
-      }
-    }
-
-    // 3. User skills
-    const userDirs = [
-      ...new Set([
-        Storage.getUserSkillsDir(),
-        Storage.getUserAgentSkillsDir(),
-        ...getMultiSourceSkillDirs(),
-      ]),
-    ];
-    const skillGroups = await mapWithConcurrency(userDirs, 3, (dir) =>
-      loadSkillsFromDir(dir),
+    const controller = new AbortController();
+    this.discoveryController = controller;
+    const discoverySignal = signal
+      ? AbortSignal.any([controller.signal, signal])
+      : controller.signal;
+    const timeout = setTimeout(
+      () => controller.abort(new SkillDiscoveryTimeoutError()),
+      10_000,
     );
-    // Merge in the original precedence order, regardless of read completion order.
-    for (const skills of skillGroups)
-      discovered.addSkillsWithPrecedence(skills);
+    try {
+      // A trust downgrade must remove the previously trusted workspace catalog
+      // immediately, rather than keeping it available during asynchronous reads.
+      if (this.publishedWorkspaceTrusted && !isTrusted) this.skills = [];
+      const discovered = new SkillManager();
 
-    // 4. Workspace skills (highest precedence)
-    if (!isTrusted) {
-      debugLogger.debug(
-        'Workspace skills disabled because folder is not trusted.',
+      // 1. Built-in skills (lowest precedence)
+      await withAbortSignal(discoverySignal, () =>
+        this.discoverBuiltinSkills(discovered, discoverySignal),
       );
-    } else {
-      const projectSkills = await loadSkillsFromDir(
-        storage.getProjectSkillsDir(),
-      );
-      discovered.addSkillsWithPrecedence(projectSkills);
 
-      // 4.1 Workspace agent skills alias (.agents/skills)
-      const projectAgentSkills = await loadSkillsFromDir(
-        storage.getProjectAgentSkillsDir(),
+      // 2. Extension skills
+      for (const extension of extensions) {
+        if (extension.isActive && extension.skills) {
+          discovered.addSkillsWithPrecedence(extension.skills);
+        }
+      }
+
+      // 3. User skills
+      const userDirs = [
+        ...new Set([
+          Storage.getUserSkillsDir(),
+          Storage.getUserAgentSkillsDir(),
+          ...getMultiSourceSkillDirs(),
+        ]),
+      ];
+      const skillGroups = await mapWithConcurrency(userDirs, 3, (dir) =>
+        withAbortSignal(discoverySignal, () =>
+          loadSkillsFromDir(dir, discoverySignal),
+        ),
       );
-      discovered.addSkillsWithPrecedence(projectAgentSkills);
+      // Merge in the original precedence order, regardless of read completion order.
+      for (const skills of skillGroups)
+        discovered.addSkillsWithPrecedence(skills);
+
+      // 4. Workspace skills (highest precedence)
+      if (!isTrusted) {
+        debugLogger.debug(
+          'Workspace skills disabled because folder is not trusted.',
+        );
+      } else {
+        const projectSkills = await withAbortSignal(discoverySignal, () =>
+          loadSkillsFromDir(storage.getProjectSkillsDir(), discoverySignal),
+        );
+        discovered.addSkillsWithPrecedence(projectSkills);
+
+        // 4.1 Workspace agent skills alias (.agents/skills)
+        const projectAgentSkills = await withAbortSignal(discoverySignal, () =>
+          loadSkillsFromDir(
+            storage.getProjectAgentSkillsDir(),
+            discoverySignal,
+          ),
+        );
+        discovered.addSkillsWithPrecedence(projectAgentSkills);
+      }
+      // Publish one complete generation. Slow old refreshes and explicit clears
+      // must never restore stale commands or partially replace the live catalog.
+      if (revision !== this.discoveryRevision || !this.adminSkillsEnabled)
+        return;
+      if (this.disabledSkillNames)
+        discovered.setDisabledSkills(this.disabledSkillNames);
+      this.skills = discovered.skills;
+      this.publishedWorkspaceTrusted = isTrusted;
+    } catch (error) {
+      // Superseded/explicitly invalidated work is no longer an active request.
+      if (revision !== this.discoveryRevision) return;
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+      if (this.discoveryController === controller)
+        this.discoveryController = undefined;
     }
-    // Publish one complete generation. Slow old refreshes and explicit clears
-    // must never restore stale commands or partially replace the live catalog.
-    if (revision !== this.discoveryRevision || !this.adminSkillsEnabled) return;
-    if (this.disabledSkillNames)
-      discovered.setDisabledSkills(this.disabledSkillNames);
-    this.skills = discovered.skills;
-    this.publishedWorkspaceTrusted = isTrusted;
   }
 
   /**
@@ -125,11 +176,12 @@ export class SkillManager {
    */
   private async discoverBuiltinSkills(
     target: SkillManager = this,
+    signal?: AbortSignal,
   ): Promise<void> {
     const __dirname = path.dirname(fileURLToPath(import.meta.url));
     const builtinDir = path.join(__dirname, 'builtin');
 
-    const builtinSkills = await loadSkillsFromDir(builtinDir);
+    const builtinSkills = await loadSkillsFromDir(builtinDir, signal);
 
     for (const skill of builtinSkills) {
       skill.isBuiltin = true;
@@ -142,7 +194,7 @@ export class SkillManager {
    * Adds skills to the manager programmatically.
    */
   addSkills(skills: SkillDefinition[]): void {
-    this.discoveryRevision++;
+    this.invalidateDiscovery();
     this.addSkillsWithPrecedence(skills);
   }
 
@@ -198,7 +250,7 @@ export class SkillManager {
    * Filters discovered skills by name.
    */
   filterSkills(predicate: (skill: SkillDefinition) => boolean): void {
-    this.discoveryRevision++;
+    this.invalidateDiscovery();
     this.skills = this.skills.filter(predicate);
   }
 

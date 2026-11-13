@@ -255,11 +255,12 @@ async function enableAction(
 async function reloadAction(
   context: CommandContext,
 ): Promise<void | SlashCommandActionReturn> {
+  const i18n = I18nManager.getInstance();
   const config = context.services.agentContext?.config;
   if (!config) {
     context.ui.addItem({
       type: MessageType.ERROR,
-      text: 'Could not retrieve configuration.',
+      text: i18n.t('无法读取配置。', 'Could not retrieve configuration.'),
     });
     return;
   }
@@ -272,7 +273,7 @@ async function reloadAction(
   const pendingTimeout = setTimeout(() => {
     context.ui.setPendingItem({
       type: MessageType.INFO,
-      text: 'Reloading agent skills...',
+      text: i18n.t('正在重新加载 Agent 技能…', 'Reloading agent skills...'),
     });
     pendingItemSet = true;
   }, 100);
@@ -304,22 +305,34 @@ async function reloadAction(
       (name) => !afterNames.has(name),
     ).length;
 
-    let successText = 'Agent skills reloaded successfully.';
+    let successText = i18n.t(
+      'Agent 技能已重新加载。',
+      'Agent skills reloaded successfully.',
+    );
     const details: string[] = [];
 
     if (added.length > 0) {
       details.push(
-        `${added.length} newly available skill${added.length > 1 ? 's' : ''}`,
+        i18n.t(
+          `新增 ${added.length} 项技能`,
+          `${added.length} newly available skill${added.length > 1 ? 's' : ''}`,
+        ),
       );
     }
     if (removedCount > 0) {
       details.push(
-        `${removedCount} skill${removedCount > 1 ? 's' : ''} no longer available`,
+        i18n.t(
+          `移除 ${removedCount} 项技能`,
+          `${removedCount} skill${removedCount > 1 ? 's' : ''} no longer available`,
+        ),
       );
     }
 
     if (details.length > 0) {
-      successText += ` ${details.join(' and ')}.`;
+      successText += i18n.t(
+        `${details.join('，')}。`,
+        ` ${details.join(' and ')}.`,
+      );
     }
 
     context.ui.addItem({
@@ -335,7 +348,9 @@ async function reloadAction(
     }
     context.ui.addItem({
       type: MessageType.ERROR,
-      text: `Failed to reload skills: ${error instanceof Error ? error.message : String(error)}`,
+      text:
+        i18n.t('重新加载技能失败：', 'Failed to reload skills: ') +
+        getErrorMessage(error),
     });
   }
 }

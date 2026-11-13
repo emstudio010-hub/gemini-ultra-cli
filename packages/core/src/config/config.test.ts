@@ -81,6 +81,11 @@ import {
   resetModelsForTesting,
 } from './models.js';
 import { Storage } from './storage.js';
+import {
+  SkillManager,
+  SkillDiscoveryTimeoutError,
+} from '../skills/skillManager.js';
+import { I18nManager } from '../i18n/i18nManager.js';
 import type { AgentLoopContext } from './agent-loop-context.js';
 import {
   runWithScopedAutoMemoryExtractionWriteAccess,
@@ -4794,6 +4799,68 @@ describe('Config JIT Initialization', () => {
   });
 
   describe('reloadSkills', () => {
+    beforeEach(() => {
+      // Config behavior tests do not need to scan the operator's real skills.
+      vi.spyOn(SkillManager.prototype, 'discoverSkills').mockResolvedValue(
+        undefined,
+      );
+    });
+    afterEach(() => {
+      vi.mocked(SkillManager.prototype.discoverSkills).mockRestore();
+      if (vi.isMockFunction(I18nManager.getInstance().t)) {
+        vi.mocked(I18nManager.getInstance().t).mockRestore();
+      }
+      if (vi.isMockFunction(coreEvents.emitFeedback)) {
+        vi.mocked(coreEvents.emitFeedback).mockRestore();
+      }
+    });
+
+    it.each(['zh', 'en'] as const)(
+      'continues startup after skill discovery timeout with %s feedback',
+      async (locale) => {
+        vi.spyOn(I18nManager.getInstance(), 't').mockImplementation((zh, en) =>
+          locale === 'zh' ? zh : en,
+        );
+        vi.spyOn(
+          SkillManager.prototype,
+          'discoverSkills',
+        ).mockRejectedValueOnce(new SkillDiscoveryTimeoutError());
+        const feedback = vi.spyOn(coreEvents, 'emitFeedback');
+        config = new Config({
+          sessionId: 'skill-timeout',
+          targetDir: '/tmp/test',
+          cwd: '/tmp/test',
+          debugMode: false,
+          model: 'test-model',
+          skillsSupport: true,
+        });
+        await config.initialize();
+        expect(config.isInitialized()).toBe(true);
+        expect(feedback).toHaveBeenCalledWith(
+          'warning',
+          expect.stringContaining(
+            locale === 'zh' ? 'CLI 将继续启动' : 'CLI will continue starting',
+          ),
+        );
+      },
+    );
+
+    it('still propagates unexpected skill discovery failures from startup', async () => {
+      const error = new Error('Unexpected skill discovery failure');
+      vi.spyOn(SkillManager.prototype, 'discoverSkills').mockRejectedValueOnce(
+        error,
+      );
+      config = new Config({
+        sessionId: 'skill-failure',
+        targetDir: '/tmp/test',
+        cwd: '/tmp/test',
+        debugMode: false,
+        model: 'test-model',
+        skillsSupport: true,
+      });
+      await expect(config.initialize()).rejects.toBe(error);
+    });
+
     it('should refresh disabledSkills and re-register ActivateSkillTool when skills exist', async () => {
       const mockOnReload = vi.fn().mockResolvedValue({
         disabledSkills: ['skill2'],

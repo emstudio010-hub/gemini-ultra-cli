@@ -11,6 +11,10 @@ import { createMockCommandContext } from '../../test-utils/mockCommandContext.js
 import type { CommandContext } from './types.js';
 import type { Config, SkillDefinition } from '@google/gemini-cli-core';
 import {
+  I18nManager,
+  SkillDiscoveryTimeoutError,
+} from '@google/gemini-cli-core';
+import {
   SettingScope,
   type LoadedSettings,
   createTestMergedSettings,
@@ -53,6 +57,9 @@ describe('skillsCommand', () => {
 
   beforeEach(() => {
     vi.useFakeTimers();
+    vi.spyOn(I18nManager.getInstance(), 't').mockImplementation(
+      (_zh, en) => en,
+    );
     const skills = [
       {
         name: 'skill1',
@@ -526,6 +533,47 @@ describe('skillsCommand', () => {
   });
 
   describe('reload', () => {
+    it.each(['zh', 'en'] as const)(
+      'shows %s timeout feedback and clears the pending UI',
+      async (locale) => {
+        vi.mocked(I18nManager.getInstance().t).mockImplementation((zh, en) =>
+          locale === 'zh' ? zh : en,
+        );
+        const reloadCmd = skillsCommand.subCommands!.find(
+          (s) => s.name === 'reload',
+        )!;
+        context.services.agentContext!.config.reloadSkills = vi.fn(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 200));
+          throw new SkillDiscoveryTimeoutError();
+        });
+        const action = reloadCmd.action!(context, '');
+        await vi.advanceTimersByTimeAsync(100);
+        expect(context.ui.setPendingItem).toHaveBeenCalledWith(
+          expect.objectContaining({
+            text:
+              locale === 'zh'
+                ? '正在重新加载 Agent 技能…'
+                : 'Reloading agent skills...',
+          }),
+        );
+        await vi.advanceTimersByTimeAsync(100);
+        await action;
+        expect(context.ui.setPendingItem).toHaveBeenLastCalledWith(null);
+        expect(context.ui.reloadCommands).not.toHaveBeenCalled();
+        expect(context.ui.addItem).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: MessageType.ERROR,
+            text: expect.stringContaining(
+              locale === 'zh'
+                ? '重新加载技能失败：技能发现超过 10 秒'
+                : 'Failed to reload skills: Skill discovery exceeded 10 seconds',
+            ),
+          }),
+        );
+        expect(vi.getTimerCount()).toBe(0);
+      },
+    );
+
     it('should reload skills successfully and show success message', async () => {
       const reloadCmd = skillsCommand.subCommands!.find(
         (s) => s.name === 'reload',

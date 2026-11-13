@@ -217,7 +217,12 @@ import { ExperimentFlags } from '../code_assist/experiments/flagNames.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import { withAbortSignal } from '../utils/withAbortSignal.js';
 import { ragLogger } from '../utils/ragLogger.js';
-import { SkillManager, type SkillDefinition } from '../skills/skillManager.js';
+import {
+  SkillManager,
+  SkillDiscoveryTimeoutError,
+  type SkillDefinition,
+} from '../skills/skillManager.js';
+import { I18nManager } from '../i18n/i18nManager.js';
 import { startupProfiler } from '../telemetry/startupProfiler.js';
 import type { AgentDefinition } from '../agents/types.js';
 import { fetchAdminControls } from '../code_assist/admin/admin_controls.js';
@@ -1637,11 +1642,22 @@ export class Config implements McpContext, AgentLoopContext {
     if (this.skillsSupport) {
       this.getSkillManager().setAdminSettings(this.adminSkillsEnabled);
       if (this.adminSkillsEnabled) {
-        await this.getSkillManager().discoverSkills(
-          this.storage,
-          this.getExtensions(),
-          this.isTrustedFolder(),
-        );
+        try {
+          await this.getSkillManager().discoverSkills(
+            this.storage,
+            this.getExtensions(),
+            this.isTrustedFolder(),
+          );
+        } catch (error) {
+          if (!(error instanceof SkillDiscoveryTimeoutError)) throw error;
+          coreEvents.emitFeedback(
+            'warning',
+            I18nManager.getInstance().t(
+              '技能加载超时，已跳过本次加载，CLI 将继续启动。可用 /skills reload 重试。',
+              'Skill loading timed out; the CLI will continue starting. Retry with /skills reload.',
+            ),
+          );
+        }
         this.getSkillManager().setDisabledSkills(this.disabledSkills);
 
         // Re-register ActivateSkillTool to update its schema with the discovered enabled skill enums
