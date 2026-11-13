@@ -4,7 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  type SetStateAction,
+} from 'react';
 import type { LoadedSettings } from '../../config/settings.js';
 import {
   AuthType,
@@ -15,6 +21,7 @@ import {
   ProjectIdRequiredError,
   ChangeAuthRequestedError,
   ValidationCancelledError,
+  I18nManager,
 } from '@google/gemini-cli-core';
 import { getErrorMessage } from '@google/gemini-cli-core';
 import { AuthState } from '../types.js';
@@ -46,10 +53,16 @@ export const useAuthCommand = (
   initialAuthError: string | null = null,
   initialAccountSuspensionInfo: AccountSuspensionInfo | null = null,
 ) => {
+  const lifecycle = useRef({
+    authAttempt: 0,
+    keyRead: 0,
+    mounted: true,
+  }).current;
   const mayReuseInitialAuth = useRef(!initialAuthError);
-  const [authState, setAuthState] = useState<AuthState>(
+  const [authState, setAuthStateValue] = useState<AuthState>(
     initialAuthError ? AuthState.Updating : AuthState.Unauthenticated,
   );
+  const [authRevision, setAuthRevision] = useState(0);
 
   const [authError, setAuthError] = useState<string | null>(initialAuthError);
   const [accountSuspensionInfo, setAccountSuspensionInfo] =
@@ -57,6 +70,29 @@ export const useAuthCommand = (
   const [apiKeyDefaultValue, setApiKeyDefaultValue] = useState<
     string | undefined
   >(undefined);
+
+  useEffect(() => {
+    lifecycle.mounted = true;
+    return () => {
+      lifecycle.mounted = false;
+      lifecycle.authAttempt++;
+      lifecycle.keyRead++;
+    };
+  }, [lifecycle]);
+
+  const setAuthState = useCallback(
+    (value: SetStateAction<AuthState>) => {
+      // Invalidate synchronously: a completion can run before React cleans up
+      // the old effect after a cancel, timeout, or explicit auth selection.
+      lifecycle.authAttempt++;
+      lifecycle.keyRead++;
+      if (lifecycle.mounted) {
+        setAuthRevision((revision) => revision + 1);
+        setAuthStateValue(value);
+      }
+    },
+    [lifecycle],
+  );
 
   const onAuthError = useCallback(
     (error: string | null) => {
@@ -68,35 +104,54 @@ export const useAuthCommand = (
     [setAuthError, setAuthState],
   );
 
-  const reloadApiKey = useCallback(async () => {
-    const envKey = process.env['GEMINI_API_KEY'];
-    if (envKey !== undefined) {
-      setApiKeyDefaultValue(envKey);
-      return envKey;
-    }
+  const onKeyLoadError = useCallback(() => {
+    onAuthError(
+      I18nManager.getInstance().t(
+        '无法读取已保存的 API 密钥。请重新输入密钥或选择其他认证方式。',
+        'Could not load the saved API key. Re-enter it or choose another authentication method.',
+      ),
+    );
+  }, [onAuthError]);
 
-    const storedKey = (await loadApiKey()) ?? '';
-    setApiKeyDefaultValue(storedKey);
-    return storedKey;
-  }, []);
+  const reloadApiKey = useCallback(
+    async (isRelevant: () => boolean = () => true) => {
+      const read = ++lifecycle.keyRead;
+      const envKey = process.env['GEMINI_API_KEY'];
+      const key = envKey !== undefined ? envKey : ((await loadApiKey()) ?? '');
+      if (lifecycle.mounted && read === lifecycle.keyRead && isRelevant()) {
+        setApiKeyDefaultValue(key);
+      }
+      return key;
+    },
+    [lifecycle],
+  );
 
   useEffect(() => {
-    if (authState === AuthState.AwaitingApiKeyInput) {
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      reloadApiKey();
-    }
-  }, [authState, reloadApiKey]);
+    if (authState !== AuthState.AwaitingApiKeyInput) return;
+    let active = true;
+    void reloadApiKey(() => active).catch(() => {
+      if (active && lifecycle.mounted) onKeyLoadError();
+    });
+    return () => {
+      active = false;
+    };
+  }, [authState, reloadApiKey, onKeyLoadError, lifecycle]);
 
   useEffect(() => {
+    if (authState !== AuthState.Unauthenticated) return;
+    const attempt = ++lifecycle.authAttempt;
+    let active = true;
+    const authType = settings.merged.security.auth.selectedType;
+    const isCurrent = () =>
+      active &&
+      lifecycle.mounted &&
+      lifecycle.authAttempt === attempt &&
+      settings.merged.security.auth.selectedType === authType;
     // eslint-disable-next-line @typescript-eslint/no-floating-promises
     (async () => {
-      if (authState !== AuthState.Unauthenticated) {
-        return;
-      }
       const mayReuseReadyAuth = mayReuseInitialAuth.current;
       mayReuseInitialAuth.current = false;
 
-      const authType = settings.merged.security.auth.selectedType;
       if (!authType) {
         if (process.env['GEMINI_API_KEY']) {
           onAuthError(
@@ -109,7 +164,14 @@ export const useAuthCommand = (
       }
 
       if (authType === AuthType.USE_GEMINI) {
-        const key = await reloadApiKey(); // Use the unified function
+        let key: string;
+        try {
+          key = await reloadApiKey(isCurrent);
+        } catch {
+          if (isCurrent()) onKeyLoadError();
+          return;
+        }
+        if (!isCurrent()) return;
         if (!key) {
           setAuthState(AuthState.AwaitingApiKeyInput);
           return;
@@ -120,6 +182,7 @@ export const useAuthCommand = (
         authType,
         settings,
       ).catch((e: unknown) => getErrorMessage(e));
+      if (!isCurrent()) return;
 
       if (error) {
         onAuthError(error);
@@ -147,11 +210,13 @@ export const useAuthCommand = (
           config.isAuthReady?.() === true &&
           config.getContentGeneratorConfig()?.authType === authType;
         if (!reuseReadyAuth) await config.refreshAuth(authType);
+        if (!isCurrent()) return;
 
         debugLogger.log(`Authenticated via "${authType}".`);
         setAuthError(null);
         setAuthState(AuthState.Authenticated);
       } catch (e) {
+        if (!isCurrent()) return;
         if (
           e instanceof ChangeAuthRequestedError ||
           e instanceof ValidationCancelledError
@@ -176,14 +241,21 @@ export const useAuthCommand = (
         }
       }
     })();
+    return () => {
+      active = false;
+      if (lifecycle.authAttempt === attempt) lifecycle.authAttempt++;
+    };
   }, [
     settings,
     config,
     authState,
+    authRevision,
     setAuthState,
     setAuthError,
     onAuthError,
     reloadApiKey,
+    onKeyLoadError,
+    lifecycle,
   ]);
 
   return {

@@ -123,8 +123,11 @@ describe('useAuth', () => {
       refreshAuth: vi.fn(),
     } as unknown as Config;
 
-    const createSettings = (selectedType?: AuthType) =>
-      ({
+    const settingsByType = new Map<AuthType | undefined, LoadedSettings>();
+    const createSettings = (selectedType?: AuthType) => {
+      const existing = settingsByType.get(selectedType);
+      if (existing) return existing;
+      const settings = {
         merged: {
           security: {
             auth: {
@@ -132,7 +135,10 @@ describe('useAuth', () => {
             },
           },
         },
-      }) as LoadedSettings;
+      } as LoadedSettings;
+      settingsByType.set(selectedType, settings);
+      return settings;
+    };
 
     let deferredRefreshAuth: {
       resolve: () => void;
@@ -140,12 +146,204 @@ describe('useAuth', () => {
     };
 
     beforeEach(() => {
+      settingsByType.clear();
       vi.mocked(mockConfig.refreshAuth).mockImplementation(
         () =>
           new Promise((resolve, reject) => {
             deferredRefreshAuth = { resolve, reject };
           }),
       );
+    });
+
+    it.each(['resolve', 'reject'] as const)(
+      'ignores a late auth %s after cancelling before effect cleanup',
+      async (outcome) => {
+        const settings = createSettings(AuthType.LOGIN_WITH_GOOGLE);
+        const screen = await renderHook(() =>
+          useAuthCommand(settings, mockConfig),
+        );
+        try {
+          await act(async () => {
+            screen.result.current.onAuthError('USER_CANCELLED');
+            if (outcome === 'resolve') deferredRefreshAuth.resolve();
+            else deferredRefreshAuth.reject(new Error('OLD_AUTH_ERROR'));
+          });
+          expect(screen.result.current.authState).toBe(AuthState.Updating);
+          expect(screen.result.current.authError).toBe('USER_CANCELLED');
+          expect(screen.result.current.accountSuspensionInfo).toBeNull();
+        } finally {
+          screen.unmount();
+        }
+      },
+    );
+
+    it.each([null, 'OLD_VALIDATION_ERROR'])(
+      'ignores cancelled validation completion %s before auth dispatch',
+      async (validationError) => {
+        let release!: (value: string | null) => void;
+        mockValidateAuthMethod.mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              release = resolve;
+            }),
+        );
+        const settings = createSettings(AuthType.LOGIN_WITH_GOOGLE);
+        const screen = await renderHook(() =>
+          useAuthCommand(settings, mockConfig),
+        );
+        try {
+          await act(async () => {
+            screen.result.current.onAuthError('USER_CANCELLED');
+            release(validationError);
+          });
+          expect(mockConfig.refreshAuth).not.toHaveBeenCalled();
+          expect(screen.result.current.authState).toBe(AuthState.Updating);
+          expect(screen.result.current.authError).toBe('USER_CANCELLED');
+        } finally {
+          screen.unmount();
+        }
+      },
+    );
+
+    it('ignores a saved key arriving after cancellation without displaying it or starting auth', async () => {
+      let release!: (value: string) => void;
+      mockLoadApiKey.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            release = resolve;
+          }),
+      );
+      const settings = createSettings(AuthType.USE_GEMINI);
+      const screen = await renderHook(() =>
+        useAuthCommand(settings, mockConfig),
+      );
+      try {
+        await act(async () => {
+          screen.result.current.onAuthError('USER_CANCELLED');
+          release('FAKE_LATE_PRIVATE_KEY');
+        });
+        expect(mockConfig.refreshAuth).not.toHaveBeenCalled();
+        expect(screen.result.current.authState).toBe(AuthState.Updating);
+        expect(screen.result.current.authError).toBe('USER_CANCELLED');
+        expect(screen.result.current.apiKeyDefaultValue).toBeUndefined();
+      } finally {
+        screen.unmount();
+      }
+    });
+
+    it('does not let an older failed attempt replace a newer authenticated result', async () => {
+      const settings = createSettings(AuthType.LOGIN_WITH_GOOGLE);
+      const screen = await renderHook(() =>
+        useAuthCommand(settings, mockConfig),
+      );
+      const old = deferredRefreshAuth;
+      try {
+        await act(async () =>
+          screen.result.current.setAuthState(AuthState.Updating),
+        );
+        vi.mocked(mockConfig.refreshAuth).mockResolvedValueOnce(undefined);
+        await act(async () =>
+          screen.result.current.setAuthState(AuthState.Unauthenticated),
+        );
+        expect(screen.result.current.authState).toBe(AuthState.Authenticated);
+        await act(async () => old.reject(new Error('OLD_AUTH_ERROR')));
+        expect(screen.result.current.authState).toBe(AuthState.Authenticated);
+        expect(screen.result.current.authError).toBeNull();
+      } finally {
+        screen.unmount();
+      }
+    });
+
+    it('starts a fresh explicit attempt even when the requested auth state is unchanged', async () => {
+      const settings = createSettings(AuthType.LOGIN_WITH_GOOGLE);
+      const screen = await renderHook(() =>
+        useAuthCommand(settings, mockConfig),
+      );
+      const old = deferredRefreshAuth;
+      try {
+        vi.mocked(mockConfig.refreshAuth).mockResolvedValueOnce(undefined);
+        await act(async () =>
+          screen.result.current.setAuthState(AuthState.Unauthenticated),
+        );
+        expect(mockConfig.refreshAuth).toHaveBeenCalledTimes(2);
+        expect(screen.result.current.authState).toBe(AuthState.Authenticated);
+        await act(async () => old.reject(new Error('OLD_AUTH_ERROR')));
+        expect(screen.result.current.authState).toBe(AuthState.Authenticated);
+      } finally {
+        screen.unmount();
+      }
+    });
+
+    it('does not dispatch auth when validation completes after unmount', async () => {
+      let release!: (value: string | null) => void;
+      mockValidateAuthMethod.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            release = resolve;
+          }),
+      );
+      const settings = createSettings(AuthType.LOGIN_WITH_GOOGLE);
+      const screen = await renderHook(() =>
+        useAuthCommand(settings, mockConfig),
+      );
+      screen.unmount();
+      await act(async () => release(null));
+      expect(mockConfig.refreshAuth).not.toHaveBeenCalled();
+    });
+
+    it('reports saved key loading failure without leaving auth pending or exposing private details', async () => {
+      mockLoadApiKey.mockRejectedValueOnce(
+        new Error('FAKE_PRIVATE_KEY_READ_DETAIL'),
+      );
+      const settings = createSettings(AuthType.USE_GEMINI);
+      const screen = await renderHook(() =>
+        useAuthCommand(settings, mockConfig),
+      );
+      try {
+        expect(screen.result.current.authState).toBe(AuthState.Updating);
+        expect(screen.result.current.authError).toBeTruthy();
+        expect(screen.result.current.authError).not.toContain(
+          'FAKE_PRIVATE_KEY_READ_DETAIL',
+        );
+        expect(mockConfig.refreshAuth).not.toHaveBeenCalled();
+      } finally {
+        screen.unmount();
+      }
+    });
+
+    it('keeps the newest saved key read when an earlier reload finishes later', async () => {
+      vi.mocked(mockConfig.refreshAuth).mockResolvedValueOnce(undefined);
+      const settings = createSettings(AuthType.LOGIN_WITH_GOOGLE);
+      const screen = await renderHook(() =>
+        useAuthCommand(settings, mockConfig),
+      );
+      let release!: (value: string) => void;
+      mockLoadApiKey
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              release = resolve;
+            }),
+        )
+        .mockResolvedValueOnce('FAKE_NEWEST_KEY');
+      try {
+        const first = screen.result.current.reloadApiKey();
+        await act(async () => {
+          await screen.result.current.reloadApiKey();
+        });
+        expect(screen.result.current.apiKeyDefaultValue).toBe(
+          'FAKE_NEWEST_KEY',
+        );
+        await act(async () => {
+          release('FAKE_OLDER_KEY');
+          await first;
+        });
+        expect(screen.result.current.apiKeyDefaultValue).toBe(
+          'FAKE_NEWEST_KEY',
+        );
+      } finally {
+        screen.unmount();
+      }
     });
 
     it('reuses ready startup auth only once after validation and refreshes an explicit later attempt', async () => {
