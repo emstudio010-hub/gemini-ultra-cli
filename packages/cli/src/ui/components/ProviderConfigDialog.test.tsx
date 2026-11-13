@@ -28,6 +28,82 @@ afterEach(() => {
   fs.rmSync(root, { recursive: true, force: true });
 });
 
+it.each(['en', 'zh'] as const)(
+  'edits another configuration target without activating it in %s',
+  async (locale) => {
+    I18nManager.getInstance().setLocale(locale);
+    const manager = ProviderManager.getInstance();
+    const first = manager.upsertProvider({
+      name: 'First',
+      baseUrl: 'https://first.invalid/v1',
+      apiKey: 'FAKE_FIRST',
+      models: ['first-model'],
+    });
+    const second = manager.upsertProvider({
+      name: 'Second',
+      baseUrl: 'https://second.invalid/v1',
+      apiKey: 'FAKE_SECOND',
+      models: ['second-model'],
+      setActive: false,
+    });
+    const before = fs.readFileSync(path.join(root, 'providers.json'));
+    const onClose = vi.fn();
+    const view = await renderWithProviders(
+      <ProviderConfigDialog onClose={onClose} />,
+    );
+    const key = async (sequence: string) =>
+      act(async () => {
+        view.stdin.write(sequence);
+        await view.waitUntilReady();
+      });
+    try {
+      expect(view.lastFrame()).toContain(
+        locale === 'zh' ? '不激活供应商' : 'without activating it',
+      );
+      await key('\u001b[D'); // Wrap from First to Second.
+      await waitFor(() =>
+        expect(view.lastFrame()).toContain(
+          locale === 'zh'
+            ? '当前配置目标: Second'
+            : 'Configuration Target: Second',
+        ),
+      );
+      expect(view.lastFrame()).toContain(
+        locale === 'zh'
+          ? '保存的默认供应商: First'
+          : 'saved active provider: First',
+      );
+      expect(fs.readFileSync(path.join(root, 'providers.json'))).toEqual(
+        before,
+      );
+      for (let index = 0; index < 8; index++) await key('\u001b[B');
+      await key('\r');
+      await key('4096');
+      await key('\r');
+      await waitFor(() =>
+        expect(manager.getProviderById(second.id)?.maxOutputTokens).toBe(4096),
+      );
+      expect(
+        manager.getProviderById(first.id)?.maxOutputTokens,
+      ).toBeUndefined();
+      expect(manager.getActiveProvider()?.id).toBe(first.id);
+      expect(manager.getActiveModel()).toBe('first-model');
+      await key('\u001b[C'); // Wrap from Second back to First.
+      await waitFor(() =>
+        expect(view.lastFrame()).toContain(
+          locale === 'zh'
+            ? '当前配置目标: First'
+            : 'Configuration Target: First',
+        ),
+      );
+      await key('\u001b');
+      expect(onClose).toHaveBeenCalledWith(false);
+    } finally {
+      view.unmount();
+    }
+  },
+);
+
 it.each([
   'escape',
   'exit',

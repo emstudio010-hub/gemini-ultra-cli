@@ -162,7 +162,16 @@ export class UniversalContentGenerator implements ContentGenerator {
   }
 
   getModelContextWindow(model: string): number | undefined {
-    const resolution = this.resolve(model);
+    let resolution: ReturnType<UniversalContentGenerator['resolve']>;
+    try {
+      resolution = this.resolve(model);
+    } catch (error) {
+      // Capacity is optional display metadata. A removed route must not crash
+      // the model picker/composer that the user needs to repair that route.
+      // Generation still resolves strictly before any provider dispatch.
+      if (error instanceof ProviderRouteError) return undefined;
+      throw error;
+    }
     return resolution
       ? resolution.provider.contextWindow
       : this.fallbackGenerator.getModelContextWindow?.(

@@ -14,6 +14,8 @@ import { RecordingContentGenerator } from '../core/recordingContentGenerator.js'
 import { LoggingContentGenerator } from '../core/loggingContentGenerator.js';
 import type { Config } from '../config/config.js';
 import { tokenLimit, DEFAULT_TOKEN_LIMIT } from '../core/tokenLimits.js';
+import { ProviderRouteError } from './providerRouteError.js';
+import { LlmRole } from '../telemetry/llmRole.js';
 
 describe('provider context window', () => {
   let directory: string;
@@ -118,5 +120,44 @@ describe('provider context window', () => {
       contextWindow: undefined,
     });
     expect(tokenLimit('small-model', recording)).toBe(DEFAULT_TOKEN_LIMIT);
+  });
+
+  it('keeps optional capacity lookup usable after deletion while refusing generation before fallback or network', async () => {
+    const provider = manager.upsertProvider({
+      ...profile,
+      contextWindow: 128000,
+    });
+    const fallback: ContentGenerator = {
+      generateContent: vi.fn(),
+      generateContentStream: vi.fn(),
+      countTokens: vi.fn(),
+      embedContent: vi.fn(),
+      getModelContextWindow: vi.fn(() => 64000),
+    };
+    const universal = new UniversalContentGenerator(fallback);
+    const model = `${provider.id}:small-model`;
+    expect(universal.getModelContextWindow(model)).toBe(128000);
+    manager.removeProviderById(provider.id);
+    const saved = readFileSync(path.join(directory, 'providers.json'));
+    expect(universal.getModelContextWindow(model)).toBeUndefined();
+    expect(tokenLimit(model, universal)).toBe(DEFAULT_TOKEN_LIMIT);
+    expect(fallback.getModelContextWindow).not.toHaveBeenCalled();
+    await expect(
+      universal.generateContent(
+        { model, contents: [] },
+        'deleted-route',
+        LlmRole.MAIN,
+      ),
+    ).rejects.toBeInstanceOf(ProviderRouteError);
+    await expect(
+      universal.generateContentStream(
+        { model, contents: [] },
+        'deleted-route-stream',
+        LlmRole.MAIN,
+      ),
+    ).rejects.toBeInstanceOf(ProviderRouteError);
+    expect(fallback.generateContent).not.toHaveBeenCalled();
+    expect(fallback.generateContentStream).not.toHaveBeenCalled();
+    expect(readFileSync(path.join(directory, 'providers.json'))).toEqual(saved);
   });
 });

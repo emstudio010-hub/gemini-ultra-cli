@@ -325,6 +325,19 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
         // 1. MAIN MENU
         // ------------------------------------------------------------------
         if (page === 'main-menu') {
+          if (key.name === 'left' || key.name === 'right') {
+            if (providers.length > 0) {
+              const index = providers.findIndex(
+                (provider) => provider.id === focusedProvider?.id,
+              );
+              const next =
+                (index + (key.name === 'left' ? -1 : 1) + providers.length) %
+                providers.length;
+              setFocusedProviderId(providers[next].id);
+              setStatusMessage('');
+            }
+            return true;
+          }
           if (key.name === 'up') {
             setMainMenuCursor((p) =>
               p > 0 ? p - 1 : mainMenuItems.length - 1,
@@ -364,6 +377,7 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
               setPage('select-protocol-option');
             } else if (selected === 'pick-models') {
               if (!focusedProvider) return true;
+              setModelCursor(0);
               setModelPool(focusedProvider.models || []);
               setEditingProviderId(focusedProvider.id);
               setSelectedModelsSet(new Set(focusedProvider.models || []));
@@ -972,12 +986,12 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
           >
             <Box flexDirection="row" justifyContent="space-between">
               <Text bold color={theme.text.accent}>
-                {t('当前配置目标:', 'Active Target:')}{' '}
+                {t('当前配置目标:', 'Configuration Target:')}{' '}
                 {focusedProvider ? focusedProvider.name : t('未配置', 'None')}
               </Text>
               <Text color={theme.status.success}>
                 {focusedProvider && activeProvider?.id === focusedProvider.id
-                  ? t('[当前使用中]', '[ACTIVE]')
+                  ? t('[保存的默认]', '[SAVED DEFAULT]')
                   : ''}
               </Text>
             </Box>
@@ -992,6 +1006,15 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
                 {'  |  '}
                 {t('已选模型:', 'Models:')}{' '}
                 {focusedProvider.models?.length || 0} {t('个', '')}
+              </Text>
+            )}
+            {providers.length > 1 && (
+              <Text color={theme.text.secondary}>
+                {t(
+                  '←/→ 切换配置目标，不激活供应商；保存的默认供应商',
+                  '←/→ changes the configuration target without activating it; saved active provider',
+                )}
+                : {activeProvider?.name ?? t('未选择', 'none')}
               </Text>
             )}
           </Box>

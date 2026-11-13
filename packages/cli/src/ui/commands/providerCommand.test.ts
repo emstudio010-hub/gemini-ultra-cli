@@ -39,7 +39,9 @@ function setup() {
   });
   const context = createMockCommandContext({
     services: {
-      agentContext: { config: { setModel } as unknown as Config },
+      agentContext: {
+        config: { setModel, getModel: () => sessionModel } as unknown as Config,
+      },
     },
   });
   context.ui.removeComponent = vi.fn();
@@ -58,6 +60,44 @@ const run = (
   context: ReturnType<typeof createMockCommandContext>,
   args: string,
 ) => providerCommand.action!(context, args);
+
+it.each(['en', 'zh'] as const)(
+  'explains recovery after the temporary model provider is removed in %s without changing the route or saving credentials',
+  async (locale) => {
+    I18nManager.getInstance().setLocale(locale);
+    const { mgr, context, setModel, sessionModel } = setup();
+    setModel('second:shared-model');
+    setModel.mockClear();
+    const result = await run(context, '');
+    if (
+      result?.type !== 'custom_dialog' ||
+      !isValidElement<{ onClose: (activate?: boolean) => void }>(
+        result.component,
+      )
+    )
+      throw new Error('Expected provider dialog');
+    mgr.removeProviderById('second');
+    const saved = fs.readFileSync(file);
+    result.component.props.onClose(false);
+    expect(sessionModel()).toBe('second:shared-model');
+    expect(setModel).not.toHaveBeenCalled();
+    expect(context.ui.addItem).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        type: 'error',
+        text: expect.stringContaining(
+          locale === 'zh'
+            ? '当前模型所属供应商已删除'
+            : 'current model provider was removed',
+        ),
+      }),
+    );
+    expect(fs.readFileSync(file)).toEqual(saved);
+    expect(mgr.getActiveProvider()?.id).toBe('first');
+    expect(
+      JSON.stringify(vi.mocked(context.ui.addItem).mock.calls),
+    ).not.toContain('fixture-only');
+  },
+);
 
 it('keeps a temporary model when closing provider configuration without activating a selection', async () => {
   const { context, setModel, sessionModel } = setup();

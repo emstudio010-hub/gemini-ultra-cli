@@ -267,6 +267,19 @@ export const providerCommand: SlashCommand = {
           if (activateSelection) syncSession(context);
           else context.ui.reloadCommands();
           context.ui.removeComponent();
+          const currentModel = context.services.agentContext?.config.getModel();
+          if (
+            currentModel &&
+            currentModel.indexOf(':') > 0 &&
+            !ProviderManager.getInstance().resolveProviderForModel(currentModel)
+          )
+            context.ui.addItem({
+              type: MessageType.ERROR,
+              text: t(
+                '当前模型所属供应商已删除或不可用。请用 /provider 添加供应商，或用 /model 重新选择模型；当前模型保留，尚未发起模型请求。',
+                'The current model provider was removed or is unavailable. Add a provider with /provider or choose another model with /model. The current model is retained; no model request was sent.',
+              ),
+            });
         },
       }),
     };

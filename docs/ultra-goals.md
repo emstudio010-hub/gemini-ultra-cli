@@ -1584,3 +1584,8 @@ WI-178/E-409至410/F-135：CLI/SwarmBoard原不显示文件范围和历史snapsh
 ## 2026-11-13 供应商窗口临时模型保留
 
 WI-179/E-411至412/F-136：原/provider退出无条件syncSession覆盖/model或-m临时模型。现窗口记录打开时保存选择及明确激活意图，关闭布尔仅在显式激活/保存选择变化时同步；无动作Esc/菜单退出/仅参数编辑保持临时模型，显式重选原默认仍激活，目录/直接use/add/Auth初始化原语义保持。首旧及首修后测试缺removeComponent mock，补fixture后用精确旧b067源码受控复现1真实失败并finally恢复当前源字节；最终9不同相关检查、CLI严格编译/四文件lint格式通过。Windows实际源码ConPTY -m临时second→provider查看保持→显式选first→model临时second→输出上限2048保存但不改临时→中文provider查看→model重开/quit，11步13条件通过、17313ms/实际CLI与验证器退出0/0HTTP模型，settings字节保持、保存默认first保持。验证器首启动观测过早/第二行为通过但ConPTY helper句柄未退出留证并按身份清理；finally释放PTY后完整退出，末console-list helper AttachConsole failed诊断保留，不冒称PTY库全链无问题。个人配置/旧E-294及E-364失败SHA/安装83保持，无打包重装版本CI/付费重跑；未覆盖最后供应商删除路由恢复/真实推理/其他平台，goal active。详见docs/ultra-provider-session-close-handoff.md。
+
+
+## 2026-11-13 非激活配置与删除恢复
+
+WI-180/E-413至414/F-137：配置窗口主菜单←/→切换编辑目标，不激活/保存/请求，头部区分配置目标与保存默认，模型清单重置光标；关闭后无法解析的当前限定路由双语提示添加/重新选模，保持当前模型。原生首轮发现删除临时Second后contextUsage→getModelContextWindow抛ProviderRouteError致Composer critical退出（10步/0网络，wrapper45秒/failed留证），core旧容量场景1失败。现仅可选容量查询捕获该类型返回未知，不调用fallback容量；普通/流式生成仍发送前严格拒绝，其他错误不吞。最终10不同相关检查、core/CLI严格编译/六文件lint格式通过；最后头部文案仅重验2个相关渲染。Windows实际源码ConPTY英文目标编辑Second4096且First/保存默认/临时Second保持，中文只删除Second→即时提示/界面存活→无害提交实际本地拒绝→/model first显式恢复/quit，13步18条件通过、17672ms/CLI与验证器退出0/0HTTP模型，唯一setModel为明确恢复，settings字节保持。既有ConPTY关闭helper AttachConsole failed诊断原样留证，不宣称PTY库完整修复。个人配置/旧E-294及E-364失败SHA/安装83保持，无打包重装版本CI/付费重跑；不冒称最后provider删除/原生认证/真实推理或最终包验收，goal active。详见docs/ultra-provider-config-target-handoff.md。
