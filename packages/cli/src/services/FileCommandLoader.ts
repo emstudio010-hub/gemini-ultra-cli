@@ -93,6 +93,7 @@ export class FileCommandLoader implements ICommandLoader {
    * @returns A promise that resolves to an array of all loaded SlashCommands.
    */
   async loadCommands(signal: AbortSignal): Promise<SlashCommand[]> {
+    if (signal.aborted) return [];
     const allCommands: SlashCommand[] = [];
     const globOptions = {
       nodir: true,
@@ -104,23 +105,35 @@ export class FileCommandLoader implements ICommandLoader {
     // Load commands from each directory
     const commandDirs = this.getCommandDirectories();
     for (const dirInfo of commandDirs) {
+      if (signal.aborted) return [];
       try {
         const files = await glob('**/*.toml', {
           ...globOptions,
           cwd: dirInfo.path,
         });
 
-        const commandPromises = files.map((file) =>
-          this.parseAndAdaptFile(
-            path.join(dirInfo.path, file),
-            dirInfo.path,
-            dirInfo.kind,
-            dirInfo.extensionName,
-            dirInfo.extensionId,
-          ),
+        if (signal.aborted) return [];
+        const loaded = new Array<SlashCommand | null>(files.length);
+        let cursor = 0;
+        // Keep disk pressure and stale reload work bounded without changing
+        // the discovery order used for command conflict precedence.
+        await Promise.all(
+          Array.from({ length: Math.min(8, files.length) }, async () => {
+            while (!signal.aborted && cursor < files.length) {
+              const index = cursor++;
+              loaded[index] = await this.parseAndAdaptFile(
+                path.join(dirInfo.path, files[index]),
+                dirInfo.path,
+                dirInfo.kind,
+                dirInfo.extensionName,
+                dirInfo.extensionId,
+                signal,
+              );
+            }
+          }),
         );
-
-        const commands = (await Promise.all(commandPromises)).filter(
+        if (signal.aborted) return [];
+        const commands = loaded.filter(
           (cmd): cmd is SlashCommand => cmd !== null,
         );
 
@@ -260,11 +273,15 @@ export class FileCommandLoader implements ICommandLoader {
     kind: CommandKind,
     extensionName?: string,
     extensionId?: string,
+    signal?: AbortSignal,
   ): Promise<SlashCommand | null> {
     let fileContent: string;
     try {
-      fileContent = await fs.readFile(filePath, 'utf-8');
+      signal?.throwIfAborted();
+      fileContent = await fs.readFile(filePath, { encoding: 'utf-8', signal });
+      signal?.throwIfAborted();
     } catch (error: unknown) {
+      if (signal?.aborted) return null;
       coreEvents.emitFeedback(
         'error',
         `[FileCommandLoader] Failed to read file ${filePath}:`,
