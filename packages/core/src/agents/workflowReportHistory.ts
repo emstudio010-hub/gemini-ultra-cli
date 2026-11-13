@@ -131,11 +131,11 @@ export function validateWorkflowReportHistory(
     readBatch(root, record.id, reference);
 }
 /** Explicit full export includes every immutable metadata batch. */
-export function readWorkflowReports(root: string, record: Record): Report[] {
-  return [
-    ...(record.reportHistory ?? []).flatMap((reference) =>
-      readBatch(root, record.id, reference),
-    ),
-    ...record.reports,
-  ];
+export function* readWorkflowReports(
+  root: string,
+  record: Record,
+): Generator<Report> {
+  for (const reference of record.reportHistory ?? [])
+    yield* readBatch(root, record.id, reference);
+  yield* record.reports;
 }

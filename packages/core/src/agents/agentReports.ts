@@ -53,7 +53,7 @@ function publish(
   phase: string,
   objective: string,
   snapshot: object,
-  entries: Entry[],
+  entries: Iterable<Entry>,
   sourcePath: string,
   locale: UiLocale,
   board?: string,
@@ -64,15 +64,22 @@ function publish(
   const snapshotSha256 = digest(raw);
   const directory = path.join(root, 'agent-reports', id, snapshotSha256);
   fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
-  const reports = entries.map((entry, index) => ({
-    file: `${String(index + 1).padStart(3, '0')}.md`,
-    label: entry.label,
-    sha256: digest(entry.text),
-    bytes: Buffer.byteLength(entry.text),
-  }));
-  entries.forEach((entry, index) =>
-    writeUnchanged(path.join(directory, reports[index].file), entry.text),
-  );
+  const reports: Array<{
+    file: string;
+    label: string;
+    sha256: string;
+    bytes: number;
+  }> = [];
+  for (const entry of entries) {
+    const report = {
+      file: `${String(reports.length + 1).padStart(3, '0')}.md`,
+      label: entry.label,
+      sha256: digest(entry.text),
+      bytes: Buffer.byteLength(entry.text),
+    };
+    writeUnchanged(path.join(directory, report.file), entry.text);
+    reports.push(report);
+  }
   writeUnchanged(path.join(directory, 'snapshot.json'), raw);
   if (board !== undefined)
     writeUnchanged(path.join(directory, 'board.jsonl'), board);
@@ -106,7 +113,7 @@ function publish(
     id,
     kind,
     phase,
-    reportCount: entries.length,
+    reportCount: reports.length,
     indexPath: path.join(directory, 'index.md'),
     manifestPath: path.join(directory, 'manifest.json'),
     snapshotSha256,
@@ -124,6 +131,13 @@ export function exportWorkflowReports(
     throw new Error(
       `This ID belongs to /${record.mode}; use /${record.mode} reports ${id}.`,
     );
+  function* entries(): Generator<Entry> {
+    for (const report of readWorkflowReports(root, record))
+      yield {
+        label: `${report.stage} · ${report.agent} · completed=${report.completed}`,
+        text: readWorkflowReportText(root, id, report),
+      };
+  }
   return publish(
     root,
     id,
@@ -131,10 +145,7 @@ export function exportWorkflowReports(
     record.phase,
     record.objective,
     { kind: record.mode, record },
-    readWorkflowReports(root, record).map((report) => ({
-      label: `${report.stage} · ${report.agent} · completed=${report.completed}`,
-      text: readWorkflowReportText(root, id, report),
-    })),
+    entries(),
     path.join(root, 'agent-workflows', `${id}.json`),
     locale,
   );
@@ -146,6 +157,13 @@ export function exportSwarmReports(
 ) {
   const record = readSwarm(root, id);
   const board = readSwarmBoard(root, id);
+  function* entries(): Generator<Entry> {
+    for (const member of record.members)
+      yield {
+        label: `@${member.name} · ${member.agent} · ${member.state} · turns=${member.turns}`,
+        text: readSwarmResultText(root, id, member),
+      };
+  }
   return publish(
     root,
     id,
@@ -153,10 +171,7 @@ export function exportSwarmReports(
     record.phase,
     record.objective,
     { kind: 'swarm', record, board },
-    record.members.map((member) => ({
-      label: `@${member.name} · ${member.agent} · ${member.state} · turns=${member.turns}`,
-      text: readSwarmResultText(root, id, member),
-    })),
+    entries(),
     path.join(root, 'swarms', id, 'members.json'),
     locale,
     board.map((post) => JSON.stringify(post)).join('\n') +

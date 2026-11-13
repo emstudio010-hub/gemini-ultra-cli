@@ -12,6 +12,14 @@ import { createAgentWorkflow, saveAgentWorkflow } from './agentWorkflows.js';
 import { createSwarm, readSwarm } from './swarm.js';
 import { consumeWorkflowRequest } from './workflowBudget.js';
 import { exportWorkflowReports, exportSwarmReports } from './agentReports.js';
+import {
+  saveWorkflowReportText,
+  workflowReportArchivePath,
+} from './workflowReportText.js';
+import {
+  saveSwarmResultText,
+  swarmResultArchivePath,
+} from './swarmResultText.js';
 
 let root: string;
 const hash = (value: string | Buffer) =>
@@ -137,3 +145,71 @@ it('exports an empty interview and rejects invalid or damaged IDs without genera
     'damaged',
   );
 });
+
+it.each(['workflow', 'swarm'] as const)(
+  'writes %s reports incrementally and never publishes a complete index when a later archive is damaged',
+  (kind) => {
+    const original = 'First complete Unicode evidence 完整证据\n'.repeat(600);
+    const later = 'Later long evidence\n'.repeat(1000);
+    let id: string;
+    let source: string;
+    let archive: string;
+    let execute: () => unknown;
+    if (kind === 'workflow') {
+      const record = createAgentWorkflow(
+        root,
+        'boost',
+        'Export in bounded memory',
+        'default',
+      );
+      record.reports = [original, later].map((text, index) => ({
+        agent: 'researcher',
+        stage: `stage ${index}`,
+        completed: false,
+        ...saveWorkflowReportText(root, record.id, text),
+      }));
+      saveAgentWorkflow(root, record);
+      id = record.id;
+      source = path.join(root, 'agent-workflows', id + '.json');
+      archive = workflowReportArchivePath(
+        root,
+        id,
+        record.reports[1].fullText!,
+      );
+      execute = () => exportWorkflowReports(root, id, 'boost');
+    } else {
+      const record = createSwarm(root, 'Export in bounded memory');
+      const saved = readSwarm(root, record.id);
+      saved.members = [original, later].map((text, index) => ({
+        name: `reader-${index}`,
+        agent: 'researcher' as const,
+        brief: 'Saved evidence',
+        state: 'paused' as const,
+        lastRead: 0,
+        turns: 1,
+        modelsUsed: [],
+        ...saveSwarmResultText(root, record.id, text),
+      }));
+      id = record.id;
+      source = path.join(root, 'swarms', id, 'members.json');
+      fs.writeFileSync(source, JSON.stringify(saved));
+      archive = swarmResultArchivePath(root, id, saved.members[1].fullResult!);
+      execute = () => exportSwarmReports(root, id);
+    }
+    fs.writeFileSync(archive, 'External archive change');
+    const before = fs.readFileSync(source);
+    expect(execute).toThrow(/missing or changed/);
+    const exports = path.join(root, 'agent-reports', id);
+    const snapshots = fs.readdirSync(exports);
+    expect(snapshots).toHaveLength(1);
+    const directory = path.join(exports, snapshots[0]);
+    expect(fs.readFileSync(path.join(directory, '001.md'), 'utf8')).toBe(
+      original,
+    );
+    expect(fs.existsSync(path.join(directory, '002.md'))).toBe(false);
+    expect(fs.existsSync(path.join(directory, 'manifest.json'))).toBe(false);
+    expect(fs.existsSync(path.join(directory, 'index.md'))).toBe(false);
+    expect(fs.readFileSync(source)).toEqual(before);
+    expect(fs.readFileSync(archive, 'utf8')).toBe('External archive change');
+  },
+);
