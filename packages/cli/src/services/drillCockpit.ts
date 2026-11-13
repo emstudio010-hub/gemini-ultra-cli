@@ -37,8 +37,6 @@ import {
   type Config,
 } from '@google/gemini-cli-core';
 import { registerCleanup } from '../utils/cleanup.js';
-import { cockpitHtml } from './drillCockpitPage.js';
-import { morphiconsBundle } from './morphiconsBundle.js';
 
 interface DrillSession {
   config: Config;
@@ -114,11 +112,13 @@ async function handleRequest(
   }
   const pathname = new URL(req.url || '/', address).pathname;
   if (req.method === 'GET' && pathname === '/assets/morphicons.js') {
+    const { morphiconsBundle } = await import('./morphiconsBundle.js');
     res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
     res.end(morphiconsBundle);
     return;
   }
   if (req.method === 'GET' && pathname === '/') {
+    const { cockpitHtml } = await import('./drillCockpitPage.js');
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     res.end(cockpitHtml(nonce));
     return;
