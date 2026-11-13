@@ -4,7 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { I18nManager, ProviderManager } from '@google/gemini-cli-core';
 import { modelCommand } from './modelCommand.js';
 import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
@@ -13,10 +17,147 @@ import { MessageType } from '../types.js';
 
 describe('modelCommand', () => {
   let mockContext: CommandContext;
+  let root: string;
 
   beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'ultra-model-command-'));
+    vi.stubEnv(
+      'GEMINI_ULTRA_PROVIDERS_FILE',
+      path.join(root, 'providers.json'),
+    );
+    vi.stubEnv('GEMINI_ULTRA_LOCALE_FILE', path.join(root, 'locale.json'));
+    ProviderManager.resetInstance();
+    I18nManager.getInstance().setLocale('en');
     mockContext = createMockCommandContext();
   });
+
+  afterEach(() => {
+    ProviderManager.resetInstance();
+    vi.unstubAllEnvs();
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it('switches model descriptions and feedback language while preserving qualified routes and save scope', async () => {
+    const manager = ProviderManager.getInstance();
+    manager.upsertProvider({
+      name: 'Local',
+      baseUrl: 'https://fixture.invalid/v1',
+      apiKey: 'FAKE_SECRET',
+      models: ['model@version'],
+      setActive: true,
+    });
+    const originalProviders = fs.readFileSync(
+      path.join(root, 'providers.json'),
+    );
+    const setModel = vi.fn();
+    mockContext.services.agentContext = {
+      config: {
+        setModel,
+        getUsageStatisticsEnabled: () => false,
+      } as unknown as Config,
+    } as Config;
+    const set = modelCommand.subCommands!.find(
+      (command) => command.name === 'set',
+    )!;
+    const manage = modelCommand.subCommands!.find(
+      (command) => command.name === 'manage',
+    )!;
+    for (const locale of ['zh', 'en', 'zh'] as const) {
+      I18nManager.getInstance().setLocale(locale);
+      const zh = locale === 'zh';
+      expect(modelCommand.description).toBe(
+        zh ? '管理模型配置' : 'Manage model configuration',
+      );
+      expect(set.description).toBe(
+        zh
+          ? '切换当前模型；添加 --persist 记住供后续会话使用'
+          : 'Switch the current model; add --persist to remember it for future sessions',
+      );
+      expect(manage.description).toBe(
+        zh ? '打开模型选择窗口' : 'Open the model selector',
+      );
+      vi.mocked(mockContext.ui.addItem).mockClear();
+      await set.action!(mockContext, '');
+      expect(mockContext.ui.addItem).toHaveBeenLastCalledWith({
+        type: MessageType.ERROR,
+        text: zh
+          ? '用法：/model set <模型名称或供应商ID:模型ID> [--persist]'
+          : 'Usage: /model set <model-name or provider-id:model-id> [--persist]',
+      });
+      await modelCommand.action!(mockContext, 'unknown-route');
+      expect(mockContext.ui.addItem).toHaveBeenLastCalledWith({
+        type: MessageType.ERROR,
+        text: zh
+          ? '无效模型“unknown-route”。请运行 /model 查看并选择可用模型。'
+          : 'Invalid model "unknown-route". Run /model to view and select from available models.',
+      });
+      for (const persist of [false, true]) {
+        await set.action!(
+          mockContext,
+          `local:model@version${persist ? ' --persist' : ''}`,
+        );
+        expect(setModel).toHaveBeenLastCalledWith(
+          'local:model@version',
+          !persist,
+        );
+        expect(mockContext.ui.addItem).toHaveBeenLastCalledWith({
+          type: MessageType.INFO,
+          text: zh
+            ? `模型已切换为 local:model@version${persist ? '（已记住，供后续会话使用）' : '（仅本次会话）'}`
+            : `Model set to local:model@version${persist ? ' (persisted)' : ' (this session only)'}`,
+        });
+      }
+    }
+    expect(fs.readFileSync(path.join(root, 'providers.json'))).toEqual(
+      originalProviders,
+    );
+    expect(
+      JSON.stringify(vi.mocked(mockContext.ui.addItem).mock.calls),
+    ).not.toContain('FAKE_SECRET');
+  });
+
+  it.each([
+    'gemini-2.5-pro gemini-2.5-flash --persist',
+    'gemini-2.5-pro --persit',
+    '--persist',
+    'gemini-2.5-pro --persist --persist',
+  ])(
+    'rejects malformed model input without applying a partial selection: %s',
+    async (args) => {
+      const setModel = vi.fn();
+      mockContext.services.agentContext = {
+        config: {
+          setModel,
+          getUsageStatisticsEnabled: () => false,
+        } as unknown as Config,
+      } as Config;
+      await modelCommand.action!(mockContext, args);
+      expect(setModel).not.toHaveBeenCalled();
+      expect(mockContext.ui.addItem).toHaveBeenCalledOnce();
+      expect(mockContext.ui.addItem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: MessageType.ERROR,
+          text: expect.stringContaining('Usage: /model set'),
+        }),
+      );
+    },
+  );
+
+  it.each(['zh', 'en'] as const)(
+    'reports unavailable model configuration in %s without claiming success',
+    async (locale) => {
+      I18nManager.getInstance().setLocale(locale);
+      mockContext.services.agentContext = null;
+      await modelCommand.action!(mockContext, 'gemini-2.5-pro');
+      expect(mockContext.ui.addItem).toHaveBeenCalledWith({
+        type: MessageType.ERROR,
+        text:
+          locale === 'zh'
+            ? '模型配置尚未就绪，请初始化完成后重试。'
+            : 'Model configuration is not ready. Try again after initialization.',
+      });
+    },
+  );
 
   it('should return a dialog action to open the model dialog when no args', async () => {
     if (!modelCommand.action) {
@@ -206,7 +347,9 @@ describe('modelCommand', () => {
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.ERROR,
-          text: expect.stringContaining('Usage: /model set <model-name>'),
+          text: expect.stringContaining(
+            'Usage: /model set <model-name or provider-id:model-id>',
+          ),
         }),
       );
     });
@@ -229,7 +372,9 @@ describe('modelCommand', () => {
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.ERROR,
-          text: expect.stringContaining('Usage: /model set <model-name>'),
+          text: expect.stringContaining(
+            'Usage: /model set <model-name or provider-id:model-id>',
+          ),
         }),
       );
     });

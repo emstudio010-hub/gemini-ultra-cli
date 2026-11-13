@@ -16,6 +16,7 @@ import {
   VALID_GEMINI_MODELS,
   logModelSlashCommand,
   ProviderManager,
+  I18nManager,
 } from '@google/gemini-cli-core';
 import {
   type CommandContext,
@@ -24,6 +25,8 @@ import {
 } from './types.js';
 import { MessageType } from '../types.js';
 import { modelSaveError } from '../utils/modelSaveError.js';
+
+const t = (zh: string, en: string) => I18nManager.getInstance().t(zh, en);
 
 function getValidModelNames(context: CommandContext): Set<string> {
   const validModels = new Set<string>([
@@ -75,8 +78,12 @@ function getValidModelNames(context: CommandContext): Set<string> {
 
 const setModelCommand: SlashCommand = {
   name: 'set',
-  description:
-    '切换当前激活的生成模型（支持 Gemini 及全部已配置的外接供应商模型）',
+  get description() {
+    return t(
+      '切换当前模型；添加 --persist 记住供后续会话使用',
+      'Switch the current model; add --persist to remember it for future sessions',
+    );
+  },
   kind: CommandKind.BUILT_IN,
   autoExecute: false,
   action: async (context: CommandContext, args: string) => {
@@ -84,10 +91,17 @@ const setModelCommand: SlashCommand = {
     const persist = parts.includes('--persist');
     const nonFlagParts = parts.filter((part) => part !== '--persist');
 
-    if (nonFlagParts.length === 0) {
+    if (
+      nonFlagParts.length !== 1 ||
+      parts.length !== (persist ? 2 : 1) ||
+      nonFlagParts[0].startsWith('--')
+    ) {
       context.ui.addItem({
         type: MessageType.ERROR,
-        text: 'Usage: /model set <model-name> [--persist]',
+        text: t(
+          '用法：/model set <模型名称或供应商ID:模型ID> [--persist]',
+          'Usage: /model set <model-name or provider-id:model-id> [--persist]',
+        ),
       });
       return;
     }
@@ -97,26 +111,41 @@ const setModelCommand: SlashCommand = {
     if (!validModels.has(modelName)) {
       context.ui.addItem({
         type: MessageType.ERROR,
-        text: `Invalid model "${modelName}". Run /model to view and select from available models.`,
+        text: t(
+          `无效模型“${modelName}”。请运行 /model 查看并选择可用模型。`,
+          `Invalid model "${modelName}". Run /model to view and select from available models.`,
+        ),
       });
       return;
     }
 
-    if (context.services.agentContext?.config) {
-      try {
-        context.services.agentContext.config.setModel(modelName, !persist);
-      } catch {
-        context.ui.addItem({ type: MessageType.ERROR, text: modelSaveError() });
-        return;
-      }
-      const event = new ModelSlashCommandEvent(modelName);
-      logModelSlashCommand(context.services.agentContext.config, event);
-
+    const config = context.services.agentContext?.config;
+    if (!config) {
       context.ui.addItem({
-        type: MessageType.INFO,
-        text: `Model set to ${modelName}${persist ? ' (persisted)' : ''}`,
+        type: MessageType.ERROR,
+        text: t(
+          '模型配置尚未就绪，请初始化完成后重试。',
+          'Model configuration is not ready. Try again after initialization.',
+        ),
       });
+      return;
     }
+    try {
+      config.setModel(modelName, !persist);
+    } catch {
+      context.ui.addItem({ type: MessageType.ERROR, text: modelSaveError() });
+      return;
+    }
+    const event = new ModelSlashCommandEvent(modelName);
+    logModelSlashCommand(config, event);
+
+    context.ui.addItem({
+      type: MessageType.INFO,
+      text: t(
+        `模型已切换为 ${modelName}${persist ? '（已记住，供后续会话使用）' : '（仅本次会话）'}`,
+        `Model set to ${modelName}${persist ? ' (persisted)' : ' (this session only)'}`,
+      ),
+    });
   },
   completion: async (context: CommandContext, partialArg: string) => {
     const validModels = Array.from(getValidModelNames(context));
@@ -126,7 +155,9 @@ const setModelCommand: SlashCommand = {
 
 const manageModelCommand: SlashCommand = {
   name: 'manage',
-  description: 'Opens a dialog to configure the model',
+  get description() {
+    return t('打开模型选择窗口', 'Open the model selector');
+  },
   kind: CommandKind.BUILT_IN,
   autoExecute: true,
   action: async () => ({
@@ -138,7 +169,9 @@ const manageModelCommand: SlashCommand = {
 export const modelCommand: SlashCommand = {
   name: 'model',
   altNames: ['模型', 'm'],
-  description: 'Manage model configuration',
+  get description() {
+    return t('管理模型配置', 'Manage model configuration');
+  },
   kind: CommandKind.BUILT_IN,
   autoExecute: false,
   subCommands: [manageModelCommand, setModelCommand],
