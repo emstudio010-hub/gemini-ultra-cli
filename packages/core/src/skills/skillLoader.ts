@@ -12,6 +12,7 @@ import { debugLogger } from '../utils/debugLogger.js';
 import { coreEvents } from '../utils/events.js';
 import { readFileWithEncoding } from '../utils/fileUtils.js';
 import { mapWithConcurrency } from '../utils/asyncPool.js';
+import { withAbortSignal } from '../utils/withAbortSignal.js';
 
 /**
  * Represents the definition of an Agent Skill.
@@ -142,32 +143,44 @@ function parseSimpleFrontmatter(
  */
 export async function loadSkillsFromDir(
   dir: string,
+  signal?: AbortSignal,
 ): Promise<SkillDefinition[]> {
+  signal?.throwIfAborted();
   const discoveredSkills: SkillDefinition[] = [];
 
   try {
     const absoluteSearchPath = path.resolve(dir);
-    const stats = await fs.stat(absoluteSearchPath).catch(() => null);
+    const stats = await withAbortSignal(signal, () =>
+      fs.stat(absoluteSearchPath).catch(() => null),
+    );
     if (!stats || !stats.isDirectory()) {
       return [];
     }
 
     const pattern = ['SKILL.md', '*/SKILL.md'];
-    const skillFiles = await glob(pattern, {
-      cwd: absoluteSearchPath,
-      absolute: true,
-      nodir: true,
-      ignore: ['**/node_modules/**', '**/.git/**'],
-    });
+    const skillFiles = await withAbortSignal(signal, () =>
+      glob(pattern, {
+        cwd: absoluteSearchPath,
+        absolute: true,
+        nodir: true,
+        ignore: ['**/node_modules/**', '**/.git/**'],
+        signal,
+      }),
+    );
 
-    for (const metadata of await mapWithConcurrency(skillFiles, 8, loadSkillFromFile)) {
+    for (const metadata of await mapWithConcurrency(skillFiles, 8, (file) => {
+      signal?.throwIfAborted();
+      return loadSkillFromFile(file, signal);
+    })) {
       if (metadata) {
         discoveredSkills.push(metadata);
       }
     }
 
     if (discoveredSkills.length === 0) {
-      const files = await fs.readdir(absoluteSearchPath);
+      const files = await withAbortSignal(signal, () =>
+        fs.readdir(absoluteSearchPath),
+      );
       if (files.length > 0) {
         debugLogger.debug(
           `Failed to load skills from ${absoluteSearchPath}. The directory is not empty but no valid skills were discovered. Please ensure SKILL.md files are present in subdirectories and have valid frontmatter.`,
@@ -175,6 +188,7 @@ export async function loadSkillsFromDir(
       }
     }
   } catch (error) {
+    signal?.throwIfAborted();
     coreEvents.emitFeedback(
       'warning',
       `Error discovering skills in ${dir}:`,
@@ -190,9 +204,13 @@ export async function loadSkillsFromDir(
  */
 export async function loadSkillFromFile(
   filePath: string,
+  signal?: AbortSignal,
 ): Promise<SkillDefinition | null> {
+  signal?.throwIfAborted();
   try {
-    const content = await readFileWithEncoding(filePath);
+    const content = await withAbortSignal(signal, () =>
+      readFileWithEncoding(filePath, undefined, signal),
+    );
     const match = content.match(FRONTMATTER_REGEX);
     if (!match) {
       return null;
@@ -213,6 +231,7 @@ export async function loadSkillFromFile(
       body: match[2]?.trim() ?? '',
     };
   } catch (error) {
+    signal?.throwIfAborted();
     debugLogger.log(`Error parsing skill file ${filePath}:`, error);
     return null;
   }

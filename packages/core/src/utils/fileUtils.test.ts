@@ -869,7 +869,8 @@ describe('fileUtils', () => {
         const openSpy = vi.spyOn(fsPromises, 'open').mockResolvedValueOnce({
           stat: vi.fn().mockResolvedValue({
             dev: 12345,
-            ino: realStats.ino + 1,
+            // Large Windows inode numbers can round ino + 1 back to ino.
+            ino: realStats.ino === 0 ? 1 : 0,
           }),
           close: vi.fn().mockResolvedValue(undefined),
         } as unknown as fsPromises.FileHandle);
@@ -1037,7 +1038,8 @@ describe('fileUtils', () => {
             realStats,
             {
               dev: 0,
-              ino: realStats.ino + 1,
+              // Use a distinct value even when ino exceeds Number.MAX_SAFE_INTEGER.
+              ino: realStats.ino === 0 ? 1 : 0,
             },
           ) as fs.Stats,
         );

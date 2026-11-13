@@ -222,8 +222,11 @@ function hasFileIdentityChanged(
 export async function readSecureFileBuffer(
   filePath: string,
   expectedStats?: fs.Stats,
+  signal?: AbortSignal,
 ): Promise<Buffer> {
+  signal?.throwIfAborted();
   const initialStats = expectedStats ?? (await fs.promises.stat(filePath));
+  signal?.throwIfAborted();
   let fileHandle: fs.promises.FileHandle | undefined;
   let handleStats: fs.Stats | undefined;
 
@@ -232,10 +235,13 @@ export async function readSecureFileBuffer(
       try {
         fileHandle = await fs.promises.open(filePath, 'r');
       } catch {
+        signal?.throwIfAborted();
         // If opening file descriptor failed or is mocked without stat, continue to readFile
       }
+      signal?.throwIfAborted();
       if (fileHandle && typeof fileHandle.stat === 'function') {
         handleStats = await fileHandle.stat();
+        signal?.throwIfAborted();
         if (hasFileIdentityChanged(initialStats, handleStats)) {
           throw new Error(
             `File device or inode changed during read: ${filePath}`,
@@ -244,9 +250,15 @@ export async function readSecureFileBuffer(
       }
     }
 
+    signal?.throwIfAborted();
     const contentBuffer = fileHandle
-      ? await fileHandle.readFile()
-      : await fs.promises.readFile(filePath);
+      ? signal
+        ? await fileHandle.readFile({ signal })
+        : await fileHandle.readFile()
+      : signal
+        ? await fs.promises.readFile(filePath, { signal })
+        : await fs.promises.readFile(filePath);
+    signal?.throwIfAborted();
 
     // Verify post-read stats to ensure file consistency during or right after reading
     let postStats: fs.Stats | undefined;
@@ -255,6 +267,7 @@ export async function readSecureFileBuffer(
     } catch {
       // If post-stat failed due to file removal, ignore here
     }
+    signal?.throwIfAborted();
     if (
       hasFileIdentityChanged(initialStats, postStats) ||
       hasFileIdentityChanged(handleStats, postStats)
@@ -277,9 +290,10 @@ export async function readSecureFileBuffer(
 export async function readFileWithEncoding(
   filePath: string,
   expectedStats?: fs.Stats,
+  signal?: AbortSignal,
 ): Promise<string> {
   // Read the file once securely; detect BOM and decode from the single buffer.
-  const full = await readSecureFileBuffer(filePath, expectedStats);
+  const full = await readSecureFileBuffer(filePath, expectedStats, signal);
   if (full.length === 0) return '';
 
   const bom = detectBOM(full);

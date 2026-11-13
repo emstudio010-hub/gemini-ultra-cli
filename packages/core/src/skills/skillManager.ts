@@ -87,10 +87,8 @@ export class SkillManager {
         ...getMultiSourceSkillDirs(),
       ]),
     ];
-    const skillGroups = await mapWithConcurrency(
-      userDirs,
-      3,
-      loadSkillsFromDir,
+    const skillGroups = await mapWithConcurrency(userDirs, 3, (dir) =>
+      loadSkillsFromDir(dir),
     );
     // Merge in the original precedence order, regardless of read completion order.
     for (const skills of skillGroups)

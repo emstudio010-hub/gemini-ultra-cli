@@ -59,7 +59,9 @@ export async function discoverAllMultiSourceSkills(signal?: AbortSignal): Promis
   for (const dir of dirs) {
     signal?.throwIfAborted();
     try {
-      const skills = await withAbortSignal(signal, () => loadSkillsFromDir(dir));
+      const skills = await withAbortSignal(signal, () =>
+        loadSkillsFromDir(dir, signal),
+      );
       for (const s of skills) {
         if (!seen.has(s.name.toLowerCase())) {
           seen.add(s.name.toLowerCase());
