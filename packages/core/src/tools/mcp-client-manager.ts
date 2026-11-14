@@ -20,6 +20,7 @@ import { getErrorMessage, isAuthenticationError } from '../utils/errors.js';
 import type { EventEmitter } from 'node:events';
 import { coreEvents } from '../utils/events.js';
 import { debugLogger } from '../utils/debugLogger.js';
+import { withAbortSignal } from '../utils/withAbortSignal.js';
 
 import { createHash } from 'node:crypto';
 import { stableStringify } from '../policy/stable-stringify.js';
@@ -35,6 +36,9 @@ import type {
  * a collection of MCP servers defined in the configuration.
  */
 export class McpClientManager {
+  private stopped = false;
+  private readonly stopController = new AbortController();
+  private stopPromise?: Promise<void>;
   private clients: Map<string, McpClient> = new Map();
   // Track all configured servers (including disabled ones) for UI display
   private allServerConfigs: Map<string, MCPServerConfig> = new Map();
@@ -114,6 +118,7 @@ export class McpClientManager {
     error?: unknown,
     serverName?: string,
   ) {
+    if (this.stopped) return;
     // Capture error for later display if it's an error/warning
     if (severity === 'error' || severity === 'warning') {
       if (serverName) {
@@ -240,6 +245,7 @@ export class McpClientManager {
    *    - Updates the Gemini chat configuration to load the new tools.
    */
   async startExtension(extension: GeminiCLIExtension) {
+    if (this.stopped) return;
     debugLogger.log(`Loading extension: ${extension.name}`);
     await Promise.all(
       Object.entries(extension.mcpServers ?? {}).map(([name, config]) =>
@@ -381,6 +387,26 @@ export class McpClientManager {
       resourceRegistry: ResourceRegistry;
     },
   ): Promise<void> {
+    if (this.stopped) return;
+    try {
+      await withAbortSignal(this.stopController.signal, () =>
+        this.discoverMcpServer(name, config, registries),
+      );
+    } catch (error) {
+      if (!this.stopped) throw error;
+    }
+  }
+
+  private async discoverMcpServer(
+    name: string,
+    config: MCPServerConfig,
+    registries?: {
+      toolRegistry: ToolRegistry;
+      promptRegistry: PromptRegistry;
+      resourceRegistry: ResourceRegistry;
+    },
+  ): Promise<void> {
+    if (this.stopped) return;
     const existingConfig = this.allServerConfigs.get(name);
     if (
       existingConfig?.extension?.id &&
@@ -428,6 +454,7 @@ export class McpClientManager {
           // This is a configuration update (hot-reload).
           // We should stop the old client before starting the new one.
           await this.disconnectClient(existingKey, true);
+          if (this.stopped) return;
         }
       }
     }
@@ -452,7 +479,9 @@ export class McpClientManager {
       return;
     }
     // User-disabled servers: disconnect if running, don't start
-    if (await this.isDisabledByUser(name)) {
+    const disabled = await this.isDisabledByUser(name);
+    if (this.stopped) return;
+    if (disabled) {
       if (existing) {
         await this.disconnectClient(clientKey);
       }
@@ -478,6 +507,7 @@ export class McpClientManager {
               this.cliConfig.getDebugMode(),
               this.clientVersion,
               async () => {
+                if (this.stopped) return;
                 debugLogger.log(
                   `🔔 Refreshing context for server '${name}'...`,
                 );
@@ -504,11 +534,17 @@ export class McpClientManager {
             if (client.getStatus() === MCPServerStatus.DISCONNECTED) {
               await client.connect();
             }
+            if (this.stopped) {
+              await client.disconnect();
+              return;
+            }
             if (targetRegistries) {
               await client.discoverInto(this.cliConfig, targetRegistries);
             }
+            if (this.stopped) return;
             this.eventEmitter?.emit('mcp-client-update', this.clients);
           } catch (error) {
+            if (this.stopped) return;
             this.eventEmitter?.emit('mcp-client-update', this.clients);
             // Check if this is a 401/auth error - if so, don't show as red error
             // (the info message was already shown in mcp-client.ts)
@@ -523,6 +559,7 @@ export class McpClientManager {
             }
           }
         } catch (error) {
+          if (this.stopped) return;
           const errorMessage = getErrorMessage(error);
           this.emitDiagnostic(
             'error',
@@ -550,7 +587,7 @@ export class McpClientManager {
       .finally(() => {
         // If we are the last recorded discoveryPromise, then we are done, reset
         // the world.
-        if (currentPromise === this.discoveryPromise) {
+        if (!this.stopped && currentPromise === this.discoveryPromise) {
           this.discoveryPromise = undefined;
           this.discoveryState = MCPDiscoveryState.COMPLETED;
           this.eventEmitter?.emit('mcp-client-update', this.clients);
@@ -573,6 +610,7 @@ export class McpClientManager {
    * ExtensionLoader explicitly calls `loadExtension`.
    */
   async startConfiguredMcpServers(): Promise<void> {
+    if (this.stopped) return;
     if (!this.cliConfig.isTrustedFolder()) {
       return;
     }
@@ -601,6 +639,7 @@ export class McpClientManager {
         this.maybeDiscoverMcpServer(name, config),
       ),
     );
+    if (this.stopped) return;
 
     // If every configured server was skipped (for example because all are
     // disabled by user settings), no discovery promise is created. In that
@@ -620,10 +659,12 @@ export class McpClientManager {
    * Restarts all MCP servers (including newly enabled ones).
    */
   async restart(): Promise<void> {
+    if (this.stopped) return;
     const disconnectionPromises = Array.from(this.clients.keys()).map((key) =>
       this.disconnectClient(key, true),
     );
     await Promise.all(disconnectionPromises);
+    if (this.stopped) return;
 
     await Promise.all(
       Array.from(this.allServerConfigs.entries()).map(
@@ -645,12 +686,14 @@ export class McpClientManager {
    * Restart a single MCP server by name.
    */
   async restartServer(name: string) {
+    if (this.stopped) return;
     const config = this.allServerConfigs.get(name);
     if (!config) {
       throw new Error(`No MCP server registered with the name "${name}"`);
     }
     const clientKey = this.getClientKey(name, config);
     await this.disconnectClient(clientKey, true);
+    if (this.stopped) return;
     await this.maybeDiscoverMcpServer(name, config);
     await this.scheduleMcpContextRefresh();
   }
@@ -660,22 +703,27 @@ export class McpClientManager {
    * This is the cleanup method to be called on application exit.
    */
   async stop(): Promise<void> {
-    const disconnectionPromises = Array.from(this.clients.entries()).map(
-      async ([name, client]) => {
-        try {
-          await client.disconnect();
-        } catch (error) {
-          this.emitDiagnostic(
-            'error',
-            `Error stopping client '${name}':`,
-            error,
-          );
-        }
-      },
-    );
-
-    await Promise.all(disconnectionPromises);
+    if (this.stopPromise) return this.stopPromise;
+    this.stopped = true;
+    const clients = Array.from(this.clients.entries());
     this.clients.clear();
+    this.discoveryPromise = undefined;
+    this.discoveryState = MCPDiscoveryState.COMPLETED;
+    this.pendingMcpContextRefresh = false;
+    this.stopController.abort(
+      new DOMException('MCP manager stopped.', 'AbortError'),
+    );
+    this.eventEmitter?.emit('mcp-client-update', this.clients);
+    const disconnectionPromises = clients.map(async ([name, client]) => {
+      try {
+        await client.disconnect();
+      } catch (error) {
+        this.emitDiagnostic('error', `Error stopping client '${name}':`, error);
+      }
+    });
+
+    this.stopPromise = Promise.all(disconnectionPromises).then(() => undefined);
+    return this.stopPromise;
   }
 
   getDiscoveryState(): MCPDiscoveryState {
@@ -711,6 +759,7 @@ export class McpClientManager {
   private pendingMcpContextRefresh: boolean = false;
 
   private async scheduleMcpContextRefresh(): Promise<void> {
+    if (this.stopped) return;
     this.pendingMcpContextRefresh = true;
 
     if (this.isRefreshingMcpContext) {
@@ -734,7 +783,10 @@ export class McpClientManager {
         do {
           this.pendingMcpContextRefresh = false;
           debugLogger.log('Executing MCP context refresh...');
-          await this.cliConfig.refreshMcpContext();
+          await withAbortSignal(this.stopController.signal, () =>
+            this.cliConfig.refreshMcpContext(),
+          );
+          if (this.stopped) return;
           debugLogger.log('MCP context refresh complete.');
 
           // If more refresh requests came in during the execution, wait a bit
@@ -745,8 +797,9 @@ export class McpClientManager {
             );
             await new Promise((resolve) => setTimeout(resolve, 300));
           }
-        } while (this.pendingMcpContextRefresh);
+        } while (this.pendingMcpContextRefresh && !this.stopped);
       } catch (error) {
+        if (this.stopped) return;
         debugLogger.error(
           `Error refreshing MCP context: ${getErrorMessage(error)}`,
         );

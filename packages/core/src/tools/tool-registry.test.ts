@@ -532,6 +532,44 @@ describe('ToolRegistry', () => {
   });
 
   describe('discoverTools', () => {
+    it.each([true, false])(
+      'preserves connected MCP tools when command discovery is configured=%s',
+      async (configured) => {
+        const mcp = createMCPTool(
+          'connected-server',
+          'available',
+          'Connected tool',
+        );
+        toolRegistry.registerTool(mcp);
+        toolRegistry.registerTool(
+          new DiscoveredTool(
+            config,
+            'obsolete',
+            DISCOVERED_TOOL_PREFIX + 'obsolete',
+            'Old command tool',
+            {},
+            mockMessageBus,
+          ),
+        );
+        mockConfigGetToolDiscoveryCommand.mockReturnValue(
+          configured ? 'fixture-discovery' : undefined,
+        );
+        if (configured)
+          vi.mocked(spawn).mockReturnValueOnce(
+            createDiscoveryProcess([{ name: 'current' }]) as any,
+          );
+        await toolRegistry.discoverAllTools();
+        expect(toolRegistry.getTool(mcp.name)).toBe(mcp);
+        expect(
+          toolRegistry.getTool(DISCOVERED_TOOL_PREFIX + 'obsolete'),
+        ).toBeUndefined();
+        if (configured)
+          expect(
+            toolRegistry.getTool(DISCOVERED_TOOL_PREFIX + 'current'),
+          ).toBeDefined();
+      },
+    );
+
     describe('discovery cancellation and transaction', () => {
       function processFixture() {
         return Object.assign(new EventEmitter(), {

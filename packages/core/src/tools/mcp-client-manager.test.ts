@@ -88,6 +88,89 @@ describe('McpClientManager', () => {
     return manager;
   };
 
+  describe('terminal shutdown gates', () => {
+    it('stops waiting for enablement and never creates a late client after stop', async () => {
+      let release!: (enabled: boolean) => void;
+      const enabled = new Promise<boolean>((resolve) => {
+        release = resolve;
+      });
+      mockConfig.getMcpEnablementCallbacks.mockReturnValue({
+        isSessionDisabled: () => false,
+        isFileEnabled: () => enabled,
+      });
+      const manager = setupManager(new McpClientManager('0.0.1', mockConfig));
+      const before = vi.mocked(McpClient).mock.calls.length;
+      let settled = false;
+      const pending = manager
+        .maybeDiscoverMcpServer('test-server', { command: 'fixture' })
+        .then(() => {
+          settled = true;
+        });
+      await new Promise((resolve) => setImmediate(resolve));
+      await manager.stop();
+      await new Promise((resolve) => setImmediate(resolve));
+      const stoppedBeforeRelease = settled;
+      release(true);
+      await pending;
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(stoppedBeforeRelease).toBe(true);
+      expect(vi.mocked(McpClient).mock.calls.length).toBe(before);
+      expect(manager.getMcpServerCount()).toBe(0);
+      await manager.maybeDiscoverMcpServer('later', { command: 'fixture' });
+      expect(vi.mocked(McpClient).mock.calls.length).toBe(before);
+    });
+
+    it('disconnects a late connection and never discovers into registries after stop', async () => {
+      let release!: () => void;
+      let enter!: () => void;
+      const entered = new Promise<void>((resolve) => {
+        enter = resolve;
+      });
+      const connection = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      mockedMcpClient.connect.mockImplementationOnce(async () => {
+        enter();
+        await connection;
+      });
+      const manager = setupManager(new McpClientManager('0.0.1', mockConfig));
+      let settled = false;
+      const discovery = manager
+        .maybeDiscoverMcpServer('test-server', { command: 'fixture' })
+        .then(() => {
+          settled = true;
+        });
+      await entered;
+      await manager.stop();
+      await new Promise((resolve) => setImmediate(resolve));
+      const stoppedBeforeRelease = settled;
+      release();
+      await discovery;
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(stoppedBeforeRelease).toBe(true);
+      expect(mockedMcpClient.discoverInto).not.toHaveBeenCalled();
+      expect(mockedMcpClient.disconnect).toHaveBeenCalledTimes(2);
+      expect(manager.getMcpServerCount()).toBe(0);
+      expect(mockConfig.refreshMcpContext).not.toHaveBeenCalled();
+    });
+
+    it('ignores context callbacks and restart requests after stop', async () => {
+      const manager = setupManager(new McpClientManager('0.0.1', mockConfig));
+      await manager.maybeDiscoverMcpServer('test-server', {
+        command: 'fixture',
+      });
+      const callback = vi.mocked(McpClient).mock.calls.at(-1)![6]!;
+      await manager.stop();
+      const connects = mockedMcpClient.connect.mock.calls.length;
+      await callback();
+      await manager.restart();
+      await manager.restartServer('test-server');
+      await manager.startConfiguredMcpServers();
+      expect(mockedMcpClient.connect.mock.calls.length).toBe(connects);
+      expect(mockConfig.refreshMcpContext).not.toHaveBeenCalled();
+    });
+  });
+
   it('should discover tools from all configured', async () => {
     mockConfig.getMcpServers.mockReturnValue({
       'test-server': { command: 'node' },

@@ -356,9 +356,9 @@ export class ToolRegistry {
     );
   }
 
-  private removeDiscoveredTools(): void {
+  private removeCommandDiscoveredTools(): void {
     for (const tool of this.allKnownTools.values()) {
-      if (tool instanceof DiscoveredTool || tool instanceof DiscoveredMCPTool) {
+      if (tool instanceof DiscoveredTool) {
         this.allKnownTools.delete(tool.name);
       }
     }
@@ -379,7 +379,7 @@ export class ToolRegistry {
   /**
    * Discovers tools from project (if available and configured).
    * Can be called multiple times to update discovered tools.
-   * This will discover tools from the command line and from MCP servers.
+   * MCP tools are managed separately and are preserved by command refreshes.
    */
   async discoverAllTools(signal?: AbortSignal): Promise<void> {
     signal?.throwIfAborted();
@@ -400,7 +400,7 @@ export class ToolRegistry {
         this.discoverToolsFromCommand(discoverySignal),
       );
       discoverySignal.throwIfAborted();
-      this.removeDiscoveredTools();
+      this.removeCommandDiscoveredTools();
       for (const tool of discovered) this.registerTool(tool);
     } finally {
       clearTimeout(timer);
