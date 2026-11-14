@@ -33,6 +33,7 @@ import {
   type SubagentActivityEvent,
 } from './types.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
+import { sanitizeErrorMessage } from '../utils/agent-sanitization-utils.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -304,7 +305,9 @@ class LocalSubagentProtocol implements AgentProtocol {
       }
       case 'ERROR': {
         const rawError = activity.data['error'];
-        const errorMsg = String(rawError ?? 'Unknown error');
+        const errorMsg = sanitizeErrorMessage(
+          String(rawError ?? 'Unknown error'),
+        );
         return [
           this._makeEvent('error', {
             status: 'INTERNAL',
@@ -361,13 +364,15 @@ class LocalSubagentProtocol implements AgentProtocol {
   }
 
   private _emitErrorAndAgentEnd(err: unknown): void {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = sanitizeErrorMessage(
+      err instanceof Error ? err.message : String(err),
+    );
     this._ensureAgentStart();
 
     const meta: Record<string, unknown> = {};
     if (err instanceof Error) {
       meta['errorName'] = err.constructor.name;
-      meta['stack'] = err.stack;
+      if (err.stack) meta['stack'] = sanitizeErrorMessage(err.stack);
       if ('exitCode' in err && typeof err.exitCode === 'number') {
         meta['exitCode'] = err.exitCode;
       }

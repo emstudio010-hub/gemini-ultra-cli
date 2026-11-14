@@ -364,8 +364,9 @@ ${output.result}`;
         returnDisplay: progress,
       };
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
+      const errorMessage = sanitizeErrorMessage(
+        error instanceof Error ? error.message : String(error),
+      );
 
       const isAbort =
         signal.aborted ||

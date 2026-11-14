@@ -227,6 +227,12 @@ missing or repeated indices are rejected, and a response containing only other
 candidate indices cannot complete successfully. Empty usage-only stream frames
 remain supported.
 
+Local subagent failure results and progress apply the existing credential
+redaction rules, as do session error messages and stacks forwarded to the
+parent. Safe tool-argument metadata remains available. Redaction covers
+recognized patterns; it does not guarantee removal of arbitrary private text in
+an upstream error. A redacted diagnostic still represents a failed member.
+
 ## Existing GitHub issues similar to yours or creating new issues
 
 If you encounter an issue that was not covered here in this _Troubleshooting

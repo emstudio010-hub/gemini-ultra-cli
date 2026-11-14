@@ -325,10 +325,14 @@ ${output.result}`;
         data: { agentId: executor.agentId },
       };
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
+      const errorMessage = sanitizeErrorMessage(
+        error instanceof Error ? error.message : String(error),
+      );
 
-      debugLogger.error(`Subagent '${this.definition.name}' failed:`, error);
+      debugLogger.error(
+        `Subagent '${this.definition.name}' failed:`,
+        errorMessage,
+      );
 
       const isAbort =
         signal.aborted ||
