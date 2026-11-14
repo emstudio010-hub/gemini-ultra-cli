@@ -35,7 +35,15 @@ export async function performInitialAuth(
   }
 
   try {
-    await config.refreshAuth(authType);
+    // The pre-sandbox bootstrap may already have authenticated this Config and
+    // handed its metadata to the full Config. Reusing that ready state avoids a
+    // second provider handshake during the first UI render.
+    const alreadyAuthenticated =
+      config.isAuthReady?.() === true &&
+      config.getContentGeneratorConfig?.()?.authType === authType;
+    if (!alreadyAuthenticated) {
+      await config.refreshAuth(authType);
+    }
     // The console.log is intentionally left out here.
     // We can add a dedicated startup message later if needed.
   } catch (e) {

@@ -47,6 +47,24 @@ describe('auth', () => {
     );
   });
 
+  it('should reuse a ready Config authenticated with the same type', async () => {
+    mockConfig = {
+      refreshAuth: vi.fn(),
+      isAuthReady: vi.fn().mockReturnValue(true),
+      getContentGeneratorConfig: vi.fn().mockReturnValue({
+        authType: AuthType.LOGIN_WITH_GOOGLE,
+      }),
+    } as unknown as Config;
+
+    const result = await performInitialAuth(
+      mockConfig,
+      AuthType.LOGIN_WITH_GOOGLE,
+    );
+
+    expect(result).toEqual({ authError: null, accountSuspensionInfo: null });
+    expect(mockConfig.refreshAuth).not.toHaveBeenCalled();
+  });
+
   it('should return error message on failed auth', async () => {
     const error = new Error('Authentication failed');
     vi.mocked(mockConfig.refreshAuth).mockRejectedValue(error);

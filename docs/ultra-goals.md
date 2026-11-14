@@ -1997,3 +1997,8 @@ WI-257/E-568至569/F-215：新增测试用真实ready Boost工作流与reader执
 ## 2026-11-15 模型选择便利性
 
 WI-258/E-570至571/F-216：/provider use <名称或ID> [模型] 支持直接选择已保存模型；未保存模型中英文报错且活动路由保持，旧默认模型行为不变。CLI tsc、选择性 Vitest（3 passed/9 skipped）、定向 ESLint、Prettier 与 diff check 通过；未调用真实供应商。goal active；下一继续认证/设置加载与演练台状态收敛。详见 docs/ultra-provider-model-selection-handoff.md。
+
+
+## 2026-11-15 启动认证复用
+
+WI-259/E-572至573/F-217：initializeApp 复用同一 Config 已完成且同类型的启动认证，避免首屏重复 refreshAuth；认证错误和类型变化仍按原流程。认证/初始化 23 passed，CLI tsc、定向 ESLint、Prettier、diff check 通过；未调用真实供应商。goal active；下一继续认证/设置冷加载与演练台状态收敛。详见 docs/ultra-auth-reuse-handoff.md。
