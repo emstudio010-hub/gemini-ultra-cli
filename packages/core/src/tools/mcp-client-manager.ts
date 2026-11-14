@@ -674,7 +674,9 @@ export class McpClientManager {
         }
       })
       .catch(() => {}); // Prevents unhandled rejection from the .finally branch
-    return currentPromise;
+    // The aggregate promise tracks UI completion across all servers. An
+    // individual deadline must stop as soon as its own discovery completes.
+    return boundedDiscoveryPromise;
   }
 
   /**

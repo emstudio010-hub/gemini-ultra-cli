@@ -176,6 +176,52 @@ describe('McpClientManager', () => {
     afterEach(() => {
       vi.useRealTimers();
     });
+    it('finishes a healthy server budget independently of another pending server', async () => {
+      vi.useFakeTimers();
+      let release!: () => void;
+      const slowConnection = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      mockedMcpClient.connect.mockReturnValueOnce(slowConnection);
+      mockedMcpClient.getServerName.mockReturnValue('slow');
+      const healthy = {
+        connect: vi.fn().mockResolvedValue(undefined),
+        discoverInto: vi.fn().mockResolvedValue(undefined),
+        disconnect: vi.fn().mockResolvedValue(undefined),
+        getStatus: vi.fn().mockReturnValue(MCPServerStatus.DISCONNECTED),
+        getServerConfig: vi.fn(),
+        getServerName: vi.fn().mockReturnValue('healthy'),
+      } as unknown as MockedObject<McpClient>;
+      vi.mocked(McpClient)
+        .mockReturnValueOnce(mockedMcpClient)
+        .mockReturnValueOnce(healthy);
+      const manager = setupManager(new McpClientManager('1', mockConfig));
+      const slow = manager.maybeDiscoverMcpServer('slow', {
+        command: 'fixture-slow',
+      });
+      let healthySettled = false;
+      const fast = manager
+        .maybeDiscoverMcpServer('healthy', {
+          command: 'fixture-healthy',
+          timeout: 1000,
+        })
+        .then(() => {
+          healthySettled = true;
+        });
+      await vi.advanceTimersByTimeAsync(0);
+      const settledBeforeTimeout = healthySettled;
+      const stateWhileSlowPending = manager.getDiscoveryState();
+      await vi.advanceTimersByTimeAsync(1000);
+      const healthyError = manager.getLastError('healthy');
+      release();
+      await Promise.all([slow, fast]);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(settledBeforeTimeout).toBe(true);
+      expect(stateWhileSlowPending).toBe(MCPDiscoveryState.IN_PROGRESS);
+      expect(healthyError).toBeUndefined();
+      expect(healthy.disconnect).not.toHaveBeenCalled();
+      expect(manager.getDiscoveryState()).toBe(MCPDiscoveryState.COMPLETED);
+    });
     it.each(['en', 'zh'] as const)(
       'bounds default discovery with %s recovery feedback and permits retry',
       async (locale) => {
