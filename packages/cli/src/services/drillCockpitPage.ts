@@ -79,7 +79,7 @@ addEventListener('pagehide',()=>morphs.forEach(m=>m.destroy?.()),{once:true});
 const tokenKey = 'drill-token';
 const token = location.hash.slice(1) || sessionStorage.getItem(tokenKey) || '';
 if (location.hash) { sessionStorage.setItem(tokenKey, token); history.replaceState(null, '', location.pathname); }
-let polling = false;
+let statusRequest;
 let modelSignature = '';
 let providers=[];let runtime={collaboration:'auto',maxParallel:3,workflow:'general'};let lastEffort='';let lastTaskSignature='';
 function showPage(page) {
@@ -108,8 +108,9 @@ $('prompts').onsubmit=async event=>{
   try {const result=await api('prompts',{config:{enabled:$('prompt-enabled').checked,prompt:$('system-prompt').value,rules}});$('config-feedback').textContent=result.message;}
   catch(error){$('config-feedback').textContent=error.message;}
 };
-async function api(path, body) {
-  const response = await fetch('/api/' + path, {method:body ? 'POST':'GET', signal:AbortSignal.timeout(12000),headers:{'X-Drill-Token':token,'Content-Type':'application/json'},body:body ? JSON.stringify(body):undefined});
+async function api(path, body, signal) {
+  const timeout=AbortSignal.timeout(12000);
+  const response = await fetch('/api/' + path, {method:body ? 'POST':'GET', signal:signal?AbortSignal.any([signal,timeout]):timeout,headers:{'X-Drill-Token':token,'Content-Type':'application/json'},body:body ? JSON.stringify(body):undefined});
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || '请求失败。');
   return data;
@@ -121,8 +122,10 @@ function table(target, headings, rows) {
   headings.forEach(text=>{const th=document.createElement('th');th.scope='col';th.textContent=text;tr.append(th);});head.append(tr);tableElement.append(head);
   const body=document.createElement('tbody');rows.forEach(row=>{const tr=document.createElement('tr');row.forEach(text=>{const td=document.createElement('td');td.textContent=String(text ?? '—');tr.append(td);});body.append(tr);});tableElement.append(body);node.append(tableElement);
 }
-async function refresh() {
-  if (polling) return; polling=true;
+async function refresh(force=false) {
+  if(statusRequest){await statusRequest;if(!force)return;}
+  if(statusRequest)return statusRequest;
+  statusRequest=(async()=>{
   try {
     const s=await api('status');
     applyLocale(s.locale||'zh');
@@ -153,7 +156,9 @@ async function refresh() {
     const states={queued:t('排队','Queued'),running:t('运行中','Running'),completed:t('完成','Completed'),failed:t('失败','Failed'),cancelled:t('已取消','Cancelled')};
     const taskSignature=JSON.stringify([locale,s.collaborationTasks]);if(taskSignature!==lastTaskSignature){lastTaskSignature=taskSignature;table('agent-tasks',t(['代理','状态','结果'],['Agent','State','Result']),(s.collaborationTasks||[]).slice(-20).reverse().map(task=>[task.agent,states[task.status]||task.status,task.error||task.finishedAt||task.startedAt||'—']));}
   } catch(error) { $('state').textContent=error.message;$('submit').disabled=true; }
-  finally { polling=false; }
+  finally { statusRequest=undefined; }
+  })();
+  return statusRequest;
 }
 async function setting(action,value,extra={}) {
   try { const result=await api('settings',{action,value,...extra});$('feedback').textContent=result.message; }
@@ -167,11 +172,14 @@ $('collaboration').onchange=saveRuntime;$('parallel').onchange=saveRuntime;$('wo
 $('bypass').onchange=()=>setting('bypass',$('bypass').checked);
 $('grant').onchange=()=>setting('grant',$('grant').checked);
 $('model').onchange=()=>{if(!$('model').value)return;const [providerId,model]=JSON.parse($('model').value);void setting('model',null,{providerId,model});};
-$('provider-edit').onchange=()=>{const p=providers.find(p=>p.id===$('provider-edit').value);$('provider-name').value=p?.name||'';$('provider-url').value=p?.baseUrl||'';$('provider-protocol').value=p?.protocol||'openai-chat';$('provider-key').value='';$('provider-models').value=(p?.models||[]).join(', ');$('provider-output-limit').value=p?.maxOutputTokens??'';$('provider-context-window').value=p?.contextWindow??'';$('provider-feedback').textContent='';};
+let providerRevision=0;let providerCatalogController;let providerSaving=false;
+function invalidateProviderEditor(){providerRevision++;providerCatalogController?.abort();providerCatalogController=undefined;$('fetch-models').disabled=false;$('provider-feedback').textContent='';}
+$('provider-form').addEventListener('input',invalidateProviderEditor);$('provider-form').addEventListener('change',invalidateProviderEditor);
+$('provider-edit').onchange=()=>{invalidateProviderEditor();const p=providers.find(p=>p.id===$('provider-edit').value);$('provider-name').value=p?.name||'';$('provider-url').value=p?.baseUrl||'';$('provider-protocol').value=p?.protocol||'openai-chat';$('provider-key').value='';$('provider-models').value=(p?.models||[]).join(', ');$('provider-output-limit').value=p?.maxOutputTokens??'';$('provider-context-window').value=p?.contextWindow??'';};
 function providerTokenLimit(id){const value=$(id).value.trim();if(!value)return null;const limit=Number(value);if(!Number.isSafeInteger(limit)||limit<1)throw new Error(t('Token 数必须是正整数。','Token counts must be positive integers.'));return limit;}
 function providerInput(){return {id:$('provider-edit').value||undefined,name:$('provider-name').value.trim(),baseUrl:$('provider-url').value.trim(),apiKey:$('provider-key').value,maxOutputTokens:providerTokenLimit('provider-output-limit'),contextWindow:providerTokenLimit('provider-context-window'),protocol:$('provider-protocol').value,models:$('provider-models').value.split(/[,\\s]+/).filter(Boolean)};}
-$('fetch-models').onclick=async()=>{const button=$('fetch-models');button.disabled=true;$('provider-feedback').textContent=t('加载中…','Loading…');try{const result=await api('provider-models',providerInput());if(result.models.length)$('provider-models').value=result.models.join(', ');$('provider-feedback').textContent=result.error||t('模型清单已加载，可编辑后保存。','Catalog loaded. Edit your selection, then save.');}catch(error){$('provider-feedback').textContent=error.message;}finally{button.disabled=false;}};
-$('provider-form').onsubmit=async event=>{event.preventDefault();const button=$('provider-form').querySelector('[type=submit]');button.disabled=true;try{const result=await api('providers',providerInput());$('provider-key').value='';modelSignature='';await refresh();$('provider-edit').value=result.id;$('provider-feedback').textContent=result.message;}catch(error){$('provider-feedback').textContent=error.message;}finally{button.disabled=false;}};
+$('fetch-models').onclick=async()=>{invalidateProviderEditor();const revision=providerRevision,controller=new AbortController();providerCatalogController=controller;const button=$('fetch-models');button.disabled=true;$('provider-feedback').textContent=t('加载中…','Loading…');try{const result=await api('provider-models',providerInput(),controller.signal);if(revision!==providerRevision||controller.signal.aborted)return;if(result.models.length){$('provider-models').value=result.models.join(', ');providerRevision++;}$('provider-feedback').textContent=result.error||t('模型清单已加载，可编辑后保存。','Catalog loaded. Edit your selection, then save.');}catch(error){if(revision===providerRevision&&!controller.signal.aborted)$('provider-feedback').textContent=error.message;}finally{if(providerCatalogController===controller){providerCatalogController=undefined;button.disabled=false;}}};
+$('provider-form').onsubmit=async event=>{event.preventDefault();if(providerSaving)return;invalidateProviderEditor();const revision=providerRevision,button=$('provider-form').querySelector('[type=submit]');providerSaving=true;button.disabled=true;try{const result=await api('providers',providerInput());modelSignature='';await refresh(true);if(revision!==providerRevision)return;$('provider-key').value='';$('provider-edit').value=result.id;$('provider-feedback').textContent=result.message;}catch(error){if(revision===providerRevision)$('provider-feedback').textContent=error.message;}finally{providerSaving=false;button.disabled=false;}};
 const presets={writing:'请帮助完成以下写作任务：\\n主题：\\n读者与用途：\\n篇幅与风格：\\n先梳理结构，再输出可直接使用的正文；不编造来源。',coding:'请完成以下编码任务：\\n项目路径：\\n目标：\\n约束：尽量简洁，先阅读相关代码，再直接实施。只运行与改动直接相关的必要检查，不做额外冒烟测试。',audit:'请审阅以下本地源码，重点找出可复现的实际缺陷并修复：\\n路径：\\n范围：',binary:'请分析以下已获授权的本地样本，记录观察依据与不确定项：\\n文件路径：\\n目标：'};
 const englishPresets={writing:'Complete this writing task.\\nTopic:\\nAudience and purpose:\\nLength and style:\\nOutline the structure, then produce usable prose. Do not invent sources.',coding:'Complete this coding task.\\nProject path:\\nGoal:\\nConstraints: Keep it concise. Read relevant code, then implement. Run only necessary checks related to the change.',audit:'Review authorized local source and fix concrete, reproducible defects.\\nPath:\\nScope:',binary:'Analyze this authorized local sample and record evidence and uncertainties.\\nFile path:\\nGoal:'};
 $('preset').onchange=()=>{const template=(locale==='zh'?presets:englishPresets)[$('preset').value];if(template){$('prompt').value=template;$('prompt').focus();}};

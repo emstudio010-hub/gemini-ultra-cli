@@ -1704,3 +1704,8 @@ WI-202/E-457至458/F-159：语言保存原location.reload丢面板/选中任务/
 ## 2026-11-14 演练台供应商Token设置
 
 WI-203/E-459至460/F-160：演练台新增输出上限/上下文容量双语折叠表单，status安全投影、正安全整数/null/省略校验，省略保留/null清除，编辑保留仍可用的非首项默认模型及空key/隐藏配置。严格CLI tsc、三文件lint、两文件格式、diff退出0，无新增单元/全量冒烟。Windows真实HTTP14条件全true/7739ms非性能基准，4本地Chat请求实际验证provider输出/容量/任务优先/切换/清除；10非法写400且文件逐字保持，0任务/外部。首轮false为记录器添加undefined属性误判Object.hasOwn，保全后仅修记录器通过。CUA中英保持provider/details/数值、保存2048/32768回填、清空回填；独立磁盘默认chosen与假key保持。finish退出0/retention及个人配置/旧失败SHA/全局83保全true，无打包重装版本CI或付费重跑。异步保存/切换迟到归属待审查，真实供应商容量与质量未验收，goal active。三份交接SHA一致。详见docs/ultra-cockpit-provider-limits-handoff.md。
+
+
+## 2026-11-14 供应商表单异步归属
+
+WI-204/E-461至462/F-161：仅生成页用revision防模型清单/保存迟到写新表单，input/change/选择使旧结果失效，独立catalog controller合并原12秒期限、失效恢复按钮；保存防重入但不撤销已提交写，仅当前revision可清key/选id/反馈。共享status Promise，保存强制等旧status再取新清单修新增id丢选中。CLI严格tsc初次/最终、单文件lint/diff退出0，真实HTTP脚本解析通过，无新单元/全量冒烟。Windows真实Drill/API通过自有代理hold响应，CUA验证catalog切Beta不覆盖/连接release前关闭/可重新加载，save切Beta保留草稿与非空key、同Alpha继续编辑也保持，旧status hold与新增save交错最终选新id及中文成功。2本地catalog/3显式保存/0任务外部；手工观察与7磁盘/gate条件分列，不伪称自动UI测试，原失败路径静态确认、未运行旧版重现。finish退出0/retention和个人配置/旧失败SHA/全局83保全true，无打包重装版本CI付费重跑。客户端取消不声称上游同时取消，已提交快照可能保存，后续草稿未保存。三份交接SHA一致，goal active。详见docs/ultra-cockpit-provider-races-handoff.md。
