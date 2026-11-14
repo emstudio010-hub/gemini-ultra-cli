@@ -20,6 +20,7 @@ import type { Config, GeminiCLIExtension } from '../config/config.js';
 import { MCPServerConfig } from '../config/config.js';
 import type { PromptRegistry } from '../prompts/prompt-registry.js';
 import type { ResourceRegistry } from '../resources/resource-registry.js';
+import { I18nManager } from '../i18n/i18nManager.js';
 
 vi.mock('./mcp-client.js', async () => {
   const originalModule = await vi.importActual('./mcp-client.js');
@@ -38,7 +39,7 @@ describe('McpClientManager', () => {
     mockedMcpClient = {
       connect: vi.fn(),
       discoverInto: vi.fn(),
-      disconnect: vi.fn(),
+      disconnect: vi.fn().mockResolvedValue(undefined),
       getStatus: vi.fn().mockReturnValue(MCPServerStatus.DISCONNECTED),
       getServerConfig: vi.fn(),
       getServerName: vi.fn().mockReturnValue('test-server'),
@@ -168,6 +169,117 @@ describe('McpClientManager', () => {
       await manager.startConfiguredMcpServers();
       expect(mockedMcpClient.connect.mock.calls.length).toBe(connects);
       expect(mockConfig.refreshMcpContext).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('discovery deadline', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+    it.each(['en', 'zh'] as const)(
+      'bounds default discovery with %s recovery feedback and permits retry',
+      async (locale) => {
+        vi.useFakeTimers();
+        const i18n = I18nManager.getInstance();
+        const previous = i18n.getLocale();
+        i18n.setLocale(locale);
+        let release!: () => void;
+        const connection = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        mockedMcpClient.connect.mockReturnValueOnce(connection);
+        mockConfig.getMcpServers.mockReturnValue({
+          'test-server': { command: 'fixture' },
+        });
+        const manager = setupManager(new McpClientManager('1', mockConfig));
+        let settled = false;
+        const startup = manager.startConfiguredMcpServers().then(() => {
+          settled = true;
+        });
+        try {
+          await vi.advanceTimersByTimeAsync(9_999);
+          expect(settled).toBe(false);
+          await vi.advanceTimersByTimeAsync(1);
+          const settledBeforeRelease = settled;
+          release();
+          await startup;
+          await vi.advanceTimersByTimeAsync(0);
+          expect(settledBeforeRelease).toBe(true);
+          expect(manager.getDiscoveryState()).toBe(MCPDiscoveryState.COMPLETED);
+          expect(mockedMcpClient.disconnect).toHaveBeenCalled();
+          expect(mockedMcpClient.discoverInto).not.toHaveBeenCalled();
+          expect(manager.getLastError('test-server')).toContain('/mcp restart');
+          expect(manager.getLastError('test-server')).toContain(
+            locale === 'zh' ? '发现超过' : 'discovery exceeded',
+          );
+          await manager.restartServer('test-server');
+          expect(mockedMcpClient.discoverInto).toHaveBeenCalledOnce();
+          expect(manager.getLastError('test-server')).toBeUndefined();
+        } finally {
+          release();
+          i18n.setLocale(previous);
+        }
+      },
+    );
+
+    it('uses one explicit budget across connection and discovery', async () => {
+      vi.useFakeTimers();
+      mockConfig.getMcpServers.mockReturnValue({
+        'test-server': { command: 'fixture', timeout: 5000 },
+      });
+      mockedMcpClient.connect.mockImplementationOnce(
+        () => new Promise((resolve) => setTimeout(resolve, 3000)),
+      );
+      mockedMcpClient.discoverInto.mockImplementationOnce(
+        () => new Promise((resolve) => setTimeout(resolve, 3000)),
+      );
+      const manager = setupManager(new McpClientManager('1', mockConfig));
+      let settled = false;
+      const startup = manager.startConfiguredMcpServers().then(() => {
+        settled = true;
+      });
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(mockedMcpClient.discoverInto).toHaveBeenCalledOnce();
+      await vi.advanceTimersByTimeAsync(2000);
+      const settledAtBudget = settled;
+      await vi.advanceTimersByTimeAsync(1000);
+      await startup;
+      expect(settledAtBudget).toBe(true);
+      expect(manager.getLastError('test-server')).toContain('5');
+      expect(mockedMcpClient.disconnect).toHaveBeenCalled();
+      expect(manager.getDiscoveryState()).toBe(MCPDiscoveryState.COMPLETED);
+    });
+
+    it('honors a longer explicit budget while bounding the enablement wait', async () => {
+      vi.useFakeTimers();
+      let release!: (enabled: boolean) => void;
+      const enablement = new Promise<boolean>((resolve) => {
+        release = resolve;
+      });
+      mockConfig.getMcpEnablementCallbacks.mockReturnValue({
+        isSessionDisabled: () => false,
+        isFileEnabled: () => enablement,
+      });
+      mockConfig.getMcpServers.mockReturnValue({
+        'test-server': { command: 'fixture', timeout: 20000 },
+      });
+      const manager = setupManager(new McpClientManager('1', mockConfig));
+      let settled = false;
+      const startup = manager.startConfiguredMcpServers().then(() => {
+        settled = true;
+      });
+      await vi.advanceTimersByTimeAsync(10000);
+      expect(settled).toBe(false);
+      expect(mockedMcpClient.connect).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(10000);
+      const settledBeforeRelease = settled;
+      release(true);
+      await startup;
+      await vi.advanceTimersByTimeAsync(0);
+      expect(settledBeforeRelease).toBe(true);
+      expect(manager.getLastError('test-server')).toContain('20');
+      expect(mockedMcpClient.connect).not.toHaveBeenCalled();
+      expect(manager.getDiscoveryState()).toBe(MCPDiscoveryState.COMPLETED);
     });
   });
 

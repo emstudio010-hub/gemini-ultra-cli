@@ -21,6 +21,7 @@ import type { EventEmitter } from 'node:events';
 import { coreEvents } from '../utils/events.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import { withAbortSignal } from '../utils/withAbortSignal.js';
+import { I18nManager } from '../i18n/i18nManager.js';
 
 import { createHash } from 'node:crypto';
 import { stableStringify } from '../policy/stable-stringify.js';
@@ -29,6 +30,20 @@ import type {
   ResourceRegistry,
   MCPResource,
 } from '../resources/resource-registry.js';
+
+export const MCP_DISCOVERY_TIMEOUT_MS = 10_000;
+
+export class McpDiscoveryTimeoutError extends Error {
+  override name = 'McpDiscoveryTimeoutError';
+  constructor(serverName: string, timeoutMs: number) {
+    super(
+      I18nManager.getInstance().t(
+        `MCP 服务 '${serverName}' 的发现超过 ${timeoutMs / 1000} 秒，已停止本次连接，CLI 将继续启动。检查配置后可用 /mcp restart 重试；启动较慢的服务可增大 timeout。`,
+        `MCP server '${serverName}' discovery exceeded ${timeoutMs / 1000} seconds; this connection was stopped and the CLI will continue starting. Check its configuration and retry /mcp restart; increase timeout for slower servers.`,
+      ),
+    );
+  }
+}
 
 /**
  * Manages the lifecycle of multiple MCP clients, including local child processes.
@@ -388,25 +403,74 @@ export class McpClientManager {
     },
   ): Promise<void> {
     if (this.stopped) return;
+    const existing = this.allServerConfigs.get(name);
+    const configuredTimeout =
+      config.extension && existing && !existing.extension
+        ? (existing.timeout ?? config.timeout)
+        : (config.timeout ?? existing?.timeout);
+    const timeoutMs =
+      typeof configuredTimeout === 'number' &&
+      Number.isFinite(configuredTimeout) &&
+      configuredTimeout > 0 &&
+      configuredTimeout <= 2_147_483_647
+        ? configuredTimeout
+        : MCP_DISCOVERY_TIMEOUT_MS;
+    const controller = new AbortController();
+    const signal = AbortSignal.any([
+      this.stopController.signal,
+      controller.signal,
+    ]);
+    let client: McpClient | undefined;
+    const closeOnTimeout = () => {
+      if (this.stopped || !client) return;
+      void client
+        .disconnect()
+        .catch((error) =>
+          debugLogger.debug('Error closing timed out MCP discovery:', error),
+        );
+    };
+    signal.addEventListener('abort', closeOnTimeout, { once: true });
+    const timer = setTimeout(
+      () => controller.abort(new McpDiscoveryTimeoutError(name, timeoutMs)),
+      timeoutMs,
+    );
     try {
-      await withAbortSignal(this.stopController.signal, () =>
-        this.discoverMcpServer(name, config, registries),
+      await withAbortSignal(signal, () =>
+        this.discoverMcpServer(name, config, registries, signal, (active) => {
+          client = active;
+          if (signal.aborted) closeOnTimeout();
+        }),
       );
     } catch (error) {
-      if (!this.stopped) throw error;
+      if (this.stopped) return;
+      if (controller.signal.aborted) {
+        const reason: unknown = controller.signal.reason;
+        if (reason instanceof McpDiscoveryTimeoutError) {
+          this.emitDiagnostic('warning', reason.message, reason, name);
+          return;
+        }
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', closeOnTimeout);
     }
   }
 
   private async discoverMcpServer(
     name: string,
     config: MCPServerConfig,
-    registries?: {
-      toolRegistry: ToolRegistry;
-      promptRegistry: PromptRegistry;
-      resourceRegistry: ResourceRegistry;
-    },
+    registries:
+      | {
+          toolRegistry: ToolRegistry;
+          promptRegistry: PromptRegistry;
+          resourceRegistry: ResourceRegistry;
+        }
+      | undefined,
+    signal: AbortSignal,
+    onClientAvailable: (client: McpClient) => void,
   ): Promise<void> {
-    if (this.stopped) return;
+    if (this.stopped || signal.aborted) return;
     const existingConfig = this.allServerConfigs.get(name);
     if (
       existingConfig?.extension?.id &&
@@ -454,7 +518,7 @@ export class McpClientManager {
           // This is a configuration update (hot-reload).
           // We should stop the old client before starting the new one.
           await this.disconnectClient(existingKey, true);
-          if (this.stopped) return;
+          if (this.stopped || signal.aborted) return;
         }
       }
     }
@@ -480,7 +544,7 @@ export class McpClientManager {
     }
     // User-disabled servers: disconnect if running, don't start
     const disabled = await this.isDisabledByUser(name);
-    if (this.stopped) return;
+    if (this.stopped || signal.aborted) return;
     if (disabled) {
       if (existing) {
         await this.disconnectClient(clientKey);
@@ -529,22 +593,29 @@ export class McpClientManager {
                   resourceRegistry: this.mainResourceRegistry,
                 }
               : undefined);
+          onClientAvailable(client);
+          if (this.stopped || signal.aborted) return;
 
           try {
+            if (client.getStatus() === MCPServerStatus.DISCONNECTING) {
+              await client.disconnect();
+              if (this.stopped || signal.aborted) return;
+            }
             if (client.getStatus() === MCPServerStatus.DISCONNECTED) {
               await client.connect();
             }
-            if (this.stopped) {
+            if (this.stopped || signal.aborted) {
               await client.disconnect();
               return;
             }
             if (targetRegistries) {
               await client.discoverInto(this.cliConfig, targetRegistries);
             }
-            if (this.stopped) return;
+            if (this.stopped || signal.aborted) return;
+            this.lastErrors.delete(name);
             this.eventEmitter?.emit('mcp-client-update', this.clients);
           } catch (error) {
-            if (this.stopped) return;
+            if (this.stopped || signal.aborted) return;
             this.eventEmitter?.emit('mcp-client-update', this.clients);
             // Check if this is a 401/auth error - if so, don't show as red error
             // (the info message was already shown in mcp-client.ts)
@@ -555,16 +626,18 @@ export class McpClientManager {
                 'error',
                 `Error during discovery for MCP server '${name}': ${errorMessage}`,
                 error,
+                name,
               );
             }
           }
         } catch (error) {
-          if (this.stopped) return;
+          if (this.stopped || signal.aborted) return;
           const errorMessage = getErrorMessage(error);
           this.emitDiagnostic(
             'error',
             `Fatal error ensuring MCP server '${name}' is connected: ${errorMessage}`,
             error,
+            name,
           );
         } finally {
           resolve();
@@ -572,14 +645,21 @@ export class McpClientManager {
       })();
     });
 
+    const boundedDiscoveryPromise = withAbortSignal(
+      signal,
+      () => currentDiscoveryPromise,
+    ).catch((error) => {
+      if (!signal.aborted) throw error;
+    });
+
     if (this.discoveryPromise) {
       // Ensure the next discovery starts regardless of the previous one's success/failure
       this.discoveryPromise = this.discoveryPromise
         .catch(() => {})
-        .then(() => currentDiscoveryPromise);
+        .then(() => boundedDiscoveryPromise);
     } else {
       this.discoveryState = MCPDiscoveryState.IN_PROGRESS;
-      this.discoveryPromise = currentDiscoveryPromise;
+      this.discoveryPromise = boundedDiscoveryPromise;
     }
     this.eventEmitter?.emit('mcp-client-update', this.clients);
     const currentPromise = this.discoveryPromise;
