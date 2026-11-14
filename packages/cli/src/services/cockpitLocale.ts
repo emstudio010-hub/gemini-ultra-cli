@@ -88,6 +88,14 @@ export const cockpitTranslations: Record<string, string> = {
     'Separate models with commas or new lines. The first model is the default.',
   获取模型清单: 'Fetch model catalog',
   保存供应商: 'Save provider',
+  '多个模型用逗号或换行分隔。新增时首个为默认模型，编辑时保留仍可用的默认模型。':
+    'Separate models with commas or new lines. New providers default to the first model; editing preserves an available default.',
+  生成与上下文设置: 'Generation and context settings',
+  输出上限: 'Output token limit',
+  上下文容量: 'Context capacity',
+  留空使用默认值: 'Leave blank for default',
+  '填写正整数 Token 数。留空清除供应商覆盖；任务自己的输出上限优先。容量应适用于此供应商的所有模型，不能超过实际支持范围。':
+    'Enter positive token counts. Blank clears the provider override; task output limits take priority. Capacity should suit all models on this provider and match actual support.',
   '加载中…': 'Loading…',
   '保存中…': 'Saving…',
   '任务处理中…': 'Processing task…',

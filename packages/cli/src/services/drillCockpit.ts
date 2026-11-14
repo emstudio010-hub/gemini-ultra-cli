@@ -205,13 +205,25 @@ async function handleRequest(
       providers: mgr
         .listProviders()
         .map(
-          ({ id, name, models, defaultModel, baseUrl, protocol, apiKey }) => ({
+          ({
             id,
             name,
             models,
             defaultModel,
             baseUrl,
             protocol,
+            apiKey,
+            maxOutputTokens,
+            contextWindow,
+          }) => ({
+            id,
+            name,
+            models,
+            defaultModel,
+            baseUrl,
+            protocol,
+            maxOutputTokens,
+            contextWindow,
             hasKey: Boolean(apiKey),
           }),
         ),
@@ -368,14 +380,22 @@ async function handleRequest(
         ]),
         models: z.array(z.string().trim().min(1)).max(300),
         defaultModel: z.string().optional(),
+        maxOutputTokens: z
+          .number()
+          .int()
+          .positive()
+          .safe()
+          .nullable()
+          .optional(),
+        contextWindow: z.number().int().positive().safe().nullable().optional(),
       })
       .safeParse(body);
     if (!parsed.success)
       throw new RequestError(
         400,
-        '请检查名称、端点和模型。 / Check the name, endpoint and model fields.',
+        '请检查名称、端点、模型和 Token 设置（必须为正整数）。 / Check the name, endpoint, models and positive integer token settings.',
       );
-    const input = parsed.data;
+    const { maxOutputTokens, contextWindow, ...input } = parsed.data;
     const existing = input.id ? mgr.getProviderById(input.id) : undefined;
     if (input.id && !existing)
       throw new RequestError(404, 'Provider no longer exists.');
@@ -403,7 +423,17 @@ async function handleRequest(
     const provider = mgr.upsertProvider({
       ...input,
       apiKey,
-      defaultModel: input.defaultModel || input.models[0],
+      defaultModel:
+        input.defaultModel ||
+        (existing?.defaultModel && input.models.includes(existing.defaultModel)
+          ? existing.defaultModel
+          : input.models[0]),
+      ...(Object.hasOwn(body, 'maxOutputTokens')
+        ? { maxOutputTokens: maxOutputTokens ?? undefined }
+        : {}),
+      ...(Object.hasOwn(body, 'contextWindow')
+        ? { contextWindow: contextWindow ?? undefined }
+        : {}),
       setActive: false,
     });
     reply(res, 200, {

@@ -1699,3 +1699,8 @@ WI-201/E-455至456/F-158：失败全文已有归档但status/看板/详情不可
 ## 2026-11-14 演练台原位语言切换
 
 WI-202/E-457至458/F-159：语言保存原location.reload丢面板/选中任务/输入。现复用applyLocale原位翻译，动态规则节点/模型默认项/保存路径/已加载表重绘，任务目录当前页与选择保留、同task/member失败历史展开保持；不新增草稿或key持久化。语言控件保存中禁用、失败还原原选项并在控件旁aria-live提示，恢复后显式重试可用。单文件CLI严格tsc/lint首次和最终、diff退出0，最终生成script可解析；无新增镜像单元/全量冒烟。Windows真实HTTP10条件true/9565ms非性能基准，实际CUA配置提示词/供应商名/规则草稿英文原位保持、规则标签更新；演练台任务草稿/同一task/展开reader历史中文保持。首错误在任务feedback可能隐藏，最终改控件旁提示并验证真实locale目录阻挡失败在配置页可见、旧英文保持，恢复fixture后中文重试草稿保持。11项手工CUA观察与2项磁盘检查分列，key假值被工具脱敏未断言原文，未运行巡检/多页或并发CLI locale压力；finish退出0/任务hash保持/0提交外部/临时根清理，磁盘无草稿marker。个人配置/旧E-294与E-364失败SHA/安装83保持，无打包重装版本CI或付费重跑，三份交接SHA一致、goal active。详见docs/ultra-cockpit-live-language-handoff.md。
+
+
+## 2026-11-14 演练台供应商Token设置
+
+WI-203/E-459至460/F-160：演练台新增输出上限/上下文容量双语折叠表单，status安全投影、正安全整数/null/省略校验，省略保留/null清除，编辑保留仍可用的非首项默认模型及空key/隐藏配置。严格CLI tsc、三文件lint、两文件格式、diff退出0，无新增单元/全量冒烟。Windows真实HTTP14条件全true/7739ms非性能基准，4本地Chat请求实际验证provider输出/容量/任务优先/切换/清除；10非法写400且文件逐字保持，0任务/外部。首轮false为记录器添加undefined属性误判Object.hasOwn，保全后仅修记录器通过。CUA中英保持provider/details/数值、保存2048/32768回填、清空回填；独立磁盘默认chosen与假key保持。finish退出0/retention及个人配置/旧失败SHA/全局83保全true，无打包重装版本CI或付费重跑。异步保存/切换迟到归属待审查，真实供应商容量与质量未验收，goal active。三份交接SHA一致。详见docs/ultra-cockpit-provider-limits-handoff.md。
