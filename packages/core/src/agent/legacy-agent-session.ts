@@ -18,6 +18,7 @@ import { Scheduler } from '../scheduler/scheduler.js';
 import { recordToolCallInteractions } from '../code_assist/telemetry.js';
 import { ToolErrorType, isFatalToolError } from '../tools/tool-error.js';
 import { debugLogger } from '../utils/debugLogger.js';
+import { isolateObserver } from '../utils/isolatedObserver.js';
 import type { EditorType } from '../utils/editor.js';
 import {
   buildToolResponseData,
@@ -58,7 +59,10 @@ const schedulerMap = new WeakMap<Config, Scheduler>();
 
 export class LegacyAgentProtocol implements AgentProtocol {
   private _events: AgentEvent[] = [];
-  private _subscribers = new Set<(event: AgentEvent) => void>();
+  private _subscribers = new Map<
+    (event: AgentEvent) => void,
+    (event: AgentEvent) => void
+  >();
   private _translationState: TranslationState;
   private _agentEndEmitted = false;
   private _activeStreamId?: string;
@@ -99,9 +103,19 @@ export class LegacyAgentProtocol implements AgentProtocol {
   }
 
   subscribe(callback: (event: AgentEvent) => void): Unsubscribe {
-    this._subscribers.add(callback);
+    const observer =
+      this._subscribers.get(callback) ??
+      isolateObserver(callback, () => {
+        if (this._subscribers.get(callback) === observer)
+          this._subscribers.delete(callback);
+        debugLogger.warn(
+          'Legacy agent event observer failed and was detached.',
+        );
+      });
+    this._subscribers.set(callback, observer);
     return () => {
-      this._subscribers.delete(callback);
+      if (this._subscribers.get(callback) === observer)
+        this._subscribers.delete(callback);
     };
   }
 
@@ -350,7 +364,7 @@ export class LegacyAgentProtocol implements AgentProtocol {
       return;
     }
 
-    const subscribers = [...this._subscribers];
+    const subscribers = [...this._subscribers.values()];
     for (const event of events) {
       if (!this._events.some((existing) => existing.id === event.id)) {
         this._events.push(event);

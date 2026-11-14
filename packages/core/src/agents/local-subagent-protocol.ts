@@ -35,34 +35,11 @@ import {
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { sanitizeErrorMessage } from '../utils/agent-sanitization-utils.js';
 import { debugLogger } from '../utils/debugLogger.js';
+import { isolateObserver } from '../utils/isolatedObserver.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/** Observability must not change execution outcomes or prevent settlement. */
-function isolateObserver<T>(
-  callback: (value: T) => void,
-  onFailure: () => void,
-): (value: T) => void {
-  let failed = false;
-  const fail = () => {
-    if (failed) return;
-    failed = true;
-    onFailure();
-  };
-  return (value) => {
-    if (failed) return;
-    try {
-      // Async functions are assignable to void callbacks. Observe rejections
-      // without waiting on UI/telemetry work in the agent's execution loop.
-      const pending: unknown = callback(value);
-      if (pending !== undefined) void Promise.resolve(pending).catch(fail);
-    } catch {
-      fail();
-    }
-  };
-}
 
 function isAbortLikeError(err: unknown): boolean {
   return err instanceof Error && err.name === 'AbortError';

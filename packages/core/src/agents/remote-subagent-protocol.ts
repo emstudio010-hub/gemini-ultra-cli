@@ -37,6 +37,7 @@ import type { AuthenticationHandler } from '@a2a-js/sdk/client';
 import { A2AAuthProviderFactory } from './auth-provider/factory.js';
 import { A2AAgentError } from './a2a-errors.js';
 import { debugLogger } from '../utils/debugLogger.js';
+import { isolateObserver } from '../utils/isolatedObserver.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 
 // ---------------------------------------------------------------------------
@@ -53,7 +54,10 @@ function isAbortLikeError(err: unknown): boolean {
 
 class RemoteSubagentProtocol implements AgentProtocol {
   private _events: AgentEvent[] = [];
-  private _subscribers = new Set<(event: AgentEvent) => void>();
+  private _subscribers = new Map<
+    (event: AgentEvent) => void,
+    (event: AgentEvent) => void
+  >();
   private _streamId: string = randomUUID();
   private _eventCounter = 0;
   private _agentStartEmitted = false;
@@ -108,9 +112,19 @@ class RemoteSubagentProtocol implements AgentProtocol {
   }
 
   subscribe(callback: (event: AgentEvent) => void): Unsubscribe {
-    this._subscribers.add(callback);
+    const observer =
+      this._subscribers.get(callback) ??
+      isolateObserver(callback, () => {
+        if (this._subscribers.get(callback) === observer)
+          this._subscribers.delete(callback);
+        debugLogger.warn(
+          'Remote subagent event observer failed and was detached.',
+        );
+      });
+    this._subscribers.set(callback, observer);
     return () => {
-      this._subscribers.delete(callback);
+      if (this._subscribers.get(callback) === observer)
+        this._subscribers.delete(callback);
     };
   }
 
@@ -313,7 +327,7 @@ class RemoteSubagentProtocol implements AgentProtocol {
 
   private _emit(events: AgentEvent[]): void {
     if (events.length === 0) return;
-    const subscribers = [...this._subscribers];
+    const subscribers = [...this._subscribers.values()];
     for (const event of events) {
       this._events.push(event);
       if (event.type === 'agent_end') {

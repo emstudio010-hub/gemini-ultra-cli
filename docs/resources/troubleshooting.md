@@ -233,11 +233,12 @@ parent. Safe tool-argument metadata remains available. Redaction covers
 recognized patterns; it does not guarantee removal of arbitrary private text in
 an upstream error. A redacted diagnostic still represents a failed member.
 
-Local subagent session observers are isolated from execution. If an event or
-raw-activity callback throws or returns a rejected promise, that observer is
-detached with a fixed warning. Other observers continue receiving events, and
-the agent keeps its original completion or failure result. Asynchronous observer
-work is not awaited by the agent loop.
+Legacy, local, and remote session event observers are isolated from execution.
+Local raw-activity observers follow the same rules. If a callback throws or
+returns a rejected promise, that observer is detached with a fixed warning.
+Other observers continue receiving events, and the agent keeps its original
+completion or failure result. Asynchronous observer work is not awaited by the
+agent loop.
 
 ## Existing GitHub issues similar to yours or creating new issues
 
