@@ -36,6 +36,10 @@ import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { sanitizeErrorMessage } from '../utils/agent-sanitization-utils.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import { isolateObserver } from '../utils/isolatedObserver.js';
+import {
+  safeAgentErrorMessage,
+  safeAgentErrorMetadata,
+} from '../utils/agentErrorDiagnostic.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -386,25 +390,10 @@ class LocalSubagentProtocol implements AgentProtocol {
   }
 
   private _emitErrorAndAgentEnd(err: unknown): void {
-    const message = sanitizeErrorMessage(
-      err instanceof Error ? err.message : String(err),
-    );
+    const message = safeAgentErrorMessage(err);
     this._ensureAgentStart();
 
-    const meta: Record<string, unknown> = {};
-    if (err instanceof Error) {
-      meta['errorName'] = err.constructor.name;
-      if (err.stack) meta['stack'] = sanitizeErrorMessage(err.stack);
-      if ('exitCode' in err && typeof err.exitCode === 'number') {
-        meta['exitCode'] = err.exitCode;
-      }
-      if ('code' in err) {
-        meta['code'] = err.code;
-      }
-      if ('status' in err) {
-        meta['status'] = err.status;
-      }
-    }
+    const meta = safeAgentErrorMetadata(err, true);
 
     this._emit([
       this._makeEvent('error', {

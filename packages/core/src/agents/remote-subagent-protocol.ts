@@ -38,6 +38,11 @@ import { A2AAuthProviderFactory } from './auth-provider/factory.js';
 import { A2AAgentError } from './a2a-errors.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import { isolateObserver } from '../utils/isolatedObserver.js';
+import {
+  safeAgentErrorMessage,
+  safeAgentErrorMetadata,
+} from '../utils/agentErrorDiagnostic.js';
+import { sanitizeErrorMessage } from '../utils/agent-sanitization-utils.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 
 // ---------------------------------------------------------------------------
@@ -365,11 +370,7 @@ class RemoteSubagentProtocol implements AgentProtocol {
     const message = this._formatError(err);
     this._ensureAgentStart();
 
-    const meta: Record<string, unknown> = {};
-    if (err instanceof Error) {
-      meta['errorName'] = err.constructor.name;
-      meta['stack'] = err.stack;
-    }
+    const meta = safeAgentErrorMetadata(err, true);
 
     this._emit([
       this._makeEvent('error', {
@@ -384,9 +385,9 @@ class RemoteSubagentProtocol implements AgentProtocol {
 
   private _formatError(error: unknown): string {
     if (error instanceof A2AAgentError) {
-      return error.userMessage;
+      return sanitizeErrorMessage(error.userMessage);
     }
-    return `Error calling remote agent: ${error instanceof Error ? error.message : String(error)}`;
+    return `Error calling remote agent: ${safeAgentErrorMessage(error)}`;
   }
 
   private _nextEventFields() {

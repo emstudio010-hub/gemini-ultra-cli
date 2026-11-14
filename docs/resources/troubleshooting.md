@@ -233,6 +233,13 @@ parent. Safe tool-argument metadata remains available. Redaction covers
 recognized patterns; it does not guarantee removal of arbitrary private text in
 an upstream error. A redacted diagnostic still represents a failed member.
 
+Session error metadata contains only a bounded error class name, safe integer
+exit codes, and safe integer or bounded, redacted string `code`/`status` values.
+When a stack is included, it follows the same redaction rules. Unsupported
+objects, BigInt, nonfinite numbers, and unreadable fields are omitted. A
+structured `rawError` entry is a new snapshot of the safe message, status, and
+optional code; it does not retain the original object or its arbitrary fields.
+
 Legacy, local, and remote session event observers are isolated from execution.
 Local raw-activity observers follow the same rules. If a callback throws or
 returns a rejected promise, that observer is detached with a fixed warning.

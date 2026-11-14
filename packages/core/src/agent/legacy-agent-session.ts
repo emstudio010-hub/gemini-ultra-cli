@@ -19,6 +19,10 @@ import { recordToolCallInteractions } from '../code_assist/telemetry.js';
 import { ToolErrorType, isFatalToolError } from '../tools/tool-error.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import { isolateObserver } from '../utils/isolatedObserver.js';
+import {
+  safeAgentErrorMessage,
+  safeAgentErrorMetadata,
+} from '../utils/agentErrorDiagnostic.js';
 import type { EditorType } from '../utils/editor.js';
 import {
   buildToolResponseData,
@@ -421,24 +425,11 @@ export class LegacyAgentProtocol implements AgentProtocol {
    * reconstruct fatal CLI errors.
    */
   private _emitErrorAndAgentEnd(err: unknown): void {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = safeAgentErrorMessage(err);
 
     this._ensureAgentStart();
 
-    const meta: Record<string, unknown> = {};
-    if (err instanceof Error) {
-      meta['errorName'] = err.constructor.name;
-      meta['stack'] = err.stack;
-      if ('exitCode' in err && typeof err.exitCode === 'number') {
-        meta['exitCode'] = err.exitCode;
-      }
-      if ('code' in err) {
-        meta['code'] = err.code;
-      }
-      if ('status' in err) {
-        meta['status'] = err.status;
-      }
-    }
+    const meta = safeAgentErrorMetadata(err, true);
 
     this._emit([
       this._makeErrorEvent({

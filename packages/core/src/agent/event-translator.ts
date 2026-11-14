@@ -16,7 +16,6 @@ import type { FinishReason } from '@google/genai';
 import { GeminiEventType } from '../core/turn.js';
 import type {
   ServerGeminiStreamEvent,
-  StructuredError,
   GeminiFinishedEventValue,
 } from '../core/turn.js';
 import type {
@@ -32,6 +31,10 @@ import {
   buildToolResponseData,
 } from './content-utils.js';
 import { toolResultDisplayToDisplayContent } from './tool-display-utils.js';
+import {
+  safeAgentErrorMessage,
+  safeAgentErrorMetadata,
+} from '../utils/agentErrorDiagnostic.js';
 
 // ---------------------------------------------------------------------------
 // Translation State
@@ -398,58 +401,36 @@ export function mapHttpToGrpcStatus(
 
 /**
  * Maps a StructuredError (or unknown error value) to an ErrorData payload.
- * Preserves selected error metadata in _meta and includes raw structured
- * errors for lossless debugging.
+ * Preserves safe scalar metadata and a minimal structured diagnostic for CLI
+ * reconstruction, without retaining the original provider error object.
  */
 export function mapError(
   error: unknown,
 ): ErrorData & { _meta?: Record<string, unknown> } {
-  const meta: Record<string, unknown> = {};
-
-  if (error instanceof Error) {
-    meta['errorName'] = error.constructor.name;
-    if ('exitCode' in error && typeof error.exitCode === 'number') {
-      meta['exitCode'] = error.exitCode;
-    }
-    if ('code' in error) {
-      meta['code'] = error.code;
-    }
-  }
-
-  if (isStructuredError(error)) {
-    const structuredMeta = { ...meta, rawError: error, status: error.status };
+  const meta = safeAgentErrorMetadata(error);
+  const message = safeAgentErrorMessage(error);
+  const status = meta['status'];
+  if (status !== undefined) {
+    const rawError = {
+      message,
+      status,
+      ...(meta['code'] === undefined ? {} : { code: meta['code'] }),
+    };
     return {
-      status: mapHttpToGrpcStatus(error.status),
-      message: error.message,
+      status: mapHttpToGrpcStatus(
+        typeof status === 'number' ? status : undefined,
+      ),
+      message,
       fatal: true,
-      _meta: structuredMeta,
+      _meta: { ...meta, rawError },
     };
   }
-
-  if (error instanceof Error) {
-    return {
-      status: 'INTERNAL',
-      message: error.message,
-      fatal: true,
-      ...(Object.keys(meta).length > 0 ? { _meta: meta } : {}),
-    };
-  }
-
   return {
     status: 'INTERNAL',
-    message: String(error),
+    message,
     fatal: true,
+    ...(Object.keys(meta).length > 0 ? { _meta: meta } : {}),
   };
-}
-
-function isStructuredError(error: unknown): error is StructuredError {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'status' in error &&
-    'message' in error &&
-    typeof error.message === 'string'
-  );
 }
 
 /**
