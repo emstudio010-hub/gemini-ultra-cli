@@ -516,6 +516,161 @@ describe('LocalAgentExecutor', () => {
     vi.useRealTimers();
   });
 
+  describe('direct executor Config shutdown', () => {
+    it('cancels an active direct run and rejects a late completion without recovery or summary', async () => {
+      const executor = await LocalAgentExecutor.create(
+        createTestDefinition(),
+        mockConfig,
+      );
+      let enter!: () => void;
+      let release!: () => void;
+      let received: AbortSignal | undefined;
+      const entered = new Promise<void>((resolve) => {
+        enter = resolve;
+      });
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      mockSendMessageStream.mockImplementationOnce(
+        async (_key, _message, _prompt, runSignal) => {
+          received = runSignal;
+          return (async function* () {
+            enter();
+            await gate;
+            yield {
+              type: StreamEventType.CHUNK,
+              value: createMockResponseChunk(
+                [],
+                [
+                  {
+                    name: COMPLETE_TASK_TOOL_NAME,
+                    id: 'late',
+                    args: { finalResult: 'UNACCEPTED_LATE_SUCCESS' },
+                  },
+                ],
+              ),
+            };
+          })();
+        },
+      );
+      const pending = executor.run({ goal: 'Direct background job' }, signal);
+      await entered;
+      try {
+        await mockConfig.dispose();
+        expect(received?.aborted).toBe(true);
+        expect(signal.aborted).toBe(false);
+      } finally {
+        release();
+      }
+      const output = await pending;
+      expect(output.terminate_reason).toBe(AgentTerminateMode.ABORTED);
+      expect(mockSendMessageStream).toHaveBeenCalledOnce();
+      expect(mockScheduleAgentTools).not.toHaveBeenCalled();
+      expect(mockSaveSummary).not.toHaveBeenCalled();
+    });
+    it('refuses new direct creation and an existing executor run after Config disposal', async () => {
+      const definition = createTestDefinition();
+      const executor = await LocalAgentExecutor.create(definition, mockConfig);
+      await mockConfig.dispose();
+      await expect(
+        LocalAgentExecutor.create(definition, mockConfig),
+      ).rejects.toMatchObject({
+        name: 'AbortError',
+        message: 'Configuration disposed.',
+      });
+      await expect(
+        executor.run({ goal: 'Closed executor' }, signal),
+      ).rejects.toMatchObject({
+        name: 'AbortError',
+        message: 'Configuration disposed.',
+      });
+      expect(MockedGeminiChat).not.toHaveBeenCalled();
+      expect(mockedLogAgentStart).not.toHaveBeenCalled();
+      expect(mockSendMessageStream).not.toHaveBeenCalled();
+    });
+    it('stops waiting during prompt preparation without starting a chat from late context', async () => {
+      const executor = await LocalAgentExecutor.create(
+        createTestDefinition(),
+        mockConfig,
+      );
+      let enter!: () => void;
+      let release!: () => void;
+      const entered = new Promise<void>((resolve) => {
+        enter = resolve;
+      });
+      mockedGetDirectoryContextString.mockImplementationOnce(() => {
+        enter();
+        return new Promise((resolve) => {
+          release = () => resolve('LATE_ENVIRONMENT_CONTEXT');
+        });
+      });
+      let error: unknown;
+      const pending = executor
+        .run({ goal: 'Prepare context' }, signal)
+        .catch((failure) => {
+          error = failure;
+        });
+      try {
+        await entered;
+        await mockConfig.dispose();
+        await vi.advanceTimersByTimeAsync(1);
+        expect(error).toMatchObject({
+          name: 'AbortError',
+          message: 'Configuration disposed.',
+        });
+      } finally {
+        release();
+        await pending;
+      }
+      expect(MockedGeminiChat).not.toHaveBeenCalled();
+      expect(mockSendMessageStream).not.toHaveBeenCalled();
+      expect(mockSaveSummary).not.toHaveBeenCalled();
+      expect(mockedLogAgentFinish).toHaveBeenCalledWith(
+        mockConfig,
+        expect.objectContaining({
+          terminate_reason: AgentTerminateMode.ABORTED,
+        }),
+      );
+    });
+    it('does not accept a completion tool returned after Config shutdown', async () => {
+      const executor = await LocalAgentExecutor.create(
+        createTestDefinition(),
+        mockConfig,
+      );
+      mockModelResponse([
+        {
+          name: COMPLETE_TASK_TOOL_NAME,
+          id: 'late-tool',
+          args: { finalResult: 'UNACCEPTED_TOOL_RESULT' },
+        },
+      ]);
+      mockScheduleAgentTools.mockImplementationOnce(
+        async (_config, requests: ToolCallRequestInfo[]) => {
+          await mockConfig.dispose();
+          return requests.map((request) => ({
+            status: 'success',
+            request,
+            response: {
+              resultDisplay: 'Late tool success',
+              responseParts: [],
+              data: {
+                taskCompleted: true,
+                submittedOutput: 'UNACCEPTED_TOOL_RESULT',
+              },
+            },
+          }));
+        },
+      );
+      const output = await executor.run(
+        { goal: 'Complete only while open' },
+        signal,
+      );
+      expect(output.terminate_reason).toBe(AgentTerminateMode.ABORTED);
+      expect(mockSaveSummary).not.toHaveBeenCalled();
+      expect(mockSendMessageStream).toHaveBeenCalledOnce();
+    });
+  });
+
   describe('interrupted visible drafts', () => {
     it.each([false, true])(
       'keeps attempts separate when an existing retry ends with success=%s',

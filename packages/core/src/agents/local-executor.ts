@@ -6,6 +6,7 @@
 
 import { type AgentLoopContext } from '../config/agent-loop-context.js';
 import { reportError } from '../utils/errorReporting.js';
+import { withAbortSignal } from '../utils/withAbortSignal.js';
 import { randomUUID } from 'node:crypto';
 import { ApprovalMode } from '../policy/types.js';
 import { GeminiChat, StreamEventType } from '../core/geminiChat.js';
@@ -177,6 +178,8 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
     context: AgentLoopContext,
     onActivity?: ActivityCallback,
   ): Promise<LocalAgentExecutor<TOutput>> {
+    const lifecycleSignal = context.config.getLifecycleSignal();
+    lifecycleSignal.throwIfAborted();
     const parentMessageBus = context.messageBus;
 
     // Create an override object to inject the subagent name into tool confirmation requests
@@ -199,6 +202,7 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
             promptRegistry: agentPromptRegistry,
             resourceRegistry: agentResourceRegistry,
           });
+          lifecycleSignal.throwIfAborted();
         }
       }
     }
@@ -296,6 +300,7 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
     const toolContext = getToolCallContext();
     const parentCallId = toolContext?.callId;
 
+    lifecycleSignal.throwIfAborted();
     return new LocalAgentExecutor(
       definition,
       context,
@@ -433,10 +438,12 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
       onWaitingForConfirmation,
     );
 
-    if (aborted) {
+    if (aborted || combinedSignal.aborted) {
       return {
         status: 'stop',
-        terminateReason: AgentTerminateMode.ABORTED,
+        terminateReason: timeoutSignal.aborted
+          ? AgentTerminateMode.TIMEOUT
+          : AgentTerminateMode.ABORTED,
         finalResult: null,
       };
     }
@@ -615,6 +622,11 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
    * @returns A promise that resolves to the agent's final output.
    */
   async run(inputs: AgentInputs, signal: AbortSignal): Promise<OutputObject> {
+    signal = AbortSignal.any([
+      signal,
+      this.context.config.getLifecycleSignal(),
+    ]);
+    signal.throwIfAborted();
     const runWithWorkspaceScope = () => {
       // If the agent definition declares additional workspace directories,
       // wrap execution in a scoped workspace context. All calls to
@@ -694,9 +706,15 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
         activeModel: this.context.config.getActiveModel(),
         today: new Date().toLocaleDateString(),
       };
+      combinedSignal.throwIfAborted();
 
       tools = this.prepareToolsList();
-      chat = await this.createChatObject(augmentedInputs, tools);
+      chat = await this.createChatObject(
+        augmentedInputs,
+        tools,
+        combinedSignal,
+      );
+      combinedSignal.throwIfAborted();
       const query = this.definition.promptConfig.query
         ? templateString(this.definition.promptConfig.query, augmentedInputs)
         : DEFAULT_QUERY_STRING;
@@ -909,6 +927,10 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
         duration_ms: Date.now() - startTime,
       };
     } catch (error) {
+      if (signal.aborted) {
+        terminateReason = AgentTerminateMode.ABORTED;
+        throw error;
+      }
       // Fetch may reject with the deadline's exact reason instead of AbortError.
       // Do not turn unrelated failures or an external cancellation into recovery.
       if (
@@ -1209,6 +1231,7 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
   private async createChatObject(
     inputs: AgentInputs,
     tools: FunctionDeclaration[],
+    signal: AbortSignal,
   ): Promise<GeminiChat> {
     const { promptConfig } = this.definition;
 
@@ -1225,8 +1248,9 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
 
     // Build system instruction from the templated prompt string.
     const systemInstruction = promptConfig.systemPrompt
-      ? await this.buildSystemPrompt(inputs)
+      ? await withAbortSignal(signal, () => this.buildSystemPrompt(inputs))
       : undefined;
+    signal.throwIfAborted();
 
     try {
       const chat = new GeminiChat(
@@ -1237,9 +1261,12 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
         undefined,
         undefined,
       );
-      await chat.initialize(undefined, 'subagent');
+      await withAbortSignal(signal, () =>
+        chat.initialize(undefined, 'subagent'),
+      );
       return chat;
     } catch (e: unknown) {
+      signal.throwIfAborted();
       await reportError(
         e,
         `Error initializing Gemini chat for agent ${this.definition.name}.`,
