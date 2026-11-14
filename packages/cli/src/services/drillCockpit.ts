@@ -406,13 +406,25 @@ async function handleRequest(
       );
     const apiKey = input.apiKey.trim() || existing?.apiKey || '';
     if (pathname === '/api/provider-models') {
-      const result = await mgr.fetchModelsFromEndpoint({
-        ...input,
-        apiKey,
-        customHeaders: existing?.customHeaders,
-        timeoutMs: 7000,
-      });
-      reply(res, 200, result);
+      const controller = new AbortController();
+      const cancel = () => controller.abort();
+      req.once('aborted', cancel);
+      res.once('close', cancel);
+      if (req.aborted || res.destroyed) cancel();
+      try {
+        const result = await mgr.fetchModelsFromEndpoint({
+          ...input,
+          apiKey,
+          customHeaders: existing?.customHeaders,
+          timeoutMs: 7000,
+          signal: controller.signal,
+        });
+        if (!controller.signal.aborted) reply(res, 200, result);
+      } finally {
+        req.removeListener('aborted', cancel);
+        res.removeListener('close', cancel);
+        controller.abort();
+      }
       return;
     }
     if (!input.models.length)

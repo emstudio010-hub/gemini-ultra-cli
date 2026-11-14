@@ -247,6 +247,10 @@ Other observers continue receiving events, and the agent keeps its original
 completion or failure result. Asynchronous observer work is not awaited by the
 agent loop.
 
+In the Drill Cockpit, model-catalog discovery stops when its browser request
+disconnects or the cockpit server closes. Cancelling discovery does not save or
+replace your configured models. You can request the catalog again afterward.
+
 ## Existing GitHub issues similar to yours or creating new issues
 
 If you encounter an issue that was not covered here in this _Troubleshooting
