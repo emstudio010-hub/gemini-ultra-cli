@@ -216,7 +216,10 @@ class DelegateInvocation extends BaseToolInvocation<
   ): Promise<ToolCallConfirmationDetails | false> {
     abortSignal.throwIfAborted();
     if (this.definition.kind === 'local')
-      assertAgentAuthorization(this.definition.name);
+      assertAgentAuthorization(
+        this.definition.name,
+        this.context.config.getApprovalMode(),
+      );
     const hintedParams = this.withUserHints(this.mappedInputs);
     const invocation = this.buildChildInvocation(hintedParams);
     return invocation.shouldConfirmExecute(abortSignal);
@@ -226,12 +229,18 @@ class DelegateInvocation extends BaseToolInvocation<
     const { abortSignal: signal, updateOutput } = options;
     signal.throwIfAborted();
     if (this.definition.kind === 'local')
-      assertAgentAuthorization(this.definition.name);
+      assertAgentAuthorization(
+        this.definition.name,
+        this.context.config.getApprovalMode(),
+      );
     const hintedParams = this.withUserHints(this.mappedInputs);
     const execute = () => {
       signal.throwIfAborted();
       if (this.definition.kind === 'local')
-        assertAgentAuthorization(this.definition.name);
+        assertAgentAuthorization(
+          this.definition.name,
+          this.context.config.getApprovalMode(),
+        );
       return runInDevTraceSpan(
         {
           operation: GeminiCliOperation.AgentCall,

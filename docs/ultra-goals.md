@@ -1884,3 +1884,8 @@ WI-238/E-531至532/F-196：有效成员scope内供应商被删除后，normalize
 ## 2026-11-15 计划模式的蜂群留言新唤醒门禁
 
 WI-239/E-533至534/F-197：CLI /swarm message原缺Plan门禁，已有engine空闲成员可绕过resume/ManageSwarm检查，通过@成员直接再执行；现message写盘/唤醒前读取当前Config模式，PLAN整条操作本地双语拒绝，模式不变，退出Plan后明确留言正常。原版zh/en两回归实际多启动一轮而失败；修后新2+旧16共18相关命令检查通过，CLI编译/双TS零warninglint/纯格式后check和diff0，无全量冒烟。Windows真实Config.initialize+编译slash+SwarmEngine/coder临时文件callback：初轮settled后Plan中文@author/英文@all均不唤醒、不改marker或状态/板，status仍只读；显式DEFAULT后仅第二轮写入，turns2/failed0/requests0/任务仍active。17条件true/11530ms/首次退出0，1次data Yoga内嵌WASM装载/0外部fetch或模型HTTP付费旧任务重跑；非LocalAgentExecutor/LLM质量或原生终端视觉验收。不保证进入Plan取消此前已活动任务或其他内部通信入口，接续检查排队成员/实际入口动态模式。个人文件/四真实失败精确SHA与false/临时凭据删除/全局83均保全true，三份同SHA交接，goal active，不打包重装升版三平台CI子代理。详见docs/ultra-swarm-plan-message-handoff.md。
+
+
+## 2026-11-15 排队原生协作成员的Plan启动复核
+
+WI-240/E-535至536/F-198：Manage/Run入口只初查Plan，已接纳成员等待writer或session slot后，AgentTool原仅复查取消/红队grant而继续启动；现assertAgentAuthorization可接当前ApprovalMode，AgentTool本地确认/execute入口/获得名额后三处传最新模式，仅PLAN原生swarmRoleSchema四角色在onStart/child前拒绝，不自动改模式或重排。Plan代码调查/CLI帮助和自定义策略路径保留；未取消已活动成员。新6 baseline3真实行为失败/3正常过，修后6+红队5+AgentTool9=20相关通过，core编译/三TS零warninglint/纯格式后三文件check/diff0，无CLI重编全量冒烟。Windows实际Config/registry/AgentTool/队列、legacy-session child受控收件marker：排队后切Plan两语言拒绝无child/start/写入、预算字节保持，显式DEFAULT重试分别正常到两child证明slot释放；四角色确认执行拒绝、两Plan帮助仍可用、取消保持原对象。14条件true/7651ms/首次退出0/4受控child/0fetch模型HTTP外部付费旧任务重跑；非LocalAgentExecutor/LLM质量或完整模式切换保证。个人文件/四真实失败精确SHA与false/临时凭据删除/全局83均保全true，三份同SHA交接、goal active，不打包重装升版三平台CI子代理。详见docs/ultra-agent-plan-admission-handoff.md。
