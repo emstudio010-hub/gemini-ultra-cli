@@ -36,6 +36,7 @@ describe('ConsecaSafetyChecker', () => {
     checker = ConsecaSafetyChecker.getInstance();
 
     mockConfig = {
+      getLifecycleSignal: () => new AbortController().signal,
       get config() {
         return this;
       },
@@ -75,6 +76,7 @@ describe('ConsecaSafetyChecker', () => {
 
   it('should return ALLOW if enableConseca is false', async () => {
     const disabledConfig = {
+      getLifecycleSignal: () => new AbortController().signal,
       get config() {
         return this;
       },

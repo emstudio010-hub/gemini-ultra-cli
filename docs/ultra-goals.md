@@ -9,7 +9,7 @@
 
 持续 goal 保持 active，沿用现有成果，不重开项目。
 
-1. **启动与加载稳定**：继续收敛无限等待、取消、关闭后的迟到结果；主聊天、委派、直接执行器、BaseLlmClient 及直接生成器已有 Windows 定向证据，下一项是上层辅助函数的取消传播与截图准备等待。最终包的启动收益仍待收敛后测量。
+1. **启动与加载稳定**：继续收敛无限等待、取消、关闭后的迟到结果；主聊天、委派、直接执行器、BaseLlmClient、直接生成器及媒体/截图/策略辅助函数已有 Windows 定向证据。下一项检查多个 Config 的策略上下文归属，随后继续启动与协作收敛；最终包的启动收益仍待收敛后测量。
 2. **双语与日常配置**：保持 `/language` 中文/英文、六档推理唯一选项及即时切换；完善模型选择与保存，按新增缺陷修复，不重复已通过场景。
 3. **真实多 Agent 协作**：继续维护 Teamwork、Boost、Grill me 和 Swarm 的预算、排队、成果保全、错误恢复及独立审核。四份真实失败保留；本地受控链通过不等同于真实复杂任务质量通过，不自动付费重跑。
 4. **演练台交互**：保持 `/演练台`、Morphicons 图标、六档动效和减少动态效果支持，继续修复任务提交、配置与会话状态衔接。
@@ -1952,3 +1952,8 @@ WI-249/E-553至554/F-207：BaseLlmClient四入口原无Config生命周期，现�
 ## 2026-11-15 直接生成器生命周期与流回收
 
 WI-250/E-555至556/F-208：Universal四入口原绕过Config关闭，count取消还可变估算成功。现withLifecycle合并caller/Config、路由预算前查且不改原request；生成/embed/count可取消等待，count普通失败估算保持。stream factory/next阻断迟到结果，已打开未读也随abort回收，早退/throw转发、正常done移除监听，回收去重/取消不等不合作return，不改路由/预算/重试。新8 baseline7行为失败/正常1过；首修46中43过/3旧mock漏接口失败保留，仅补mock后3定向通过/20未选，合计46不同。首tsc流对象this联合类型显式标AsyncGenerator后最终core编译0；首lint新switch default补齐，五TS最终零warning/格式diff0，无CLI重编全量冒烟。Windows真实Config直接generator/Universal Chat HTTP-SSE及Google SDK生成/流/count/embed：首夹具共用workspace未完成Boost阻止第二create，退出1原日志保留；每Config隔离workspace后六场景15至36ms先于server释放取消并socketclose/closed零HTTP且Boost预算保持/独立caller原reason及六正常控制通过。33条件true/10828ms/纠正夹具后首次退出0/13loopback/0外部真实模型付费自动重试旧任务重跑，provider保持。个人文件/四旧失败SHA与false/ULQ凭据删除/全局83保全true，三份同SHA、goal active，不打包重装升版CI子代理。上层Conseca/tokenCalculation仍可吞取消、截图capture仍待；非完整helper关闭或真实质量/最终三平台验收。详见docs/ultra-generator-lifecycle-handoff.md。
+
+
+## 2026-11-15 上层辅助函数取消传播与截图准备
+
+WI-251/E-557至558/F-209：媒体计数/策略/截图catch原吞取消，capture漏signal且closed策略缓存可命中。count新增兼容可选signal并entry/catch查、withAbortSignal等API，AbortError保原对象；主聊天/压缩传现有signal，普通失败估算不变。截图合并Config/caller，捕获与模型可取消、callTool传signal，取消不变普通fallback；Conseca生成执行接Config信号，checker入口/cache前后查，不改普通回退/路由预算重试。新9 baseline全行为失败，修后新9+媒体旧10/截图8/策略3+5/checker10共45过/6未选，core编译/12TS零warninglint/格式diff首次0，无全量冒烟CLI重编。Windows真实Config/helpers/Conseca缓存/Universal Chat与SDK计数及主聊天媒体准备：策略/视觉/无自有signal计数关闭15至31ms先于server释放拒绝并socketclose、不写迟到cache；capture受控收件caller/Config取消后迟到图片零模型请求；主聊天native计数caller取消仅UserCancelled无Finished/后续生成；四正常控制及closed缓存拒绝通过。29条件true/10146ms/首次退出0/10loopback/0外部实际模型付费重试旧任务重跑/provider保持。个人文件/四旧失败SHA与false/ULQ凭据删除/全局83保全true，三份同SHA、goal active，不打包重装升版CI子代理。受控capture非真实浏览器MCP，未承诺全部底层抢占/压缩语义；CheckerRunner原异常转DENY保持。下一查Conseca多Config上下文/cache归属，继续启动协作收敛。详见docs/ultra-helper-cancellation-handoff.md。

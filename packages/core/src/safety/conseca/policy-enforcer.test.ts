@@ -23,6 +23,7 @@ describe('policy_enforcer', () => {
     } as unknown as ContentGenerator;
 
     mockConfig = {
+      getLifecycleSignal: () => new AbortController().signal,
       getContentGenerator: vi.fn().mockReturnValue(mockContentGenerator),
     } as unknown as Config;
   });

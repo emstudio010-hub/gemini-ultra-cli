@@ -68,6 +68,7 @@ export class ConsecaSafetyChecker implements InProcessChecker {
       };
     }
 
+    this.context.config.getLifecycleSignal().throwIfAborted();
     if (!this.context.config.enableConseca) {
       debugLogger.debug('[Conseca] check skipped: Conseca is not enabled.');
       return {
@@ -129,6 +130,7 @@ export class ConsecaSafetyChecker implements InProcessChecker {
     trustedContent: string,
     config: Config,
   ): Promise<SecurityPolicy> {
+    config.getLifecycleSignal().throwIfAborted();
     if (this.activeUserPrompt === userPrompt && this.currentPolicy) {
       return this.currentPolicy;
     }
@@ -138,6 +140,7 @@ export class ConsecaSafetyChecker implements InProcessChecker {
       trustedContent,
       config,
     );
+    config.getLifecycleSignal().throwIfAborted();
     this.currentPolicy = policy;
     this.activeUserPrompt = userPrompt;
 

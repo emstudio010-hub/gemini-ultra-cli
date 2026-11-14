@@ -15,6 +15,8 @@ import { DEFAULT_GEMINI_FLASH_MODEL } from '../../config/models.js';
 import { debugLogger } from '../../utils/debugLogger.js';
 
 import { LlmRole } from '../../telemetry/index.js';
+import { withAbortSignal } from '../../utils/withAbortSignal.js';
+import { isAbortError } from '../../utils/errors.js';
 
 const CONSECA_ENFORCEMENT_PROMPT = `
 You are a security enforcement engine. Your goal is to check if a specific tool call complies with a given security policy.
@@ -55,6 +57,8 @@ export async function enforcePolicy(
   toolCall: FunctionCall,
   config: Config,
 ): Promise<SafetyCheckResult> {
+  const signal = config.getLifecycleSignal();
+  signal.throwIfAborted();
   const model = DEFAULT_GEMINI_FLASH_MODEL;
   const contentGenerator = config.getContentGenerator();
 
@@ -86,31 +90,34 @@ export async function enforcePolicy(
   );
 
   try {
-    const result = await contentGenerator.generateContent(
-      {
-        model,
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: zodToJsonSchema(EnforcementResultSchema, {
-            target: 'openApi3',
-          }),
-        },
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              {
-                text: safeTemplateReplace(CONSECA_ENFORCEMENT_PROMPT, {
-                  policy: toolPolicyStr,
-                  tool_call: toolCallStr,
-                }),
-              },
-            ],
+    const result = await withAbortSignal(signal, () =>
+      contentGenerator.generateContent(
+        {
+          model,
+          config: {
+            abortSignal: signal,
+            responseMimeType: 'application/json',
+            responseSchema: zodToJsonSchema(EnforcementResultSchema, {
+              target: 'openApi3',
+            }),
           },
-        ],
-      },
-      'conseca-policy-enforcement',
-      LlmRole.SUBAGENT,
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                {
+                  text: safeTemplateReplace(CONSECA_ENFORCEMENT_PROMPT, {
+                    policy: toolPolicyStr,
+                    tool_call: toolCallStr,
+                  }),
+                },
+              ],
+            },
+          ],
+        },
+        'conseca-policy-enforcement',
+        LlmRole.SUBAGENT,
+      ),
     );
 
     const responseText = getResponseText(result);
@@ -154,6 +161,8 @@ export async function enforcePolicy(
       };
     }
   } catch (error) {
+    signal.throwIfAborted();
+    if (isAbortError(error)) throw error;
     debugLogger.error('Policy enforcement failed:', error);
     return {
       decision: SafetyCheckDecision.ALLOW,

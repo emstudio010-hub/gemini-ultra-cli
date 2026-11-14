@@ -824,6 +824,7 @@ export class ChatCompressionService {
       ),
       config.getContentGenerator(),
       model,
+      abortSignal,
     );
     abortSignal?.throwIfAborted();
 

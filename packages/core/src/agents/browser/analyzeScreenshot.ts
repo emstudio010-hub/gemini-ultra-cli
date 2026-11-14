@@ -35,6 +35,8 @@ import {
 } from './modelAvailability.js';
 import { debugLogger } from '../../utils/debugLogger.js';
 import { LlmRole } from '../../telemetry/llmRole.js';
+import { withAbortSignal } from '../../utils/withAbortSignal.js';
+import { isAbortError } from '../../utils/errors.js';
 
 /**
  * System prompt for the visual analysis model call.
@@ -82,15 +84,16 @@ class AnalyzeScreenshotInvocation extends BaseToolInvocation<
   }
 
   async execute({ abortSignal: signal }: ExecuteOptions): Promise<ToolResult> {
+    signal = AbortSignal.any([signal, this.config.getLifecycleSignal()]);
+    signal.throwIfAborted();
     try {
       const instruction = String(this.params['instruction'] ?? '');
 
       debugLogger.log(`Visual analysis requested: ${instruction}`);
 
       // Capture screenshot via MCP tool
-      const screenshotResult = await this.browserManager.callTool(
-        'take_screenshot',
-        {},
+      const screenshotResult = await withAbortSignal(signal, () =>
+        this.browserManager.callTool('take_screenshot', {}, signal),
       );
 
       // Extract base64 image data from MCP response.
@@ -142,35 +145,37 @@ class AnalyzeScreenshotInvocation extends BaseToolInvocation<
           ]
         : undefined;
 
-      const response = await contentGenerator.generateContent(
-        {
-          model: visualModel,
-          config: {
-            temperature: 0,
-            topP: 0.95,
-            systemInstruction: VISUAL_SYSTEM_PROMPT,
-            abortSignal: signal,
-            ...(tools ? { tools } : {}),
-          },
-          contents: [
-            {
-              role: 'user',
-              parts: [
-                {
-                  text: `Analyze this screenshot and respond to the following instruction:\n\n${instruction}`,
-                },
-                {
-                  inlineData: {
-                    mimeType,
-                    data: screenshotBase64,
-                  },
-                },
-              ],
+      const response = await withAbortSignal(signal, () =>
+        contentGenerator.generateContent(
+          {
+            model: visualModel,
+            config: {
+              temperature: 0,
+              topP: 0.95,
+              systemInstruction: VISUAL_SYSTEM_PROMPT,
+              abortSignal: signal,
+              ...(tools ? { tools } : {}),
             },
-          ],
-        },
-        'visual-analysis',
-        LlmRole.UTILITY_TOOL,
+            contents: [
+              {
+                role: 'user',
+                parts: [
+                  {
+                    text: `Analyze this screenshot and respond to the following instruction:\n\n${instruction}`,
+                  },
+                  {
+                    inlineData: {
+                      mimeType,
+                      data: screenshotBase64,
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+          'visual-analysis',
+          LlmRole.UTILITY_TOOL,
+        ),
       );
 
       // Extract response content. Computer-use models may still return
@@ -206,6 +211,8 @@ class AnalyzeScreenshotInvocation extends BaseToolInvocation<
         returnDisplay: `Visual Analysis Result:\n${responseText}`,
       };
     } catch (error) {
+      signal.throwIfAborted();
+      if (isAbortError(error)) throw error;
       const errorMsg = error instanceof Error ? error.message : String(error);
       debugLogger.error(`Visual analysis failed: ${errorMsg}`);
 

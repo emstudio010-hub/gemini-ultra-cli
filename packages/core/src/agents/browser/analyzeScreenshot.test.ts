@@ -58,6 +58,7 @@ function createMockConfig(
       );
 
   return {
+    getLifecycleSignal: () => new AbortController().signal,
     getBrowserAgentConfig: vi.fn().mockReturnValue({
       customConfig: { visualModel: modelName },
     }),
@@ -107,6 +108,7 @@ describe('analyzeScreenshot', () => {
       expect(browserManager.callTool).toHaveBeenCalledWith(
         'take_screenshot',
         {},
+        expect.any(AbortSignal),
       );
 
       // Verify the visual model was called

@@ -13,6 +13,8 @@ import { debugLogger } from '../../utils/debugLogger.js';
 import { SafetyCheckDecision } from '../protocol.js';
 
 import { LlmRole } from '../../telemetry/index.js';
+import { withAbortSignal } from '../../utils/withAbortSignal.js';
+import { isAbortError } from '../../utils/errors.js';
 
 const CONSECA_POLICY_GENERATION_PROMPT = `
 You are a security expert responsible for generating fine-grained security policies for a large language model integrated into a command-line tool. Your role is to act as a "policy generator" that creates temporary, context-specific rules based on a user's prompt and the tools available to the main LLM.
@@ -102,6 +104,8 @@ export async function generatePolicy(
   trustedContent: string,
   config: Config,
 ): Promise<PolicyGenerationResult> {
+  const signal = config.getLifecycleSignal();
+  signal.throwIfAborted();
   const model = DEFAULT_GEMINI_FLASH_MODEL;
   const contentGenerator = config.getContentGenerator();
 
@@ -110,31 +114,34 @@ export async function generatePolicy(
   }
 
   try {
-    const result = await contentGenerator.generateContent(
-      {
-        model,
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: zodToJsonSchema(SecurityPolicyResponseSchema, {
-            target: 'openApi3',
-          }),
-        },
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              {
-                text: safeTemplateReplace(CONSECA_POLICY_GENERATION_PROMPT, {
-                  user_prompt: userPrompt,
-                  trusted_content: trustedContent,
-                }),
-              },
-            ],
+    const result = await withAbortSignal(signal, () =>
+      contentGenerator.generateContent(
+        {
+          model,
+          config: {
+            abortSignal: signal,
+            responseMimeType: 'application/json',
+            responseSchema: zodToJsonSchema(SecurityPolicyResponseSchema, {
+              target: 'openApi3',
+            }),
           },
-        ],
-      },
-      'conseca-policy-generation',
-      LlmRole.SUBAGENT,
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                {
+                  text: safeTemplateReplace(CONSECA_POLICY_GENERATION_PROMPT, {
+                    user_prompt: userPrompt,
+                    trusted_content: trustedContent,
+                  }),
+                },
+              ],
+            },
+          ],
+        },
+        'conseca-policy-generation',
+        LlmRole.SUBAGENT,
+      ),
     );
 
     const responseText = getResponseText(result);
@@ -169,6 +176,8 @@ export async function generatePolicy(
       };
     }
   } catch (error) {
+    signal.throwIfAborted();
+    if (isAbortError(error)) throw error;
     debugLogger.error('Policy generation failed:', error);
     return {
       policy: {},

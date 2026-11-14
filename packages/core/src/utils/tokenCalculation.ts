@@ -7,6 +7,8 @@
 import type { PartListUnion, Part } from '@google/genai';
 import type { ContentGenerator } from '../core/contentGenerator.js';
 import { debugLogger } from './debugLogger.js';
+import { isAbortError } from './errors.js';
+import { withAbortSignal } from './withAbortSignal.js';
 
 // Token estimation constants
 // ASCII characters (0-127) are roughly 3-4 chars per token.
@@ -155,7 +157,9 @@ export async function calculateRequestTokenCount(
   request: PartListUnion,
   contentGenerator: ContentGenerator,
   model: string,
+  abortSignal?: AbortSignal,
 ): Promise<number> {
+  abortSignal?.throwIfAborted();
   const parts: Part[] = Array.isArray(request)
     ? request.map((p) => (typeof p === 'string' ? { text: p } : p))
     : typeof request === 'string'
@@ -170,12 +174,17 @@ export async function calculateRequestTokenCount(
 
   if (hasMedia) {
     try {
-      const response = await contentGenerator.countTokens({
-        model,
-        contents: [{ role: 'user', parts }],
-      });
+      const response = await withAbortSignal(abortSignal, () =>
+        contentGenerator.countTokens({
+          model,
+          contents: [{ role: 'user', parts }],
+          ...(abortSignal ? { config: { abortSignal } } : {}),
+        }),
+      );
       return response.totalTokens ?? 0;
     } catch (error) {
+      abortSignal?.throwIfAborted();
+      if (isAbortError(error)) throw error;
       // Fallback to local estimation if the API call fails
       debugLogger.debug('countTokens API failed:', error);
       return estimateTokenCountSync(parts, 0, DEFAULT_CHARS_PER_TOKEN);

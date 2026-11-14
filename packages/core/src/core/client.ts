@@ -769,6 +769,7 @@ export class GeminiClient {
       request,
       this.getContentGeneratorOrFail(),
       modelForLimitCheck,
+      signal,
     );
 
     if (estimatedRequestTokenCount > remainingTokenCount) {
