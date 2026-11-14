@@ -154,6 +154,8 @@ it('passes literal JVM arguments, keeps immutable input and full hashed artifact
     ghidraVersion: '12.1.4',
   });
   expect(result.code).toHaveLength(1000);
+  expect(result.decompiledSignature).toBeUndefined();
+  expect(result.signatureProvenance.decompiledSignature).toBe('not-provided');
   expect(await fs.readFile(result.codeArtifact, 'utf8')).toBe(report.code);
   expect(await fs.readFile(sample, 'utf8')).toBe('immutable sample');
   expect(await fs.readFile(result.logArtifact, 'utf8')).toContain(
@@ -163,6 +165,29 @@ it('passes literal JVM arguments, keeps immutable input and full hashed artifact
   const args = execute.mock.calls[0][1] as string[];
   expect(args.at(-1)).toBe('401000');
   expect(args).toContain('ghidra.app.util.headless.AnalyzeHeadless');
+});
+it('retains distinct database and decompiler signatures in the result and saved report', async () => {
+  const signature = 'undefined verify_key(void)';
+  const decompiledSignature = 'uint verify_key(char * param_1, uint param_2);';
+  launch({ ...report, signature, decompiledSignature });
+  const result = await decompileBinary(
+    { filePath: sample },
+    root,
+    root,
+    new AbortController().signal,
+  );
+  expect(result).toMatchObject({
+    signature,
+    decompiledSignature,
+    signatureProvenance: {
+      signature: 'ghidra-program-database',
+      decompiledSignature: 'ghidra-decompiler-inference',
+    },
+  });
+  const saved = JSON.parse(await fs.readFile(result.reportArtifact, 'utf8'));
+  expect(saved.signature).toBe(signature);
+  expect(saved.decompiledSignature).toBe(decompiledSignature);
+  expect(saved.signatureProvenance).toEqual(result.signatureProvenance);
 });
 it('rejects expressions and workspace-denied samples before starting any parser', async () => {
   await expect(

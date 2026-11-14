@@ -55,6 +55,8 @@ public class UltraDecompile extends HeadlessScript {
       report.put("language", currentProgram.getLanguageID().toString());
       report.put("compiler", currentProgram.getCompilerSpec().getCompilerSpecID().toString());
       report.put("signature", function.getSignature().toString());
+      String inferredSignature = result.getDecompiledFunction().getSignature();
+      if (inferredSignature != null && !inferredSignature.isBlank()) report.put("decompiledSignature", inferredSignature);
       report.put("selection", selection);
       report.put("code", code);
       report.put("diagnostics", result.getErrorMessage());

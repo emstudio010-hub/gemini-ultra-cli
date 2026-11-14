@@ -47,6 +47,7 @@ const reportSchema = z.object({
   language: z.string().min(1),
   compiler: z.string(),
   signature: z.string(),
+  decompiledSignature: z.string().min(1).optional(),
   selection: z.enum(['requested-address', 'first-entrypoint-or-function']),
   code: z.string().min(1).max(1048576),
   diagnostics: z.string().nullable(),
@@ -210,6 +211,13 @@ export async function decompileBinary(
     const fullCode = report.code;
     const result = {
       ...report,
+      signatureProvenance: {
+        signature: 'ghidra-program-database',
+        decompiledSignature: report.decompiledSignature
+          ? 'ghidra-decompiler-inference'
+          : 'not-provided',
+        note: 'signature describes the program database; decompiledSignature describes the returned pseudocode and may differ. Quote each exact field separately. Neither proves the original source prototype or ABI; compare disassembly.',
+      },
       code: fullCode.slice(0, input.maxChars),
       truncated: fullCode.length > input.maxChars,
       originalChars: fullCode.length,
@@ -312,7 +320,7 @@ export class BinaryDecompileTool extends BaseDeclarativeTool<
     super(
       BinaryDecompileTool.Name,
       'Static Function Decompilation',
-      'Decompile one local function with installed Ghidra and a compatible JDK. The sample is copied, never executed or modified. Inspect binary metadata/functions first; address is a hexadecimal virtual address, not a file offset or expression. Without address selects an entrypoint/first function. Saves full C-like pseudocode, report, hashes and log in project artifacts; maxChars only limits the returned preview. Bounded to 120 seconds, 1 GiB heap and 64 MiB samples. Configure GEMINI_ULTRA_GHIDRA_HOME (installation root) and JAVA_HOME or GEMINI_ULTRA_TOOL_JAVA. Pseudocode is not original source or proof of runtime behavior.',
+      'Decompile one local function with installed Ghidra and a compatible JDK. The sample is copied, never executed or modified. Inspect binary metadata/functions first; address is a hexadecimal virtual address, not a file offset or expression. Without address selects an entrypoint/first function. Saves full C-like pseudocode, report, hashes and log in project artifacts; maxChars only limits the returned preview. signature is the program-database prototype; decompiledSignature is the pseudocode inference. They may differ: cite each exact field and compare disassembly. Bounded to 120 seconds, 1 GiB heap and 64 MiB samples. Configure GEMINI_ULTRA_GHIDRA_HOME (installation root) and JAVA_HOME or GEMINI_ULTRA_TOOL_JAVA. Pseudocode is not original source or proof of runtime behavior.',
       Kind.Read,
       {
         type: 'object',
