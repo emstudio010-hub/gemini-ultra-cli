@@ -28,6 +28,113 @@ afterEach(() => {
   fs.rmSync(root, { recursive: true, force: true });
 });
 
+it.each(['parameter', 'models'] as const)(
+  'keeps a selected non-default model when saving %s',
+  async (operation) => {
+    const manager = ProviderManager.getInstance();
+    const provider = manager.upsertProvider({
+      name: 'Fixture',
+      baseUrl: 'https://fixture.invalid/v1',
+      apiKey: 'FAKE_ONLY',
+      models: ['default-model', 'selected-model'],
+      defaultModel: 'default-model',
+    });
+    manager.setActiveSelection(provider.id, 'selected-model');
+    manager.upsertProvider({
+      ...manager.getProviderById(provider.id)!,
+      defaultModel: 'default-model',
+      setActive: false,
+    });
+    const onClose = vi.fn();
+    const view = await renderWithProviders(
+      <ProviderConfigDialog onClose={onClose} />,
+    );
+    const key = async (sequence: string) =>
+      act(async () => {
+        view.stdin.write(sequence);
+        await view.waitUntilReady();
+      });
+    try {
+      for (let index = 0; index < (operation === 'parameter' ? 8 : 2); index++)
+        await key('\u001b[B');
+      await key('\r');
+      if (operation === 'parameter') await key('2048');
+      await key('\r');
+      await waitFor(() =>
+        expect(view.lastFrame()).toContain(
+          operation === 'parameter' ? 'Output limit updated' : 'Models saved',
+        ),
+      );
+      expect(manager.getActiveModel()).toBe('selected-model');
+      expect(manager.getProviderById(provider.id)?.defaultModel).toBe(
+        'default-model',
+      );
+      await key('\u001b');
+      await waitFor(() => expect(onClose).toHaveBeenCalledWith(false));
+    } finally {
+      view.unmount();
+    }
+  },
+);
+
+it('rejects a stale parameter save without losing input, then reloads the current profile on return', async () => {
+  const manager = ProviderManager.getInstance();
+  const provider = manager.upsertProvider({
+    name: 'Fixture',
+    baseUrl: 'https://fixture.invalid/v1',
+    apiKey: 'FAKE_ORIGINAL',
+    models: ['old-model'],
+  });
+  const view = await renderWithProviders(
+    <ProviderConfigDialog onClose={vi.fn()} />,
+  );
+  const key = async (sequence: string) =>
+    act(async () => {
+      view.stdin.write(sequence);
+      await view.waitUntilReady();
+    });
+  try {
+    for (let index = 0; index < 8; index++) await key('\u001b[B');
+    await key('\r');
+    await key('2048');
+    manager.upsertProvider({
+      ...provider,
+      apiKey: 'FAKE_UPDATED',
+      models: ['new-default', 'new-selected'],
+      defaultModel: 'new-default',
+      maxOutputTokens: 512,
+      contextWindow: 16384,
+      setActive: false,
+    });
+    manager.setActiveSelection(provider.id, 'new-selected');
+    const updated = manager.getProviderById(provider.id)!;
+    const before = fs.readFileSync(path.join(root, 'providers.json'));
+    await key('\r');
+    await waitFor(() =>
+      expect(view.lastFrame()).toContain('changed in another view'),
+    );
+    expect(view.lastFrame()).toContain('2048');
+    expect(fs.readFileSync(path.join(root, 'providers.json'))).toEqual(before);
+    await key('\u001b');
+    await key('\r');
+    await waitFor(() => expect(view.lastFrame()).toContain('512'));
+    for (let index = 0; index < 3; index++) await key('\u007f');
+    await key('1024');
+    await key('\r');
+    await waitFor(() =>
+      expect(view.lastFrame()).toContain('Output limit updated'),
+    );
+    expect(manager.getProviderById(provider.id)).toMatchObject({
+      ...updated,
+      maxOutputTokens: 1024,
+      updatedAt: expect.any(String),
+    });
+    expect(manager.getActiveModel()).toBe('new-selected');
+  } finally {
+    view.unmount();
+  }
+});
+
 it.each(['en', 'zh'] as const)(
   'edits another configuration target without activating it in %s',
   async (locale) => {

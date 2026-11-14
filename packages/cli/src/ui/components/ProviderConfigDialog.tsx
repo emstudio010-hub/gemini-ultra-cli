@@ -136,6 +136,34 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
   const catalogRequest = useRef<AbortController | undefined>(undefined);
   useEffect(() => () => catalogRequest.current?.abort(), []);
 
+  const requireCurrentProvider = (snapshot?: ExternalProviderProfile) => {
+    const current = snapshot && mgr.getProviderById(snapshot.id);
+    if (!current)
+      throw new Error(
+        t(
+          '供应商已不存在，请返回并重新选择。',
+          'Provider no longer exists. Return and select a provider again.',
+        ),
+      );
+    if (JSON.stringify(current) !== JSON.stringify(snapshot))
+      throw new Error(
+        t(
+          '此供应商已在其他界面更新。当前输入保留，请按 Esc 返回主菜单后重新选择。',
+          'This provider changed in another view. Input retained; press Esc to return and select it again.',
+        ),
+      );
+    return current;
+  };
+  const updateProvider = (
+    snapshot: ExternalProviderProfile | undefined,
+    changes: Partial<Parameters<typeof mgr.upsertProvider>[0]>,
+  ) =>
+    mgr.upsertProvider({
+      ...requireCurrentProvider(snapshot),
+      ...changes,
+      setActive: false,
+    });
+
   const mainMenuItems = [
     {
       id: 'switch-active',
@@ -307,6 +335,8 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
             closeDialog();
             return true;
           }
+          mgr.reloadFromDisk();
+          setProviders(mgr.listProviders());
           setPage('main-menu');
           return true;
         }
@@ -432,7 +462,8 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
           if (isEnter(key)) {
             const prov = providers[listCursor];
             if (prov) {
-              mgr.setActiveSelection(prov.id, prov.defaultModel);
+              const current = requireCurrentProvider(prov);
+              mgr.setActiveSelection(current.id, current.defaultModel);
               explicitlyActivated.current = true;
               setFocusedProviderId(prov.id);
               setStatusMessage(
@@ -464,18 +495,14 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
             } else if (formField === 'url') {
               if (formUrl.trim()) setFormField('key');
             } else {
-              if (editingProviderId && focusedProvider) {
-                mgr.upsertProvider({
-                  id: editingProviderId,
-                  name: formName.trim() || focusedProvider.name,
-                  baseUrl: formUrl.trim() || focusedProvider.baseUrl,
-                  apiKey: formKey.trim() || focusedProvider.apiKey,
-                  protocol: focusedProvider.protocol,
-                  models: focusedProvider.models,
-                  defaultModel: focusedProvider.defaultModel,
-                  imageModels: focusedProvider.imageModels,
-                  defaultImageModel: focusedProvider.defaultImageModel,
-                  setActive: activeProvider?.id === focusedProvider.id,
+              if (editingProviderId) {
+                const snapshot = requireCurrentProvider(
+                  providers.find((p) => p.id === editingProviderId),
+                );
+                updateProvider(snapshot, {
+                  name: formName.trim() || snapshot.name,
+                  baseUrl: formUrl.trim() || snapshot.baseUrl,
+                  apiKey: formKey.trim() || snapshot.apiKey,
                 });
                 setProviders(mgr.listProviders());
                 setStatusMessage(
@@ -527,19 +554,13 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
           }
           if (isEnter(key)) {
             const chosen = PROTOCOLS[protocolCursor].id;
-            if (editingProviderId && focusedProvider) {
-              mgr.upsertProvider({
-                id: editingProviderId,
-                name: focusedProvider.name,
-                baseUrl: focusedProvider.baseUrl,
-                apiKey: focusedProvider.apiKey,
-                protocol: chosen,
-                models: focusedProvider.models,
-                defaultModel: focusedProvider.defaultModel,
-                imageModels: focusedProvider.imageModels,
-                defaultImageModel: focusedProvider.defaultImageModel,
-                setActive: activeProvider?.id === focusedProvider.id,
-              });
+            if (editingProviderId) {
+              updateProvider(
+                providers.find((p) => p.id === editingProviderId),
+                {
+                  protocol: chosen,
+                },
+              );
               setProviders(mgr.listProviders());
               setStatusMessage(
                 t(
@@ -570,7 +591,9 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
             if (!catalogRequest.current?.signal.aborted && isFetching)
               return true;
             const provider = editingProviderId
-              ? mgr.getProviderById(editingProviderId)
+              ? requireCurrentProvider(
+                  providers.find((p) => p.id === editingProviderId),
+                )
               : undefined;
             if (editingProviderId && !provider)
               throw new Error(
@@ -644,7 +667,9 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
             catalogRequest.current?.abort();
             setIsFetching(false);
             const targetProv = editingProviderId
-              ? mgr.getProviderById(editingProviderId)
+              ? requireCurrentProvider(
+                  providers.find((p) => p.id === editingProviderId),
+                )
               : undefined;
             if (editingProviderId && !targetProv)
               throw new Error(
@@ -655,21 +680,13 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
               );
 
             if (targetProv) {
-              mgr.upsertProvider({
-                id: targetProv.id,
-                name: targetProv.name,
-                baseUrl: targetProv.baseUrl,
-                apiKey: targetProv.apiKey,
-                protocol: targetProv.protocol,
+              updateProvider(targetProv, {
                 models: cleanModels,
                 defaultModel:
                   targetProv.defaultModel &&
                   cleanModels.includes(targetProv.defaultModel)
                     ? targetProv.defaultModel
                     : cleanModels[0],
-                imageModels: targetProv.imageModels,
-                defaultImageModel: targetProv.defaultImageModel,
-                setActive: activeProvider?.id === targetProv.id,
               });
               setProviders(mgr.listProviders());
               setStatusMessage(
@@ -724,10 +741,8 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
             return true;
           }
           if (isEnter(key) && focusedProvider) {
-            mgr.upsertProvider({
-              ...focusedProvider,
+            updateProvider(focusedProvider, {
               reasoningReplay: REASONING_REPLAY_MODES[reasoningReplayCursor],
-              setActive: activeProvider?.id === focusedProvider.id,
             });
             setProviders(mgr.listProviders());
             setStatusMessage(
@@ -761,12 +776,10 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
               return true;
             }
             if (focusedProvider) {
-              mgr.upsertProvider({
-                ...focusedProvider,
+              updateProvider(focusedProvider, {
                 ...(page === 'edit-context-window'
                   ? { contextWindow: limit }
                   : { maxOutputTokens: limit }),
-                setActive: activeProvider?.id === focusedProvider.id,
               });
               setProviders(mgr.listProviders());
               setStatusMessage(
@@ -803,19 +816,11 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
         if (page === 'edit-image-model') {
           if (isEnter(key)) {
             if (focusedProvider) {
-              mgr.upsertProvider({
-                id: focusedProvider.id,
-                name: focusedProvider.name,
-                baseUrl: focusedProvider.baseUrl,
-                apiKey: focusedProvider.apiKey,
-                protocol: focusedProvider.protocol,
-                models: focusedProvider.models,
-                defaultModel: focusedProvider.defaultModel,
+              updateProvider(focusedProvider, {
                 imageModels: imageModelInput.trim()
                   ? [imageModelInput.trim()]
                   : [],
                 defaultImageModel: imageModelInput.trim() || undefined,
-                setActive: activeProvider?.id === focusedProvider.id,
               });
               setProviders(mgr.listProviders());
               setStatusMessage(
@@ -846,6 +851,7 @@ export const ProviderConfigDialog: React.FC<ProviderConfigDialogProps> = ({
         if (page === 'confirm-delete') {
           if (isEnter(key)) {
             if (focusedProvider) {
+              requireCurrentProvider(focusedProvider);
               if (!mgr.removeProviderById(focusedProvider.id))
                 throw new Error(
                   t(
