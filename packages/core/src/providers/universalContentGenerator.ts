@@ -51,7 +51,6 @@ import {
   responsesSchema,
   anthropicSchema,
   geminiSchema,
-  parseProviderValue,
   parseProviderJson,
   providerContents,
   type ChatMessage,
@@ -622,6 +621,71 @@ export class UniversalContentGenerator implements ContentGenerator {
     }
   }
 
+  private async readProviderBody(
+    response: Response,
+    request: GenerateContentParameters,
+    controller: AbortController,
+    completeWithinTimeout = false,
+  ): Promise<string> {
+    const signal = this.streamSignal(request, controller);
+    if (!response.body) {
+      signal.throwIfAborted();
+      return '';
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    const timeoutMs = this.streamIdleMs();
+    const deadline = completeWithinTimeout ? Date.now() + timeoutMs : undefined;
+    const timeout = new Error(
+      I18nManager.getInstance().t(
+        `供应商响应正文在 ${timeoutMs} 毫秒内未${completeWithinTimeout ? '完成' : '继续传输'}；已停止等待。`,
+        `Provider response body ${completeWithinTimeout ? 'did not finish within' : 'was idle for'} ${timeoutMs} ms; waiting was stopped.`,
+      ),
+    );
+    let text = '';
+    try {
+      while (true) {
+        const remaining =
+          deadline === undefined ? timeoutMs : deadline - Date.now();
+        if (remaining <= 0) controller.abort(timeout);
+        signal.throwIfAborted();
+        const timer = setTimeout(() => controller.abort(timeout), remaining);
+        const chunk = await withAbortSignal(signal, () =>
+          reader.read(),
+        ).finally(() => clearTimeout(timer));
+        if (chunk.done) return text + decoder.decode();
+        text += decoder.decode(chunk.value, { stream: true });
+      }
+    } finally {
+      controller.abort();
+      void reader.cancel().catch(() => {});
+      reader.releaseLock();
+    }
+  }
+
+  private async providerHttpError(
+    response: Response,
+    label: string,
+    request: GenerateContentParameters,
+    controller: AbortController,
+  ): Promise<HttpError> {
+    let detail: string;
+    try {
+      detail = await this.readProviderBody(response, request, controller, true);
+    } catch {
+      // Explicit cancellation must not turn into a retryable HTTP failure.
+      request.config?.abortSignal?.throwIfAborted();
+      detail = I18nManager.getInstance().t(
+        '错误响应正文不可读取或已超时；未显示不完整正文。',
+        'Error response body was unavailable or timed out; incomplete contents are omitted.',
+      );
+    }
+    return this.httpError(
+      `${label} HTTP ${response.status}: ${detail}`,
+      response.status,
+    );
+  }
+
   private chatOutputLimit(
     request: GenerateContentParameters,
   ): Record<string, number> {
@@ -660,23 +724,32 @@ export class UniversalContentGenerator implements ContentGenerator {
       ...(provider.customHeaders || {}),
     };
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(payload),
-      signal: request.config?.abortSignal,
-    });
+    const abortController = new AbortController();
+    const res = await this.fetchStreamHeaders(
+      url,
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      },
+      request,
+      abortController,
+    );
 
     if (!res.ok) {
-      const errText = await res.text();
-      throw this.httpError(
-        `OpenAI Provider [${provider.name}] HTTP ${res.status}: ${errText}`,
-        res.status,
+      throw await this.providerHttpError(
+        res,
+        `OpenAI Provider [${provider.name}]`,
+        request,
+        abortController,
       );
     }
 
-    const raw: unknown = await res.json();
-    const data = parseProviderValue(raw, chatSchema, 'OpenAI');
+    const data = parseProviderJson(
+      await this.readProviderBody(res, request, abortController),
+      chatSchema,
+      'OpenAI',
+    );
     if (data.error)
       throw new Error(`OpenAI Provider error: ${JSON.stringify(data.error)}`);
     const choice = selectChatChoice(data.choices);
@@ -785,10 +858,11 @@ export class UniversalContentGenerator implements ContentGenerator {
     );
 
     if (!res.ok) {
-      const errText = await res.text();
-      throw this.httpError(
-        `OpenAI Provider [${provider.name}] Stream HTTP ${res.status}: ${errText}`,
-        res.status,
+      throw await this.providerHttpError(
+        res,
+        `OpenAI Provider [${provider.name}] Stream`,
+        request,
+        abortController,
       );
     }
 
@@ -1134,9 +1208,11 @@ export class UniversalContentGenerator implements ContentGenerator {
       abortController,
     );
     if (!res.ok) {
-      throw this.httpError(
-        `OpenAI Responses [${provider.name}] HTTP ${res.status}: ${await res.text()}`,
-        res.status,
+      throw await this.providerHttpError(
+        res,
+        `OpenAI Responses [${provider.name}]`,
+        request,
+        abortController,
       );
     }
 
@@ -1387,9 +1463,11 @@ export class UniversalContentGenerator implements ContentGenerator {
       abortController,
     );
     if (!res.ok) {
-      throw this.httpError(
-        `Anthropic [${provider.name}] HTTP ${res.status}: ${await res.text()}`,
-        res.status,
+      throw await this.providerHttpError(
+        res,
+        `Anthropic [${provider.name}]`,
+        request,
+        abortController,
       );
     }
 
@@ -1541,23 +1619,33 @@ export class UniversalContentGenerator implements ContentGenerator {
     provider: ExternalProviderProfile,
     request: GenerateContentParameters,
   ): Promise<GenerateContentResponse> {
-    const res = await fetch(this.geminiUrl(provider, request.model, false), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(provider.customHeaders || {}),
+    const abortController = new AbortController();
+    const res = await this.fetchStreamHeaders(
+      this.geminiUrl(provider, request.model, false),
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(provider.customHeaders || {}),
+        },
+        body: JSON.stringify(this.geminiBody(request)),
       },
-      body: JSON.stringify(this.geminiBody(request)),
-      signal: request.config?.abortSignal,
-    });
+      request,
+      abortController,
+    );
     if (!res.ok) {
-      throw this.httpError(
-        `Gemini [${provider.name}] HTTP ${res.status}: ${await res.text()}`,
-        res.status,
+      throw await this.providerHttpError(
+        res,
+        `Gemini [${provider.name}]`,
+        request,
+        abortController,
       );
     }
-    const value: unknown = await res.json();
-    const raw = parseProviderValue(value, geminiSchema, 'Gemini');
+    const raw = parseProviderJson(
+      await this.readProviderBody(res, request, abortController),
+      geminiSchema,
+      'Gemini',
+    );
     if (raw.error)
       throw new Error(`Gemini error: ${JSON.stringify(raw.error)}`);
     if (
@@ -1596,9 +1684,11 @@ export class UniversalContentGenerator implements ContentGenerator {
       abortController,
     );
     if (!res.ok) {
-      throw this.httpError(
-        `Gemini [${provider.name}] HTTP ${res.status}: ${await res.text()}`,
-        res.status,
+      throw await this.providerHttpError(
+        res,
+        `Gemini [${provider.name}]`,
+        request,
+        abortController,
       );
     }
     let completed = false;

@@ -1904,3 +1904,8 @@ WI-242/E-539至540/F-200：readSse原仅过滤具名ping，data-only顶层type=p
 ## 2026-11-15 四流协议响应头等待期限与取消
 
 WI-243/E-541至542/F-201：stream fetch等待头原未进readSse空闲期限，非合作fetch忽略signal也可使调用方取消迟迟不返回。共享fetchStreamHeaders接四协议，以现有最小1秒/默认120秒设置头期限+合并signal/withAbortSignal，取消保留原reason，自有transport abort，迟到Response body异步cancel不发布；收到头立即清timer交原body进展期限，非整流总时限，不新增重试/切模型。baseline新5真实行为失败，修后5+HTTP分类6+四协议完成清理4+正文长流1=16相关通过/21未选，core编译/双TS零warninglint/纯格式后check/diff0，无CLI重编全量冒烟。Windows原生fetch/HTTP四服务器收件不发头，配置1秒时Chat1021/Responses1007/Anthropic1010/Gemini1011ms失败且socketclose、无5秒fallback/输出；caller200ms取消原对象保持；正常300ms头后2.3秒连续内容/usage5仍成功。13条件true/13696ms总/首次退出0/6loopback/0外部实际模型付费重试旧任务重跑，provider字节保持。非OK错误body和Chat/Gemini非流JSON等待仍待下一步，非CLI启动基准/真实复杂协作验收。个人文件/四真实失败精确SHA与false/临时凭据删除/全局83均保全true，三份同SHA交接、goal active，不打包重装升版三平台CI子代理。详见docs/ultra-provider-header-timeout-handoff.md。
+
+
+## 2026-11-15 错误正文完整期限与非流JSON等待
+
+WI-244/E-543至544/F-202：六入口非OK后res.text原无界，Chat/Gemini非流fetch/json也未接头/body期限。共用readProviderBody：错误body完整期限不被字节续期，成功JSON逐段idle，withAbortSignal保caller reason，finally abort/cancel/release且不发布部分正文；providerHttpError超时省略未完成body、原HTTP status/重试分类保持，caller取消不包装HTTP错误。非流接原header helper及safe JSON解析，UTF8/BOM行为保持，不新增重试或总流时限。baseline新14中12真实失败/2正常过，修后14+HTTP旧6=20相关通过；最终reader取消清理调整后仅补caller2通过不累计，core编译/双TS最终零warninglint/格式diff0，无CLI重编全量冒烟。Windows六入口错误80ms空格续传仍1009至1092ms按1秒期限结束，429/503/400分类/断开/无私有前缀保持；Chat/Gemini非流header/200idle失败关闭、1.8秒跨UTF8/BOM JSON正常，200/503 caller取消原对象保持。27条件true/27718ms总/首次退出0/14loopback/0外部实际模型付费自动重试旧任务重跑。正常JSON持续字节进展仍允许长流、同步解析不抢占，非总请求SLA或原生Google/其他网络客户端保证；真实复杂质量未全面完成。个人文件/四真实失败精确SHA与false/临时凭据删除/全局83均保全true，三份同SHA交接、goal active，不打包重装升版三平台CI子代理。详见docs/ultra-provider-body-timeout-handoff.md。
