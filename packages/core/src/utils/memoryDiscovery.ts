@@ -606,7 +606,6 @@ export async function loadJitSubdirectoryMemory(
   // filter out paths that match already loaded files by identity
   // reuse the identities from deduplicatePathsByFileIdentity to avoid redundant stat calls
   const newPaths: string[] = [];
-  const newFileIdentities: string[] = [];
   for (const filePath of deduplicatedNewPaths) {
     const identityKey = newPathsIdentityMap.get(filePath);
     if (identityKey && cachedIdentities.has(identityKey)) {
@@ -619,9 +618,6 @@ export async function loadJitSubdirectoryMemory(
     }
     // if we don't have an identity (stat failed), include it to be safe
     newPaths.push(filePath);
-    if (identityKey) {
-      newFileIdentities.push(identityKey);
-    }
   }
 
   if (newPaths.length === 0) {
@@ -634,15 +630,18 @@ export async function loadJitSubdirectoryMemory(
   );
 
   const contents = await readGeminiMdFiles(newPaths, 'tree', boundaryMarkers);
+  const files = contents.flatMap((item) =>
+    item.content === null
+      ? []
+      : [{ path: item.filePath, content: item.content }],
+  );
 
   return {
-    files: contents
-      .filter((item) => item.content !== null)
-      .map((item) => ({
-        path: item.filePath,
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
-        content: item.content as string,
-      })),
-    fileIdentities: newFileIdentities,
+    files,
+    // A failed read must remain eligible for discovery on the next access.
+    fileIdentities: files.flatMap((file) => {
+      const identity = newPathsIdentityMap.get(file.path);
+      return identity ? [identity] : [];
+    }),
   };
 }

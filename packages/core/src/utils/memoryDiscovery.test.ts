@@ -30,6 +30,10 @@ import {
 import type { GeminiCLIExtension } from '../config/config.js';
 import { SimpleExtensionLoader } from './extensionLoader.js';
 
+vi.mock('node:fs/promises', async (importOriginal) => ({
+  ...(await importOriginal<typeof fsPromises>()),
+}));
+
 vi.mock('os', async (importOriginal) => {
   const actualOs = await importOriginal<typeof os>();
   return {
@@ -538,6 +542,70 @@ describe('memoryDiscovery', () => {
   });
 
   describe('loadJitSubdirectoryMemory', () => {
+    it.each(['root', 'leaf'])(
+      'does not cache failed %s memory identities when another file succeeds',
+      async (failedLevel) => {
+        const root = await createEmptyDir(
+          path.join(testRootDir, 'partial_memory'),
+        );
+        await createEmptyDir(path.join(root, '.git'));
+        const leaf = await createEmptyDir(path.join(root, 'src'));
+        const rootMemory = await createTestFile(
+          path.join(root, DEFAULT_CONTEXT_FILENAME),
+          'Root constraint',
+        );
+        const leafMemory = await createTestFile(
+          path.join(leaf, DEFAULT_CONTEXT_FILENAME),
+          'Leaf constraint',
+        );
+        const failed = failedLevel === 'root' ? rootMemory : leafMemory;
+        const successful = failedLevel === 'root' ? leafMemory : rootMemory;
+        const failedStat = await fsPromises.stat(failed);
+        const failedIdentity = `${failedStat.dev}:${failedStat.ino}`;
+        const originalRead = fsPromises.readFile;
+        let rejectRead = true;
+        const read = vi
+          .spyOn(fsPromises, 'readFile')
+          .mockImplementation((...args) => {
+            if (
+              rejectRead &&
+              path.resolve(String(args[0])) === path.resolve(failed)
+            ) {
+              return Promise.reject(
+                Object.assign(new Error('Controlled file lock'), {
+                  code: 'EACCES',
+                }),
+              );
+            }
+            return originalRead(...args);
+          });
+        try {
+          const first = await loadJitSubdirectoryMemory(
+            path.join(leaf, 'target.ts'),
+            [root],
+            new Set(),
+            new Set(),
+          );
+          expect(first.files.map((file) => file.path)).toEqual([successful]);
+          expect(first.fileIdentities).not.toContain(failedIdentity);
+          expect(first.fileIdentities).toHaveLength(1);
+          rejectRead = false;
+          const second = await loadJitSubdirectoryMemory(
+            path.join(leaf, 'target.ts'),
+            [root],
+            new Set(first.files.map((file) => file.path)),
+            new Set(first.fileIdentities),
+          );
+          expect(second.files.map((file) => file.path)).toEqual([failed]);
+          expect(second.fileIdentities).toEqual([failedIdentity]);
+          const afterStat = await fsPromises.stat(failed);
+          expect(`${afterStat.dev}:${afterStat.ino}`).toBe(failedIdentity);
+        } finally {
+          read.mockRestore();
+        }
+      },
+    );
+
     it('should load JIT memory when target is inside a trusted root', async () => {
       const rootDir = await createEmptyDir(path.join(testRootDir, 'jit_root'));
       await createEmptyDir(path.join(rootDir, '.git'));
