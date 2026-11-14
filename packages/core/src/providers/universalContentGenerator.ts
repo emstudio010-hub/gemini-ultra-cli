@@ -31,6 +31,7 @@ import { withUltraPrompt } from './ultraPromptConfig.js';
 import { LoggingContentGenerator } from '../core/loggingContentGenerator.js';
 import { providerUsage } from './providerUsage.js';
 import { isRecord } from '../utils/markdownUtils.js';
+import { withAbortSignal } from '../utils/withAbortSignal.js';
 import type { HttpError } from '../utils/httpErrors.js';
 import { consumeSwarmRequest } from '../agents/swarm.js';
 import { consumeWorkflowRequest } from '../agents/workflowBudget.js';
@@ -570,6 +571,57 @@ export class UniversalContentGenerator implements ContentGenerator {
       : controller.signal;
   }
 
+  private streamIdleMs(): number {
+    const configured = Number(process.env['GEMINI_ULTRA_STREAM_IDLE_MS']);
+    return Number.isFinite(configured) && configured >= 1000
+      ? configured
+      : 120000;
+  }
+
+  private async fetchStreamHeaders(
+    url: string,
+    options: RequestInit,
+    request: GenerateContentParameters,
+    controller: AbortController,
+  ): Promise<Response> {
+    const signal = this.streamSignal(request, controller);
+    signal.throwIfAborted();
+    const timeoutMs = this.streamIdleMs();
+    const timer = setTimeout(
+      () =>
+        controller.abort(
+          new Error(
+            I18nManager.getInstance().t(
+              `供应商在 ${timeoutMs} 毫秒内未返回 HTTP 响应头；已停止等待。`,
+              `Provider did not return HTTP response headers within ${timeoutMs} ms; waiting was stopped.`,
+            ),
+          ),
+        ),
+      timeoutMs,
+    );
+    let response: Response | undefined;
+    const discardResponse = () => {
+      if (response?.body) void response.body.cancel().catch(() => {});
+    };
+    try {
+      return await withAbortSignal(signal, async () => {
+        response = await fetch(url, { ...options, signal });
+        if (signal.aborted) {
+          discardResponse();
+          signal.throwIfAborted();
+        }
+        return response;
+      });
+    } catch (error) {
+      controller.abort(error);
+      discardResponse();
+      throw error;
+    } finally {
+      // Body progress has its own idle window; this is not a total stream limit.
+      clearTimeout(timer);
+    }
+  }
+
   private chatOutputLimit(
     request: GenerateContentParameters,
   ): Record<string, number> {
@@ -721,12 +773,16 @@ export class UniversalContentGenerator implements ContentGenerator {
       ...(provider.customHeaders || {}),
     };
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(payload),
-      signal: this.streamSignal(request, abortController),
-    });
+    const res = await this.fetchStreamHeaders(
+      url,
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      },
+      request,
+      abortController,
+    );
 
     if (!res.ok) {
       const errText = await res.text();
@@ -887,11 +943,7 @@ export class UniversalContentGenerator implements ContentGenerator {
     let buffer = '';
     let event: string | undefined;
     let data: string[] = [];
-    const configuredIdleMs = Number(process.env['GEMINI_ULTRA_STREAM_IDLE_MS']);
-    const idleMs =
-      Number.isFinite(configuredIdleMs) && configuredIdleMs >= 1000
-        ? configuredIdleMs
-        : 120000;
+    const idleMs = this.streamIdleMs();
     let finishDeadline: number | undefined;
     let progressDeadline = Date.now() + idleMs;
     try {
@@ -1067,16 +1119,20 @@ export class UniversalContentGenerator implements ContentGenerator {
       ...(tools ? { tools } : {}),
     };
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${provider.apiKey}`,
-        ...(provider.customHeaders || {}),
+    const res = await this.fetchStreamHeaders(
+      url,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${provider.apiKey}`,
+          ...(provider.customHeaders || {}),
+        },
+        body: JSON.stringify(payload),
       },
-      body: JSON.stringify(payload),
-      signal: this.streamSignal(request, abortController),
-    });
+      request,
+      abortController,
+    );
     if (!res.ok) {
       throw this.httpError(
         `OpenAI Responses [${provider.name}] HTTP ${res.status}: ${await res.text()}`,
@@ -1314,18 +1370,22 @@ export class UniversalContentGenerator implements ContentGenerator {
         : {}),
     };
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': provider.apiKey,
-        Authorization: `Bearer ${provider.apiKey}`,
-        'anthropic-version': '2023-06-01',
-        ...(provider.customHeaders || {}),
+    const res = await this.fetchStreamHeaders(
+      url,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': provider.apiKey,
+          Authorization: `Bearer ${provider.apiKey}`,
+          'anthropic-version': '2023-06-01',
+          ...(provider.customHeaders || {}),
+        },
+        body: JSON.stringify(payload),
       },
-      body: JSON.stringify(payload),
-      signal: this.streamSignal(request, abortController),
-    });
+      request,
+      abortController,
+    );
     if (!res.ok) {
       throw this.httpError(
         `Anthropic [${provider.name}] HTTP ${res.status}: ${await res.text()}`,
@@ -1522,15 +1582,19 @@ export class UniversalContentGenerator implements ContentGenerator {
     request: GenerateContentParameters,
   ): AsyncGenerator<GenerateContentResponse> {
     const abortController = new AbortController();
-    const res = await fetch(this.geminiUrl(provider, request.model, true), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(provider.customHeaders || {}),
+    const res = await this.fetchStreamHeaders(
+      this.geminiUrl(provider, request.model, true),
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(provider.customHeaders || {}),
+        },
+        body: JSON.stringify(this.geminiBody(request)),
       },
-      body: JSON.stringify(this.geminiBody(request)),
-      signal: this.streamSignal(request, abortController),
-    });
+      request,
+      abortController,
+    );
     if (!res.ok) {
       throw this.httpError(
         `Gemini [${provider.name}] HTTP ${res.status}: ${await res.text()}`,
