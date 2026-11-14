@@ -1158,6 +1158,108 @@ describe('Server Config (config.ts)', () => {
   });
 
   describe('refreshAuth', () => {
+    describe('authentication shutdown', () => {
+      let priorConfigFactory: typeof createContentGeneratorConfig | undefined;
+      let priorGeneratorFactory: typeof createContentGenerator | undefined;
+      let initial: ContentGenerator;
+      const makeGenerator = (): ContentGenerator => ({
+        generateContent: vi.fn(),
+        generateContentStream: vi.fn(),
+        countTokens: vi.fn(),
+        embedContent: vi.fn(),
+      });
+      beforeEach(() => {
+        priorConfigFactory = vi
+          .mocked(createContentGeneratorConfig)
+          .getMockImplementation();
+        priorGeneratorFactory = vi
+          .mocked(createContentGenerator)
+          .getMockImplementation();
+        initial = makeGenerator();
+        vi.mocked(createContentGeneratorConfig).mockImplementation(
+          async (_config, authType) => ({ authType }),
+        );
+        vi.mocked(createContentGenerator).mockResolvedValue(initial);
+      });
+      afterEach(() => {
+        vi.mocked(createContentGeneratorConfig).mockReset();
+        vi.mocked(createContentGenerator).mockReset();
+        if (priorConfigFactory)
+          vi.mocked(createContentGeneratorConfig).mockImplementation(
+            priorConfigFactory,
+          );
+        if (priorGeneratorFactory)
+          vi.mocked(createContentGenerator).mockImplementation(
+            priorGeneratorFactory,
+          );
+      });
+      it.each(['config', 'generator'] as const)(
+        'stops pending %s authentication on Config disposal without publishing its late result',
+        async (stage) => {
+          const config = new Config(baseParams);
+          await config.refreshAuth(AuthType.GATEWAY);
+          const previous = config.getContentGeneratorConfig();
+          const late = makeGenerator();
+          let release!: () => void;
+          if (stage === 'config')
+            vi.mocked(createContentGeneratorConfig).mockImplementationOnce(
+              () =>
+                new Promise((resolve) => {
+                  release = () => resolve({ authType: AuthType.USE_VERTEX_AI });
+                }),
+            );
+          else
+            vi.mocked(createContentGenerator).mockImplementationOnce(
+              () =>
+                new Promise((resolve) => {
+                  release = () => resolve(late);
+                }),
+            );
+          let error: unknown;
+          const pending = config
+            .refreshAuth(AuthType.USE_VERTEX_AI)
+            .catch((failure) => {
+              error = failure;
+            });
+          try {
+            await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+            await config.dispose();
+            await vi.waitFor(
+              () =>
+                expect(error).toMatchObject({
+                  name: 'AbortError',
+                  message: 'Configuration disposed.',
+                }),
+              { timeout: 200 },
+            );
+            expect(config.isAuthReady()).toBe(false);
+          } finally {
+            release?.();
+            await pending;
+          }
+          expect(config.getContentGenerator()).toBe(initial);
+          expect(config.getContentGeneratorConfig()).toBe(previous);
+          expect(config.isAuthReady()).toBe(false);
+        },
+      );
+      it('refuses new authentication after Config disposal before any factory dispatch', async () => {
+        const config = new Config(baseParams);
+        await config.refreshAuth(AuthType.GATEWAY);
+        await config.dispose();
+        vi.mocked(createContentGeneratorConfig).mockClear();
+        vi.mocked(createContentGenerator).mockClear();
+        await expect(
+          config.refreshAuth(AuthType.USE_VERTEX_AI),
+        ).rejects.toMatchObject({
+          name: 'AbortError',
+          message: 'Configuration disposed.',
+        });
+        expect(config.isAuthReady()).toBe(false);
+        expect(createContentGeneratorConfig).not.toHaveBeenCalled();
+        expect(createContentGenerator).not.toHaveBeenCalled();
+      });
+    });
+
     it.each(['config', 'generator'] as const)(
       'rejects a superseded late %s factory without replacing the current auth',
       async (stage) => {
@@ -1731,6 +1833,18 @@ describe('Server Config (config.ts)', () => {
       );
       return { source, target, first, second, client };
     }
+
+    it('does not reuse authentication metadata from a disposed startup Config', async () => {
+      const { source, target, second } = setup();
+      await source.refreshAuth(AuthType.LOGIN_WITH_GOOGLE);
+      await source.dispose();
+      target.reuseStartupAuthMetadataFrom(source);
+      await target.refreshAuth(AuthType.LOGIN_WITH_GOOGLE);
+      expect(getExperiments).toHaveBeenCalledTimes(2);
+      expect(second.retrieveUserQuota).toHaveBeenCalledOnce();
+      expect(source.isAuthReady()).toBe(false);
+      expect(target.isAuthReady()).toBe(true);
+    });
 
     it('reuses startup values once while rebuilding the generator and retaining admin checks', async () => {
       const { source, target, first, second } = setup();

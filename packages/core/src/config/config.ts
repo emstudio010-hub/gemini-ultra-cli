@@ -1714,6 +1714,9 @@ export class Config implements McpContext, AgentLoopContext {
     customHeaders?: Record<string, string>,
     signal?: AbortSignal,
   ) {
+    signal = signal
+      ? AbortSignal.any([signal, this.lifecycleController.signal])
+      : this.lifecycleController.signal;
     signal?.throwIfAborted();
     this.authRefreshController?.abort(new AuthRefreshSupersededError());
     const controller = new AbortController();
@@ -1940,6 +1943,7 @@ export class Config implements McpContext, AgentLoopContext {
     startupAuthHandoffs.delete(this);
     const metadata = startupAuthMetadata.get(source);
     if (
+      !this.lifecycleController.signal.aborted &&
       source !== this &&
       source.isAuthReady() &&
       !this.isAuthReady() &&
@@ -4634,6 +4638,9 @@ export class Config implements McpContext, AgentLoopContext {
       new DOMException('Configuration disposed.', 'AbortError'),
     );
     this.initialized = false;
+    this.authReady = false;
+    startupAuthMetadata.delete(this);
+    startupAuthHandoffs.delete(this);
     this._extensionLoader.dispose();
     this.memoryContextManager?.dispose();
     this.logCurrentModeDuration(this.getApprovalMode());
