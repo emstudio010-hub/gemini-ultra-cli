@@ -10,6 +10,7 @@ import { type InProcessChecker, AllowedPathChecker } from './built-in.js';
 import { InProcessCheckerType } from '../policy/types.js';
 
 import { ConsecaSafetyChecker } from './conseca/conseca.js';
+import type { AgentLoopContext } from '../config/agent-loop-context.js';
 
 /**
  * Registry for managing safety checker resolution.
@@ -39,7 +40,10 @@ export class CheckerRegistry {
   // Regex to validate checker names (alphanumeric and hyphens only)
   private static readonly VALID_NAME_PATTERN = /^[a-z0-9-]+$/;
 
-  constructor(private readonly checkersPath: string) {}
+  constructor(
+    private readonly checkersPath: string,
+    private readonly context?: AgentLoopContext,
+  ) {}
 
   /**
    * Resolves an external checker name to an absolute executable path.
@@ -72,6 +76,9 @@ export class CheckerRegistry {
       throw new Error(`Invalid checker name "${name}".`);
     }
 
+    if (name === InProcessCheckerType.CONSECA && this.context) {
+      return ConsecaSafetyChecker.getInstance(this.context);
+    }
     const checker = CheckerRegistry.getBuiltInInProcessCheckers().get(name);
     if (checker) {
       return checker;

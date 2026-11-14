@@ -1429,7 +1429,7 @@ export class Config implements McpContext, AgentLoopContext {
     const contextBuilder = new ContextBuilder(this);
     const checkersPath = this.targetDir;
     // The checkersPath  is used to resolve external checkers. Since we do not have any external checkers currently, it is set to the targetDir.
-    const checkerRegistry = new CheckerRegistry(checkersPath);
+    const checkerRegistry = new CheckerRegistry(checkersPath, this);
     const checkerRunner = new CheckerRunner(contextBuilder, checkerRegistry, {
       checkersPath,
       timeout: 30000, // 30 seconds to allow for LLM-based checkers
@@ -1456,7 +1456,7 @@ export class Config implements McpContext, AgentLoopContext {
     // Register Conseca if enabled
     if (this.enableConseca) {
       debugLogger.log('[SAFETY] Registering Conseca Safety Checker');
-      ConsecaSafetyChecker.getInstance().setContext(this);
+      ConsecaSafetyChecker.getInstance(this);
     }
 
     this.messageBus = new MessageBus(this.policyEngine, this.debugMode);

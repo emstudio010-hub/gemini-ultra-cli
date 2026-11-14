@@ -75,7 +75,7 @@ describe('helper lifecycle', () => {
     async (operation) => {
       const held = deferred<GenerateContentResponse>();
       vi.mocked(generator.generateContent).mockReturnValueOnce(held.promise);
-      const checker = ConsecaSafetyChecker.getInstance();
+      const checker = ConsecaSafetyChecker.getInstance(config);
       const invoke = () =>
         operation === 'generate'
           ? generatePolicy('fixture', '', config)
@@ -231,7 +231,7 @@ describe('helper lifecycle', () => {
     ).rejects.toBe(reason);
   });
   it('does not reuse a cached Conseca policy after its Config closes', async () => {
-    const checker = ConsecaSafetyChecker.getInstance();
+    const checker = ConsecaSafetyChecker.getInstance(config);
     await expect(checker.getPolicy('fixture', '', config)).resolves.toEqual(
       policy,
     );
