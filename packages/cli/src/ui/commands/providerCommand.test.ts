@@ -170,6 +170,20 @@ it('switches the live qualified session route as well as the persisted active pr
   expect(context.ui.reloadCommands).toHaveBeenCalled();
 });
 
+it('switches directly to a saved model when selecting a provider', async () => {
+  const { mgr, context, sessionModel } = setup();
+  mgr.upsertProvider({
+    ...mgr.getProvider('Second')!,
+    models: ['shared-model', 'deep-model'],
+    defaultModel: 'shared-model',
+    setActive: false,
+  });
+  await run(context, 'use Second deep-model');
+  expect(mgr.getActiveProvider()?.id).toBe('second');
+  expect(mgr.getActiveModel()).toBe('deep-model');
+  expect(sessionModel()).toBe('second:deep-model');
+});
+
 it('adds a manually named model without catalog discovery and synchronizes its live route', async () => {
   const { mgr, context, sessionModel } = setup();
   const catalog = vi

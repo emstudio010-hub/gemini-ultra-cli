@@ -1992,3 +1992,8 @@ WI-257/E-568/F-215：/swarm新任务入口先检查isAgentWorkflowRunning，运�
 ## 2026-11-15 Swarm互斥真实运行锁验证
 
 WI-257/E-568至569/F-215：新增测试用真实ready Boost工作流与reader执行锁，第二Swarm立即拒绝且不建任务；取消原工作流后reader正常收尾。CLI编译、Swarm单项测试、lint/格式/diff0；无全量/付费。三份交接SHA、目标池/case同步，goal active。详见docs/ultra-swarm-mutual-exclusion-test-handoff.md。
+
+
+## 2026-11-15 模型选择便利性
+
+WI-258/E-570至571/F-216：/provider use <名称或ID> [模型] 支持直接选择已保存模型；未保存模型中英文报错且活动路由保持，旧默认模型行为不变。CLI tsc、选择性 Vitest（3 passed/9 skipped）、定向 ESLint、Prettier 与 diff check 通过；未调用真实供应商。goal active；下一继续认证/设置加载与演练台状态收敛。详见 docs/ultra-provider-model-selection-handoff.md。

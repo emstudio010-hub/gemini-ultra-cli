@@ -175,14 +175,16 @@ export const providerCommand: SlashCommand = {
       altNames: ['切换', '激活'],
       get description() {
         return t(
-          '切换供应商：/provider use <名称或ID>',
-          'Switch provider: /provider use <name or ID>',
+          '切换供应商或模型：/provider use <名称或ID> [模型]',
+          'Switch provider or model: /provider use <name or ID> [model]',
         );
       },
       kind: CommandKind.BUILT_IN,
       autoExecute: false,
       action: async (context: CommandContext, args: string) => {
-        const target = args.trim();
+        const values = args.trim().split(/\s+/).filter(Boolean);
+        const target = values[0] ?? '';
+        const requestedModel = values[1];
         const mgr = ProviderManager.getInstance();
         const provider = target ? mgr.getProvider(target) : undefined;
         if (!provider) {
@@ -194,19 +196,30 @@ export const providerCommand: SlashCommand = {
                   'Provider not found. Use /provider list to see names and IDs.',
                 )
               : t(
-                  '用法：/provider use <名称或ID>',
-                  'Usage: /provider use <name or ID>',
+                  '用法：/provider use <名称或ID> [模型]',
+                  'Usage: /provider use <name or ID> [model]',
                 ),
           });
           return;
         }
-        const model = provider.defaultModel || provider.models[0];
+        const model =
+          requestedModel || provider.defaultModel || provider.models[0];
         if (!model) {
           context.ui.addItem({
             type: MessageType.ERROR,
             text: t(
               '该供应商尚无模型，请先用 /provider 配置。',
               'This provider has no model. Configure it with /provider first.',
+            ),
+          });
+          return;
+        }
+        if (requestedModel && !provider.models.includes(requestedModel)) {
+          context.ui.addItem({
+            type: MessageType.ERROR,
+            text: t(
+              `供应商 ${provider.name} 未保存模型 ${requestedModel}。可用模型：${provider.models.join(', ') || '无'}`,
+              `Provider ${provider.name} has no saved model ${requestedModel}. Available models: ${provider.models.join(', ') || 'none'}`,
             ),
           });
           return;
