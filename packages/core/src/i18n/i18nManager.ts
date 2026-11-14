@@ -9,6 +9,8 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
+import { isolateObserver } from '../utils/isolatedObserver.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 export type UiLocale = 'zh' | 'en';
 
@@ -22,11 +24,24 @@ function getLocaleConfigPath(): string {
 export class I18nManager {
   private static instance: I18nManager | null = null;
   private locale: UiLocale = 'zh';
-  private listeners = new Set<() => void>();
+  private listeners = new Map<() => void, () => void>();
   readonly subscribe = (listener: () => void): (() => void) => {
-    this.listeners.add(listener);
+    const observer =
+      this.listeners.get(listener) ??
+      isolateObserver<void>(listener, () => {
+        if (this.listeners.get(listener) === observer)
+          this.listeners.delete(listener);
+        debugLogger.warn(
+          this.t(
+            '界面语言订阅器出错，已停用该订阅器。',
+            'UI language listener failed and was detached.',
+          ),
+        );
+      });
+    this.listeners.set(listener, observer);
     return () => {
-      this.listeners.delete(listener);
+      if (this.listeners.get(listener) === observer)
+        this.listeners.delete(listener);
     };
   };
   readonly getSnapshot = (): UiLocale => this.locale;
@@ -72,7 +87,7 @@ export class I18nManager {
       if (fs.existsSync(temp)) fs.unlinkSync(temp);
     }
     this.locale = loc;
-    for (const listener of this.listeners) listener();
+    for (const listener of [...this.listeners.values()]) listener();
   }
 
   toggleLocale(): UiLocale {

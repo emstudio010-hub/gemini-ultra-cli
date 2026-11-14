@@ -247,6 +247,11 @@ Other observers continue receiving events, and the agent keeps its original
 completion or failure result. Asynchronous observer work is not awaited by the
 agent loop.
 
+Language changes are saved before UI listeners are notified. A failing listener
+is detached without turning a successful save into a failure; other listeners
+still receive the update. If saving the preference fails, the previous language
+remains active and no change notification is sent.
+
 Stopping the Drill Cockpit also cancels an unfinished startup. A cancelled
 startup reports `AbortError` and does not publish a URL; a later start creates a
 fresh service and credential. Concurrent starts share the current startup.

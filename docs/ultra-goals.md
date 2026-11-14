@@ -1854,3 +1854,8 @@ WI-232/E-519至520/F-190：前端已有取消但/api/provider-models未传signal
 ## 2026-11-15 演练台未完成启动的取消与新旧身份归属
 
 WI-233/E-521至522/F-191：stop只关已发布server而不取消starting，立即stop仍迟到监听并返回空token地址、重启共享旧启动/旧finally清新状态；现starting持controller/promise，stop先解除本次状态并AbortError取消，默认与占用回退port0都传原生listen signal，取消后不再fallback/迟到监听关闭；局部token只在成功且仍当前state发布，旧finally仅清自身。旧源码新3场景2实际失败/正常1过，修后3过，真实createServer记录自有监听非替换；CLI编译/双TS零warninglint/3文件格式diff0，无全量冒烟。Windows实际Config/编译Cockpit/native Server.listen原型记录：立即停止无遗留、旧新重叠只留新监听/并发共用/旧收尾不清新服务、页面200；默认端口占用下取消无残留/正常回落可取消port0/新token完整且不同，stop不影响占用者。17条件true/6689ms/首次退出0/2本地页面/0模型外部fetch付费旧任务重跑；个人文件/四旧真实失败SHA与false/ULQ凭据删除/全局83保全true。三份同SHA，goal active，无打包重装升版CI子代理；不是所有初始化/实际浏览器终端或复杂协作质量验收。详见docs/ultra-cockpit-lifecycle-handoff.md。
+
+
+## 2026-11-15 语言通知隔离与持续目标重建
+
+WI-234/E-523至524/F-192：用户重建active goal，保留源码/Windows优先与最后统一打包。I18nManager原保存成功后listener异常导致命令误报未保存/健康视图漏更新，Set遍历新增回调本轮触发；现复用isolateObserver+Map按快照通知、同步异步坏订阅一次停用/无原异常双语warning，真实写盘失败仍保留旧语言/不通知。基线3中2行为失败/1正常；修后核心6+既有LanguageDialog写失败恢复1共7不同过，首写失败spy未命中改真实阻塞父路径仅补该用例；core初最终编译/双TS最终零warninglint/3文件格式diff0。实际Windows ConPTY /language中文→中文六档→en→英文六档→英文/provider→quit0，坏listener一次/健康zh,en、选项各6唯一、配置字节保持。原result13功能保全true但额外fetch计数断言false保留SHA c5329fc1d9eaf701a97272e061b016aa1b990b8e4d36853726a6c3a4112e1918；独立startup-only probe找到Yoga内嵌data WASM加载，无外部传输；guard无条件reject不委派网络，严格组合validation纠正断言范围，未重跑菜单/付费旧任务。个人文件/四旧失败SHA与false/ULQ凭据删除/全局83保全true，三份同SHA，无打包重装升版CI子代理，整体质量/最终分发未完成。详见docs/ultra-locale-observer-handoff.md。
