@@ -4634,6 +4634,7 @@ export class Config implements McpContext, AgentLoopContext {
       new DOMException('Configuration disposed.', 'AbortError'),
     );
     this.initialized = false;
+    this._extensionLoader.dispose();
     this.memoryContextManager?.dispose();
     this.logCurrentModeDuration(this.getApprovalMode());
     coreEvents.off(CoreEvent.AgentsRefreshed, this.onAgentsRefreshed);

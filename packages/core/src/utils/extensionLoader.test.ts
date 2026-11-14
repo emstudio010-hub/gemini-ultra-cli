@@ -18,6 +18,8 @@ import { PolicyDecision } from '../policy/types.js';
 import type { Config, GeminiCLIExtension } from '../config/config.js';
 import { type McpClientManager } from '../tools/mcp-client-manager.js';
 import type { GeminiClient } from '../core/client.js';
+import { EventEmitter } from 'node:events';
+import type { ExtensionEvents } from './extensionLoader.js';
 
 describe('SimpleExtensionLoader', () => {
   let mockConfig: Config;
@@ -118,6 +120,118 @@ describe('SimpleExtensionLoader', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  describe('loader disposal', () => {
+    function deferred() {
+      let release!: () => void;
+      let enter!: () => void;
+      const entered = new Promise<void>((resolve) => {
+        enter = resolve;
+      });
+      const pending = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return { release, enter, entered, pending };
+    }
+
+    it('cancels initial extension startup before late policies and completion events', async () => {
+      const gate = deferred();
+      const events = new EventEmitter<ExtensionEvents>();
+      const emit = vi.spyOn(events, 'emit');
+      vi.mocked(mockMcpClientManager.startExtension).mockImplementationOnce(
+        async () => {
+          gate.enter();
+          await gate.pending;
+        },
+      );
+      const loader = new SimpleExtensionLoader([activeExtension], events);
+      let settled = false;
+      const outcome = loader
+        .start(mockConfig)
+        .catch((error) => error)
+        .then((value) => {
+          settled = true;
+          return value;
+        });
+      await gate.entered;
+      const eventCount = emit.mock.calls.length;
+      loader.dispose();
+      await new Promise((resolve) => setImmediate(resolve));
+      const cancelledBeforeRelease = settled;
+      gate.release();
+      expect(await outcome).toMatchObject({ name: 'AbortError' });
+      expect(cancelledBeforeRelease).toBe(true);
+      expect(mockPolicyEngine.addRule).not.toHaveBeenCalled();
+      expect(mockPolicyEngine.addChecker).not.toHaveBeenCalled();
+      expect(mockGeminiClientSetTools).not.toHaveBeenCalled();
+      expect(emit.mock.calls.length).toBe(eventCount);
+    });
+
+    it('stops dynamic tool refresh before policies and memory are published', async () => {
+      const gate = deferred();
+      const loader = new SimpleExtensionLoader([]);
+      await loader.start(mockConfig);
+      extensionReloadingEnabled = true;
+      mockGeminiClientSetTools.mockImplementationOnce(async () => {
+        gate.enter();
+        await gate.pending;
+      });
+      const outcome = loader
+        .loadExtension(activeExtension)
+        .catch((error) => error);
+      await gate.entered;
+      loader.dispose();
+      expect(await outcome).toMatchObject({ name: 'AbortError' });
+      gate.release();
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(mockPolicyEngine.addRule).not.toHaveBeenCalled();
+      expect(mockPolicyEngine.addChecker).not.toHaveBeenCalled();
+      expect(mockMemoryRefresh).not.toHaveBeenCalled();
+    });
+
+    it('does not advance memory refresh into prompts hooks agents or skills after disposal', async () => {
+      const gate = deferred();
+      const loader = new SimpleExtensionLoader([]);
+      await loader.start(mockConfig);
+      extensionReloadingEnabled = true;
+      mockMemoryRefresh.mockImplementationOnce(async () => {
+        gate.enter();
+        await gate.pending;
+      });
+      const outcome = loader
+        .loadExtension(activeExtension)
+        .catch((error) => error);
+      await gate.entered;
+      loader.dispose();
+      expect(await outcome).toMatchObject({ name: 'AbortError' });
+      gate.release();
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(mockGeminiClientUpdateSystemInstruction).not.toHaveBeenCalled();
+      expect(mockHookSystemInit).not.toHaveBeenCalled();
+      expect(mockAgentRegistryReload).not.toHaveBeenCalled();
+      expect(mockSkillsReload).not.toHaveBeenCalled();
+    });
+
+    it('rejects closed loader entrypoints before changing its extension catalog', async () => {
+      const loader = new SimpleExtensionLoader([activeExtension]);
+      loader.dispose();
+      await expect(loader.start(mockConfig)).rejects.toMatchObject({
+        name: 'AbortError',
+      });
+      await expect(
+        loader.loadExtension(inactiveExtension),
+      ).rejects.toMatchObject({ name: 'AbortError' });
+      await expect(
+        loader.unloadExtension(activeExtension),
+      ).rejects.toMatchObject({ name: 'AbortError' });
+      await expect(
+        loader.restartExtension(activeExtension),
+      ).rejects.toMatchObject({ name: 'AbortError' });
+      expect(loader.getExtensions()).toEqual([activeExtension]);
+      expect(mockMcpClientManager.startExtension).not.toHaveBeenCalled();
+      expect(mockMcpClientManager.stopExtension).not.toHaveBeenCalled();
+    });
   });
 
   it('should register policies when an extension starts', async () => {

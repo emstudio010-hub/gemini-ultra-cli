@@ -6,8 +6,20 @@
 
 import type { EventEmitter } from 'node:events';
 import type { Config, GeminiCLIExtension } from '../config/config.js';
+import { withAbortSignal } from './withAbortSignal.js';
 
 export abstract class ExtensionLoader {
+  private readonly lifecycleController = new AbortController();
+
+  dispose(): void {
+    this.lifecycleController.abort(
+      new DOMException('Extension loader disposed.', 'AbortError'),
+    );
+  }
+
+  protected throwIfDisposed(): void {
+    this.lifecycleController.signal.throwIfAborted();
+  }
   // Assigned in `start`.
   protected config: Config | undefined;
 
@@ -35,6 +47,7 @@ export abstract class ExtensionLoader {
    * McpClientManager, PromptRegistry, and GeminiChat set up.
    */
   async start(config: Config): Promise<void> {
+    this.throwIfDisposed();
     this.isStarting = true;
     try {
       if (!this.config) {
@@ -42,11 +55,14 @@ export abstract class ExtensionLoader {
       } else {
         throw new Error('Already started, you may only call `start` once.');
       }
-      await Promise.all(
-        this.getExtensions()
-          .filter((e) => e.isActive)
-          .map(this.startExtension.bind(this)),
+      await withAbortSignal(this.lifecycleController.signal, () =>
+        Promise.all(
+          this.getExtensions()
+            .filter((e) => e.isActive)
+            .map(this.startExtension.bind(this)),
+        ),
       );
+      this.throwIfDisposed();
     } finally {
       this.isStarting = false;
     }
@@ -62,6 +78,7 @@ export abstract class ExtensionLoader {
    * extension reloading is enabled and the `config` object is initialized.
    */
   protected async startExtension(extension: GeminiCLIExtension) {
+    this.throwIfDisposed();
     if (!this.config) {
       throw new Error('Cannot call `startExtension` prior to calling `start`.');
     }
@@ -71,8 +88,12 @@ export abstract class ExtensionLoader {
       completed: this.startCompletedCount,
     });
     try {
-      await this.config.getMcpClientManager()!.startExtension(extension);
+      await withAbortSignal(this.lifecycleController.signal, () =>
+        this.config!.getMcpClientManager()!.startExtension(extension),
+      );
+      this.throwIfDisposed();
       await this.maybeRefreshGeminiTools(extension);
+      this.throwIfDisposed();
 
       // Register policy rules and checkers
       if (extension.rules || extension.checkers) {
@@ -98,10 +119,11 @@ export abstract class ExtensionLoader {
       // useSlashCommandProcessor hook which responds to events fired here today.
     } finally {
       this.startCompletedCount++;
-      this.eventEmitter?.emit('extensionsStarting', {
-        total: this.startingCount,
-        completed: this.startCompletedCount,
-      });
+      if (!this.lifecycleController.signal.aborted)
+        this.eventEmitter?.emit('extensionsStarting', {
+          total: this.startingCount,
+          completed: this.startCompletedCount,
+        });
       if (this.startingCount === this.startCompletedCount) {
         this.startingCount = 0;
         this.startCompletedCount = 0;
@@ -111,6 +133,7 @@ export abstract class ExtensionLoader {
   }
 
   private async maybeRefreshMemories(): Promise<void> {
+    if (this.lifecycleController.signal.aborted) return;
     if (!this.config) {
       throw new Error(
         'Cannot refresh gemini memories prior to calling `start`.',
@@ -124,11 +147,24 @@ export abstract class ExtensionLoader {
       // Wait until all extensions are done starting and stopping before we
       // reload memory, this is somewhat expensive and also busts the context
       // cache, we want to only do it once.
-      await this.config.getMemoryContextManager()?.refresh();
+      await withAbortSignal(this.lifecycleController.signal, async () =>
+        this.config!.getMemoryContextManager()?.refresh(
+          this.lifecycleController.signal,
+        ),
+      );
+      this.throwIfDisposed();
       this.config.getGeminiClient().updateSystemInstruction();
-      await this.config.getHookSystem()?.initialize();
-      await this.config.getAgentRegistry().reload();
-      await this.config.reloadSkills();
+      await withAbortSignal(this.lifecycleController.signal, async () =>
+        this.config!.getHookSystem()?.initialize(),
+      );
+      this.throwIfDisposed();
+      await withAbortSignal(this.lifecycleController.signal, () =>
+        this.config!.getAgentRegistry().reload(),
+      );
+      this.throwIfDisposed();
+      await withAbortSignal(this.lifecycleController.signal, () =>
+        this.config!.reloadSkills(),
+      );
     }
   }
 
@@ -139,10 +175,14 @@ export abstract class ExtensionLoader {
   private async maybeRefreshGeminiTools(
     extension: GeminiCLIExtension,
   ): Promise<void> {
+    this.throwIfDisposed();
     if (extension.excludeTools && extension.excludeTools.length > 0) {
       const geminiClient = this.config?.geminiClient;
       if (geminiClient?.isInitialized()) {
-        await geminiClient.setTools();
+        await withAbortSignal(this.lifecycleController.signal, () =>
+          geminiClient.setTools(),
+        );
+        this.throwIfDisposed();
       }
     }
   }
@@ -155,6 +195,7 @@ export abstract class ExtensionLoader {
   protected async maybeStartExtension(
     extension: GeminiCLIExtension,
   ): Promise<void> {
+    this.throwIfDisposed();
     if (this.config && this.config.getEnableExtensionReloading()) {
       await this.startExtension(extension);
     }
@@ -170,6 +211,7 @@ export abstract class ExtensionLoader {
    * initialized.
    */
   protected async stopExtension(extension: GeminiCLIExtension) {
+    this.throwIfDisposed();
     if (!this.config) {
       throw new Error('Cannot call `stopExtension` prior to calling `start`.');
     }
@@ -180,8 +222,12 @@ export abstract class ExtensionLoader {
     });
 
     try {
-      await this.config.getMcpClientManager()!.stopExtension(extension);
+      await withAbortSignal(this.lifecycleController.signal, () =>
+        this.config!.getMcpClientManager()!.stopExtension(extension),
+      );
+      this.throwIfDisposed();
       await this.maybeRefreshGeminiTools(extension);
+      this.throwIfDisposed();
 
       // Unregister policy rules and checkers
       if (extension.rules || extension.checkers) {
@@ -213,10 +259,11 @@ export abstract class ExtensionLoader {
       // useSlashCommandProcessor hook which responds to events fired here today.
     } finally {
       this.stopCompletedCount++;
-      this.eventEmitter?.emit('extensionsStopping', {
-        total: this.stoppingCount,
-        completed: this.stopCompletedCount,
-      });
+      if (!this.lifecycleController.signal.aborted)
+        this.eventEmitter?.emit('extensionsStopping', {
+          total: this.stoppingCount,
+          completed: this.stopCompletedCount,
+        });
       if (this.stoppingCount === this.stopCompletedCount) {
         this.stoppingCount = 0;
         this.stopCompletedCount = 0;
@@ -233,13 +280,16 @@ export abstract class ExtensionLoader {
   protected async maybeStopExtension(
     extension: GeminiCLIExtension,
   ): Promise<void> {
+    this.throwIfDisposed();
     if (this.config && this.config.getEnableExtensionReloading()) {
       await this.stopExtension(extension);
     }
   }
 
   async restartExtension(extension: GeminiCLIExtension): Promise<void> {
+    this.throwIfDisposed();
     await this.stopExtension(extension);
+    this.throwIfDisposed();
     await this.startExtension(extension);
   }
 }
@@ -276,6 +326,7 @@ export class SimpleExtensionLoader extends ExtensionLoader {
   ///
   /// This is intended for dynamic loading of extensions after calling `start`.
   async loadExtension(extension: GeminiCLIExtension) {
+    this.throwIfDisposed();
     this.extensions.push(extension);
     await this.maybeStartExtension(extension);
   }
@@ -285,6 +336,7 @@ export class SimpleExtensionLoader extends ExtensionLoader {
   ///
   /// This is intended for dynamic unloading of extensions after calling `start`.
   async unloadExtension(extension: GeminiCLIExtension) {
+    this.throwIfDisposed();
     const index = this.extensions.indexOf(extension);
     if (index === -1) return;
     this.extensions.splice(index, 1);

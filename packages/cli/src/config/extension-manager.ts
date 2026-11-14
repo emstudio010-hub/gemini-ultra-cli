@@ -641,6 +641,7 @@ Would you like to attempt to install via "git clone" instead?`,
 
   protected override async startExtension(extension: GeminiCLIExtension) {
     await super.startExtension(extension);
+    this.throwIfDisposed();
     if (extension.themes && !themeManager.hasExtensionThemes(extension.name)) {
       themeManager.registerExtensionThemes(extension.name, extension.themes);
     }
@@ -648,6 +649,7 @@ Would you like to attempt to install via "git clone" instead?`,
 
   protected override async stopExtension(extension: GeminiCLIExtension) {
     await super.stopExtension(extension);
+    this.throwIfDisposed();
     if (extension.themes) {
       themeManager.unregisterExtensionThemes(extension.name, extension.themes);
     }
@@ -1066,8 +1068,10 @@ Would you like to attempt to install via "git clone" instead?`,
   override async restartExtension(
     extension: GeminiCLIExtension,
   ): Promise<void> {
+    this.throwIfDisposed();
     const extensionDir = extension.path;
     await this.unloadExtension(extension);
+    this.throwIfDisposed();
     await this.loadExtension(extensionDir);
   }
 

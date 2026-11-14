@@ -430,6 +430,77 @@ describe('Server Config (config.ts)', () => {
   });
 
   describe('initialize', () => {
+    it('does not register extension policies after Config disposal during extension startup', async () => {
+      const { SimpleExtensionLoader } = await import(
+        '../utils/extensionLoader.js'
+      );
+      const { PolicyDecision } = await import('../policy/types.js');
+      const { McpClientManager } = await import(
+        '../tools/mcp-client-manager.js'
+      );
+      let release!: () => void;
+      let enter!: () => void;
+      const entered = new Promise<void>((resolve) => {
+        enter = resolve;
+      });
+      const pending = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      vi.mocked(McpClientManager).mockImplementationOnce(
+        () =>
+          ({
+            startConfiguredMcpServers: vi.fn(),
+            startExtension: async () => {
+              enter();
+              await pending;
+            },
+            setMainRegistries: vi.fn(),
+            getMcpInstructions: () => '',
+            stop: vi.fn(),
+          }) as unknown as McpClientManager,
+      );
+      const source = 'Extension (late-fixture): policies.toml';
+      const loader = new SimpleExtensionLoader([
+        {
+          name: 'late-fixture',
+          version: '1',
+          path: '/fixture',
+          contextFiles: [],
+          id: 'late-fixture',
+          isActive: true,
+          rules: [
+            {
+              toolName: 'late-fixture-tool',
+              decision: PolicyDecision.ALLOW,
+              source,
+            },
+          ],
+        },
+      ]);
+      const config = new Config({
+        ...baseParams,
+        checkpointing: false,
+        skillsSupport: false,
+        extensionLoader: loader,
+      });
+      const policy = vi.spyOn(config.getPolicyEngine(), 'addRule');
+      const initialize = config.initialize().catch((error) => error);
+      try {
+        await entered;
+        await config.dispose();
+        release();
+        await initialize;
+        await new Promise((resolve) => setImmediate(resolve));
+        expect(policy.mock.calls.some(([rule]) => rule.source === source)).toBe(
+          false,
+        );
+        expect(config.isInitialized()).toBe(false);
+      } finally {
+        release();
+        policy.mockRestore();
+      }
+    });
+
     describe('shutdown during initialization', () => {
       it.each(['storage', 'tools', 'client'] as const)(
         'rejects shutdown while waiting for %s and never publishes late readiness',
