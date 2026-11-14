@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MemoryContextManager } from './memoryContextManager.js';
 import * as memoryDiscovery from '../utils/memoryDiscovery.js';
 import type { Config } from '../config/config.js';
@@ -32,6 +32,9 @@ vi.mock('../utils/memoryDiscovery.js', async (importOriginal) => {
 describe('MemoryContextManager', () => {
   let memoryContextManager: MemoryContextManager;
   let mockConfig: Config;
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
   beforeEach(() => {
     mockConfig = {
@@ -193,6 +196,132 @@ describe('MemoryContextManager', () => {
       expect(memoryContextManager.getEnvironmentMemory()).toContain(
         'Project Content',
       );
+    });
+  });
+
+  describe('refresh transaction', () => {
+    const file = '/home/user/.gemini/GEMINI.md';
+    async function seed() {
+      vi.mocked(memoryDiscovery.getGlobalMemoryPaths).mockResolvedValue([file]);
+      vi.mocked(memoryDiscovery.getEnvironmentMemoryPaths).mockResolvedValue(
+        [],
+      );
+      vi.mocked(memoryDiscovery.readGeminiMdFiles).mockResolvedValue([
+        { filePath: file, content: 'Retained instruction' },
+      ]);
+      await memoryContextManager.refresh();
+      vi.mocked(coreEvents.emit).mockClear();
+    }
+    it('retains content, loaded paths and change notifications when discovery fails', async () => {
+      await seed();
+      vi.mocked(memoryDiscovery.getGlobalMemoryPaths).mockRejectedValueOnce(
+        new Error('Discovery failed'),
+      );
+      await expect(memoryContextManager.refresh()).rejects.toThrow(
+        'Discovery failed',
+      );
+      expect(memoryContextManager.getGlobalMemory()).toContain(
+        'Retained instruction',
+      );
+      expect([...memoryContextManager.getLoadedPaths()]).toEqual([file]);
+      expect(coreEvents.emit).not.toHaveBeenCalled();
+    });
+    it.each(['en', 'zh'] as const)(
+      'times out in %s without discarding or later replacing prior context',
+      async (locale) => {
+        await seed();
+        vi.useFakeTimers();
+        const { I18nManager } = await import('../i18n/i18nManager.js');
+        const translate = vi
+          .spyOn(I18nManager.getInstance(), 't')
+          .mockImplementation((zh, en) => (locale === 'zh' ? zh : en));
+        let release!: (value: memoryDiscovery.GeminiFileContent[]) => void;
+        vi.mocked(memoryDiscovery.readGeminiMdFiles).mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              release = resolve;
+            }),
+        );
+        const loading = memoryContextManager.refresh().catch((error) => error);
+        await vi.advanceTimersByTimeAsync(10_001);
+        const error = await loading;
+        expect(error.name).toBe('MemoryRefreshTimeoutError');
+        expect(error.message).toContain('/memory refresh');
+        expect(error.message).toContain(
+          locale === 'zh' ? '超过 10 秒' : 'exceeded 10 seconds',
+        );
+        expect(memoryContextManager.getGlobalMemory()).toContain(
+          'Retained instruction',
+        );
+        expect([...memoryContextManager.getLoadedPaths()]).toEqual([file]);
+        release([{ filePath: '/late/GEMINI.md', content: 'Late instruction' }]);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(memoryContextManager.getGlobalMemory()).not.toContain(
+          'Late instruction',
+        );
+        expect(coreEvents.emit).not.toHaveBeenCalled();
+        expect(vi.getTimerCount()).toBe(0);
+        translate.mockRestore();
+      },
+    );
+    it('rejects a superseded refresh while publishing only the newest content and paths', async () => {
+      await seed();
+      let release!: (value: string[]) => void;
+      vi.mocked(memoryDiscovery.getGlobalMemoryPaths).mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            release = resolve;
+          }),
+      );
+      const older = memoryContextManager.refresh().catch((error) => error);
+      vi.mocked(memoryDiscovery.getGlobalMemoryPaths).mockResolvedValue([
+        '/new/GEMINI.md',
+      ]);
+      vi.mocked(memoryDiscovery.readGeminiMdFiles).mockResolvedValue([
+        { filePath: '/new/GEMINI.md', content: 'Newest instruction' },
+      ]);
+      await memoryContextManager.refresh();
+      expect((await older).name).toBe('AbortError');
+      release(['/old/GEMINI.md']);
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(memoryContextManager.getGlobalMemory()).toContain(
+        'Newest instruction',
+      );
+      expect([...memoryContextManager.getLoadedPaths()]).toEqual([
+        '/new/GEMINI.md',
+      ]);
+      expect(coreEvents.emit).toHaveBeenCalledTimes(1);
+    });
+    it('propagates explicit cancellation without clearing the previous loaded paths', async () => {
+      await seed();
+      const controller = new AbortController();
+      const reason = new Error('Cancelled by caller');
+      vi.mocked(memoryDiscovery.getGlobalMemoryPaths).mockReturnValueOnce(
+        new Promise(() => {}),
+      );
+      const loading = memoryContextManager
+        .refresh(controller.signal)
+        .catch((error) => error);
+      controller.abort(reason);
+      expect(await loading).toBe(reason);
+      expect([...memoryContextManager.getLoadedPaths()]).toEqual([file]);
+      expect(coreEvents.emit).not.toHaveBeenCalled();
+    });
+    it('keeps the previous snapshot if categorization fails and gates retained project memory after trust is removed', async () => {
+      await seed();
+      vi.mocked(mockConfig.getMcpClientManager).mockImplementationOnce(() => {
+        throw new Error('MCP instructions unavailable');
+      });
+      await expect(memoryContextManager.refresh()).rejects.toThrow(
+        'MCP instructions unavailable',
+      );
+      expect([...memoryContextManager.getLoadedPaths()]).toEqual([file]);
+      expect(memoryContextManager.getGlobalMemory()).toContain(
+        'Retained instruction',
+      );
+      vi.mocked(mockConfig.isTrustedFolder).mockReturnValue(false);
+      expect(memoryContextManager.getEnvironmentMemory()).toBe('');
+      expect(coreEvents.emit).not.toHaveBeenCalled();
     });
   });
 
