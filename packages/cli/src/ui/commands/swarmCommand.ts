@@ -284,6 +284,13 @@ async function action(
         });
         return;
       }
+      if (isAgentWorkflowRunning(root))
+        throw new Error(
+          i18n.t(
+            '当前项目已有工作流正在执行，请先查看状态或取消后再启动 Swarm。',
+            'A workflow is already running in this project. Inspect or cancel it before starting a Swarm.',
+          ),
+        );
       if (config.getApprovalMode() === ApprovalMode.PLAN)
         throw new Error(
           i18n.t(
