@@ -25,6 +25,9 @@ import {
 import { isValidToolName } from '../tools/tool-names.js';
 import { FRONTMATTER_REGEX } from '../skills/skillLoader.js';
 import { getErrorMessage } from '../utils/errors.js';
+import { withAbortSignal } from '../utils/withAbortSignal.js';
+import { mapWithConcurrency } from '../utils/asyncPool.js';
+import { I18nManager } from '../i18n/i18nManager.js';
 
 /**
  * Error thrown when an agent definition is invalid or cannot be loaded.
@@ -639,6 +642,38 @@ export function markdownToAgentDefinition(
  */
 export async function loadAgentsFromDirectory(
   dir: string,
+  signal?: AbortSignal,
+): Promise<AgentLoadResult> {
+  signal?.throwIfAborted();
+  const controller = new AbortController();
+  const loadingSignal = signal
+    ? AbortSignal.any([signal, controller.signal])
+    : controller.signal;
+  const timeoutError = new AgentLoadError(
+    dir,
+    I18nManager.getInstance().t(
+      'Agent 目录加载超过 10 秒，已跳过该目录。请检查文件后运行 /agents reload 重试。',
+      'Agent directory loading exceeded 10 seconds; this directory was skipped. Check its files and retry with /agents reload.',
+    ),
+  );
+  const timer = setTimeout(() => controller.abort(timeoutError), 10_000);
+  try {
+    return await withAbortSignal(loadingSignal, () =>
+      readAgentsFromDirectory(dir, loadingSignal),
+    );
+  } catch (error) {
+    signal?.throwIfAborted();
+    if (controller.signal.aborted && controller.signal.reason === timeoutError)
+      return { agents: [], errors: [timeoutError] };
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function readAgentsFromDirectory(
+  dir: string,
+  signal: AbortSignal,
 ): Promise<AgentLoadResult> {
   const result: AgentLoadResult = {
     agents: [],
@@ -647,8 +682,11 @@ export async function loadAgentsFromDirectory(
 
   let dirEntries: Dirent[];
   try {
-    dirEntries = await fs.readdir(dir, { withFileTypes: true });
+    dirEntries = await withAbortSignal(signal, () =>
+      fs.readdir(dir, { withFileTypes: true }),
+    );
   } catch (error) {
+    signal.throwIfAborted();
     // If directory doesn't exist, just return empty
     if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
       return result;
@@ -669,21 +707,27 @@ export async function loadAgentsFromDirectory(
       entry.name.endsWith('.md'),
   );
 
-  for (const entry of files) {
+  const loaded = await mapWithConcurrency(files, 8, async (entry) => {
+    signal.throwIfAborted();
+    const loadedFile: AgentLoadResult = { agents: [], errors: [] };
     const filePath = path.join(dir, entry.name);
     try {
-      const content = await fs.readFile(filePath, 'utf-8');
+      const content = await withAbortSignal(signal, () =>
+        fs.readFile(filePath, { encoding: 'utf8', signal }),
+      );
       const hash = crypto.createHash('sha256').update(content).digest('hex');
       const agentDefs = await parseAgentMarkdown(filePath, content);
+      signal.throwIfAborted();
       for (const def of agentDefs) {
         const agent = markdownToAgentDefinition(def, { hash, filePath });
-        result.agents.push(agent);
+        loadedFile.agents.push(agent);
       }
     } catch (error) {
+      signal.throwIfAborted();
       if (error instanceof AgentLoadError) {
-        result.errors.push(error);
+        loadedFile.errors.push(error);
       } else {
-        result.errors.push(
+        loadedFile.errors.push(
           new AgentLoadError(
             filePath,
             `Unexpected error: ${getErrorMessage(error)}`,
@@ -691,6 +735,12 @@ export async function loadAgentsFromDirectory(
         );
       }
     }
+    return loadedFile;
+  });
+  signal.throwIfAborted();
+  for (const file of loaded) {
+    result.agents.push(...file.agents);
+    result.errors.push(...file.errors);
   }
 
   return result;
