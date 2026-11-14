@@ -236,6 +236,13 @@ async function action(
         return;
       }
       if (operation === 'message') {
+        if (config.getApprovalMode() === ApprovalMode.PLAN)
+          throw new Error(
+            i18n.t(
+              '请先退出计划模式，再通过留言唤醒 Swarm 成员。',
+              'Leave Plan Mode before posting messages that can wake Swarm members.',
+            ),
+          );
         postSwarmMessage(root, swarm.id, 'coordinator', args.trim());
         context.ui.addItem({
           type: MessageType.INFO,

@@ -1879,3 +1879,8 @@ WI-237/E-529至530/F-195：全局submitting使旧Config挂起阻塞新Config，s
 ## 2026-11-15 成员供应商失效的本地诊断与显式恢复
 
 WI-238/E-531至532/F-196：有效成员scope内供应商被删除后，normalizeAgentModel原普通Error会打断可选容量读取，并绕开已有本地路由错误分类；现仅缺失供应商改抛ProviderRouteError，容量unknown、生成/流/计数本地严格拒绝，不切供应商/重试/花请求预算，失败turn仍累计。baseline新增4实际失败，修后4+旧19共23相关通过，core编译/双TS零warninglint/纯格式后check与diff0，无CLI重编/全量冒烟。Windows编译Swarm与Provider原生loopback：删路由0请求且失败暂停，同ID恢复后显式唤醒research成功，累计失败和模型记录保留，父仍primary。首导入dist路径错误保全；首完整结果18/19true、7382ms/2HTTP，错误要求失败result为空而非保留诊断，passed=false精确SHA b7a8d4ac61a7965d2096487572e78a3f4896ac6e2a5346706938b6e2d3568f18保留，assert后Node UV句柄断言异常退出亦保留未归因。仅补失败诊断/归档6条件true/6818ms/0HTTP/退出0，不重跑恢复父请求；严格组合证据passed=true不改原false。runner可控，不证明Local执行器或LLM复杂质量；0外部付费旧任务重跑。个人文件/四真实失败SHA与false/临时凭据删除/全局83保全true，三份交接同SHA、goal active，不打包重装升版CI子代理。持续四目标：启动加载、双语/演练台/配置、真实协作恢复和独立验收、红队逆向可移植性；源码与Windows先，功能收敛后最后统一包。详见docs/ultra-agent-route-removal-handoff.md。
+
+
+## 2026-11-15 计划模式的蜂群留言新唤醒门禁
+
+WI-239/E-533至534/F-197：CLI /swarm message原缺Plan门禁，已有engine空闲成员可绕过resume/ManageSwarm检查，通过@成员直接再执行；现message写盘/唤醒前读取当前Config模式，PLAN整条操作本地双语拒绝，模式不变，退出Plan后明确留言正常。原版zh/en两回归实际多启动一轮而失败；修后新2+旧16共18相关命令检查通过，CLI编译/双TS零warninglint/纯格式后check和diff0，无全量冒烟。Windows真实Config.initialize+编译slash+SwarmEngine/coder临时文件callback：初轮settled后Plan中文@author/英文@all均不唤醒、不改marker或状态/板，status仍只读；显式DEFAULT后仅第二轮写入，turns2/failed0/requests0/任务仍active。17条件true/11530ms/首次退出0，1次data Yoga内嵌WASM装载/0外部fetch或模型HTTP付费旧任务重跑；非LocalAgentExecutor/LLM质量或原生终端视觉验收。不保证进入Plan取消此前已活动任务或其他内部通信入口，接续检查排队成员/实际入口动态模式。个人文件/四真实失败精确SHA与false/临时凭据删除/全局83均保全true，三份同SHA交接，goal active，不打包重装升版三平台CI子代理。详见docs/ultra-swarm-plan-message-handoff.md。

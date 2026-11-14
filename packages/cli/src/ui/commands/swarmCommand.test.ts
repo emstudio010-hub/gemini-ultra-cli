@@ -16,6 +16,7 @@ import {
   latestSwarm,
   cancelSavedSwarm,
   I18nManager,
+  getSwarmEngine,
 } from '@google/gemini-cli-core';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { swarmCommand } from './swarmCommand.js';
@@ -244,6 +245,53 @@ it('keeps no-ID resume on the current swarm and refuses execution in Plan Mode w
   expect(savedFiles()).toEqual(before);
   expect(planned.config.setApprovalMode).not.toHaveBeenCalled();
 });
+
+it.each(['zh', 'en'] as const)(
+  'does not wake or mutate a swarm through a %s message in Plan Mode and allows an explicit message after leaving it',
+  async (locale) => {
+    I18nManager.getInstance().setLocale(locale);
+    const swarm = createSwarm(root, 'Keep planned work idle');
+    const runner = vi.fn(async () => ({
+      completed: true,
+      text: 'Saved report',
+    }));
+    const engine = getSwarmEngine(root, swarm.id, runner);
+    try {
+      engine.add('reader', 'researcher', 'Read the assigned source only');
+      await engine.wait(new AbortController().signal);
+      const before = savedFiles();
+      const planned = resumeContext(ApprovalMode.PLAN);
+      const message = swarmCommand.subCommands!.find(
+        (command) => command.name === 'message',
+      )!;
+      expect(
+        await message.action!(planned.context, '@reader inspect new evidence'),
+      ).toBeUndefined();
+      await engine.wait(new AbortController().signal);
+      expect(runner).toHaveBeenCalledTimes(1);
+      expect(savedFiles()).toEqual(before);
+      expect(planned.config.setApprovalMode).not.toHaveBeenCalled();
+      expect(planned.context.ui.addItem).toHaveBeenCalledWith({
+        type: 'error',
+        text:
+          locale === 'zh'
+            ? '请先退出计划模式，再通过留言唤醒 Swarm 成员。'
+            : 'Leave Plan Mode before posting messages that can wake Swarm members.',
+      });
+      const normal = resumeContext();
+      await message.action!(normal.context, '@reader inspect new evidence');
+      await engine.wait(new AbortController().signal);
+      expect(runner).toHaveBeenCalledTimes(2);
+      expect(readSwarm(root, swarm.id)).toMatchObject({
+        budget: { turns: 2, requests: 0 },
+        members: [{ state: 'waiting', result: 'Saved report' }],
+      });
+      expect(normal.config.setApprovalMode).not.toHaveBeenCalled();
+    } finally {
+      engine.cancel();
+    }
+  },
+);
 
 it('rejects bad or missing IDs and another pending swarm without falling back or submitting a prompt', async () => {
   const older = createSwarm(root, 'Historical swarm');
