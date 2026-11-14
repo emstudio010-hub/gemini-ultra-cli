@@ -162,3 +162,29 @@ it('preserves repeated fragments when their concatenation is also a declared too
   expect(result.error).toBeUndefined();
   expect(result.calls).toEqual([{ id: 'repeat', name: 'partpart', args: {} }]);
 });
+
+it('rejects the whole tool batch if a later call has malformed arguments', async () => {
+  const result = await collect(
+    [
+      [
+        call(0, 'first', 'read_file', '{"file_path":"fixture.txt"}'),
+        call(
+          1,
+          'second',
+          'complete_task',
+          '{"result":"PRIVATE_BATCH_MARKER" invalid}',
+        ),
+      ],
+    ],
+    ['read_file', 'complete_task'],
+  );
+  expect(result.error).toMatchObject({
+    name: 'ProviderToolArgumentsError',
+    toolName: 'complete_task',
+    reason: 'invalid-json',
+  });
+  expect(result.calls).toEqual([]);
+  expect(String(result.error) + JSON.stringify(result.error)).not.toContain(
+    'PRIVATE_BATCH_MARKER',
+  );
+});

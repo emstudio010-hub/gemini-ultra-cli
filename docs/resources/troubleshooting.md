@@ -192,6 +192,25 @@ is especially useful for scripting and automation.
   - Always run `npm run preflight` before committing code. This can catch many
     common issues related to formatting, linting, and type errors.
 
+## External provider tool argument errors
+
+`ProviderToolArgumentsError` means the external response contained malformed
+tool argument JSON or a JSON root that was not an object. Tools from that
+response are not executed, including otherwise valid calls in the same batch.
+The CLI does not guess repairs for those arguments.
+
+The diagnostic reports the protocol, a declared tool name when identifiable,
+UTF-8 byte length, UTF-16 code-unit length, and an optional zero-based JSON
+position in UTF-16 code units. The position is not a byte offset. Argument
+contents and the original parser error are omitted; undeclared or unsafe tool
+names appear as `unknown`. Not every JavaScript runtime supplies a position.
+
+Preserve the task and inspect the provider's tool-call response format before
+explicitly retrying. The metadata identifies where parsing failed; it does not
+by itself distinguish a malformed upstream response from incorrect stream
+fragment assembly. A failed Swarm member retains this diagnostic in its report
+and still follows the task's cumulative failure and retry limits.
+
 ## Existing GitHub issues similar to yours or creating new issues
 
 If you encounter an issue that was not covered here in this _Troubleshooting

@@ -20,9 +20,13 @@ import type { Config } from '../config/config.js';
 import { LlmRole } from '../telemetry/llmRole.js';
 import { ProviderManager } from './providerManager.js';
 import { ProviderRouteError } from './providerRouteError.js';
+import { parseProviderToolArguments } from './providerToolArguments.js';
 import { ExternalFallbackGenerator } from './externalFallbackGenerator.js';
 import { I18nManager } from '../i18n/i18nManager.js';
-import type { ExternalProviderProfile } from './providerTypes.js';
+import type {
+  ExternalProviderProfile,
+  ProviderProtocol,
+} from './providerTypes.js';
 import { withUltraPrompt } from './ultraPromptConfig.js';
 import { LoggingContentGenerator } from '../core/loggingContentGenerator.js';
 import { providerUsage } from './providerUsage.js';
@@ -651,7 +655,12 @@ export class UniversalContentGenerator implements ContentGenerator {
           functionCall: {
             id: tc.id,
             name: tc.function.name,
-            args: this.parseArgs(tc.function.arguments ?? '{}'),
+            args: this.parseArgs(
+              tc.function.arguments ?? '{}',
+              'openai-chat',
+              tc.function.name,
+              request,
+            ),
           },
         });
       }
@@ -835,7 +844,7 @@ export class UniversalContentGenerator implements ContentGenerator {
           functionCall: {
             id: tc.id,
             name: tc.name,
-            args: this.parseArgs(tc.argsText),
+            args: this.parseArgs(tc.argsText, 'openai-chat', tc.name, request),
           },
         });
       }
@@ -934,18 +943,18 @@ export class UniversalContentGenerator implements ContentGenerator {
     }
   }
 
-  private parseArgs(text: string): Record<string, unknown> {
-    let value: unknown;
-    try {
-      value = JSON.parse(text || '{}');
-    } catch {
-      throw new Error(
-        'Provider returned malformed tool argument JSON; the tool was not executed.',
-      );
-    }
-    if (!isRecord(value))
-      throw new Error('Provider tool arguments must be a JSON object.');
-    return value;
+  private parseArgs(
+    text: string,
+    protocol: ProviderProtocol,
+    name: string,
+    request: GenerateContentParameters,
+  ): Record<string, unknown> {
+    return parseProviderToolArguments(
+      text,
+      protocol,
+      name,
+      this.formatOpenAITools(request)?.map((tool) => tool.function.name) ?? [],
+    );
   }
 
   private async collect(
@@ -1143,7 +1152,7 @@ export class UniversalContentGenerator implements ContentGenerator {
         functionCall: {
           id: c.callId,
           name: c.name,
-          args: this.parseArgs(c.args),
+          args: this.parseArgs(c.args, 'openai-responses', c.name, request),
         },
       })),
       usage,
@@ -1341,7 +1350,12 @@ export class UniversalContentGenerator implements ContentGenerator {
         functionCall: {
           id: b.id,
           name: b.name,
-          args: this.parseArgs(b.json || JSON.stringify(b.initialInput ?? {})),
+          args: this.parseArgs(
+            b.json || JSON.stringify(b.initialInput ?? {}),
+            'anthropic',
+            b.name,
+            request,
+          ),
         },
       })),
       usage,
