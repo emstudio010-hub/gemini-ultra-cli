@@ -1026,13 +1026,16 @@ async function handleAutomaticOAuth(
   mcpServerConfig: MCPServerConfig,
   wwwAuthenticate: string,
   cliConfig: McpContext,
+  signal?: AbortSignal,
 ): Promise<boolean> {
+  signal?.throwIfAborted();
   try {
     debugLogger.log(`🔐 '${mcpServerName}' requires OAuth authentication`);
 
     const serverUrl = mcpServerConfig.httpUrl || mcpServerConfig.url;
     const discoveryOptions = {
       allowPrivateNetwork: mcpServerConfig.oauth?.allowPrivateNetwork,
+      ...(signal ? { signal } : {}),
     };
 
     // Try to discover OAuth config from the WWW-Authenticate header first
@@ -1080,7 +1083,10 @@ async function handleAutomaticOAuth(
     debugLogger.log(
       `Starting OAuth authentication for server '${mcpServerName}'...`,
     );
-    const authProvider = new MCPOAuthProvider(new MCPOAuthTokenStorage());
+    const authProvider = new MCPOAuthProvider(
+      new MCPOAuthTokenStorage(),
+      signal,
+    );
     await authProvider.authenticate(mcpServerName, oauthAuthConfig, serverUrl);
 
     debugLogger.log(
@@ -1088,6 +1094,7 @@ async function handleAutomaticOAuth(
     );
     return true;
   } catch (error) {
+    signal?.throwIfAborted();
     cliConfig.emitMcpDiagnostic(
       'error',
       `Failed to handle automatic OAuth for server '${mcpServerName}': ${getErrorMessage(error)}`,
@@ -1161,8 +1168,9 @@ function createAuthProvider(
 function createDynamicOAuthTokenProvider(
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
+  signal?: AbortSignal,
 ): McpAuthProvider {
-  return new DynamicStoredOAuthProvider(mcpServerName, mcpServerConfig);
+  return new DynamicStoredOAuthProvider(mcpServerName, mcpServerConfig, signal);
 }
 
 /**
@@ -1790,12 +1798,15 @@ export function hasNetworkTransport(config: MCPServerConfig): boolean {
 async function getStoredOAuthToken(
   serverName: string,
   oauthConfig?: MCPOAuthConfig,
+  signal?: AbortSignal,
 ): Promise<string | null> {
   const tokenStorage = new MCPOAuthTokenStorage();
-  const credentials = await tokenStorage.getCredentials(serverName);
+  const credentials = await withAbortSignal(signal, () =>
+    tokenStorage.getCredentials(serverName),
+  );
   if (!credentials) return null;
 
-  const authProvider = new MCPOAuthProvider(tokenStorage);
+  const authProvider = new MCPOAuthProvider(tokenStorage, signal);
   return authProvider.getValidToken(serverName, {
     ...oauthConfig,
     // Pass client ID if available
@@ -1858,7 +1869,7 @@ async function showAuthRequiredMessage(
   signal?: AbortSignal,
 ): Promise<never> {
   const hasRejectedToken = !!(await withAbortSignal(signal, () =>
-    getStoredOAuthToken(serverName, oauthConfig),
+    getStoredOAuthToken(serverName, oauthConfig, signal),
   ));
 
   const message = hasRejectedToken
@@ -2114,6 +2125,7 @@ async function establishMcpConnection(
       mcpServerConfig,
       debugMode,
       cliConfig,
+      signal,
     );
     try {
       await connectTransport(mcpClient, transport, mcpServerConfig, signal);
@@ -2154,7 +2166,11 @@ async function establishMcpConnection(
         await connectWithSSETransport(
           mcpClient,
           mcpServerConfig,
-          await getStoredOAuthToken(mcpServerName, mcpServerConfig.oauth),
+          await getStoredOAuthToken(
+            mcpServerName,
+            mcpServerConfig.oauth,
+            signal,
+          ),
           signal,
         );
 
@@ -2270,12 +2286,13 @@ async function establishMcpConnection(
             mcpServerConfig,
             wwwAuthenticate,
             cliConfig,
+            signal,
           ),
         );
         if (oauthSuccess) {
           // Retry connection with OAuth token
           const accessToken = await withAbortSignal(signal, () =>
-            getStoredOAuthToken(mcpServerName, mcpServerConfig.oauth),
+            getStoredOAuthToken(mcpServerName, mcpServerConfig.oauth, signal),
           );
           if (!accessToken) {
             throw new Error(
@@ -2324,6 +2341,7 @@ async function establishMcpConnection(
           const baseUrl = `${serverUrl.protocol}//${serverUrl.host}`;
           const discoveryOptions = {
             allowPrivateNetwork: mcpServerConfig.oauth?.allowPrivateNetwork,
+            ...(signal ? { signal } : {}),
           };
 
           // Try to discover OAuth configuration from the base URL
@@ -2358,6 +2376,7 @@ async function establishMcpConnection(
             );
             const authProvider = new MCPOAuthProvider(
               new MCPOAuthTokenStorage(),
+              signal,
             );
             await withAbortSignal(signal, () =>
               authProvider.authenticate(
@@ -2369,7 +2388,7 @@ async function establishMcpConnection(
 
             // Retry connection with OAuth token
             const accessToken = await withAbortSignal(signal, () =>
-              getStoredOAuthToken(mcpServerName, mcpServerConfig.oauth),
+              getStoredOAuthToken(mcpServerName, mcpServerConfig.oauth, signal),
             );
             if (!accessToken) {
               throw new Error(
@@ -2508,7 +2527,9 @@ export async function createTransport(
   mcpServerConfig: MCPServerConfig,
   debugMode: boolean,
   cliConfig: McpContext,
+  signal?: AbortSignal,
 ): Promise<Transport> {
+  signal?.throwIfAborted();
   const noUrl = !mcpServerConfig.url && !mcpServerConfig.httpUrl;
   if (noUrl) {
     if (
@@ -2530,11 +2551,15 @@ export async function createTransport(
   if (mcpServerConfig.httpUrl || mcpServerConfig.url) {
     let authProvider = createAuthProvider(mcpServerConfig);
     const headers: Record<string, string> =
-      (await authProvider?.getRequestHeaders?.()) ?? {};
+      (await withAbortSignal(signal, async () =>
+        authProvider?.getRequestHeaders?.(),
+      )) ?? {};
 
     if (authProvider === undefined) {
       const tokenStorage = new MCPOAuthTokenStorage();
-      const credentials = await tokenStorage.getCredentials(mcpServerName);
+      const credentials = await withAbortSignal(signal, () =>
+        tokenStorage.getCredentials(mcpServerName),
+      );
       const shouldUseDynamicOAuthProvider = !!credentials;
 
       if (!shouldUseDynamicOAuthProvider && mcpServerConfig.oauth?.enabled) {
@@ -2553,6 +2578,7 @@ export async function createTransport(
         authProvider = createDynamicOAuthTokenProvider(
           mcpServerName,
           mcpServerConfig,
+          signal,
         );
       }
     }

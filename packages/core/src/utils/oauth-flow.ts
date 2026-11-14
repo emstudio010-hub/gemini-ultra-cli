@@ -16,6 +16,7 @@ import * as crypto from 'node:crypto';
 import type * as net from 'node:net';
 import { URL } from 'node:url';
 import { debugLogger } from './debugLogger.js';
+import { withAbortSignal } from './withAbortSignal.js';
 import { validateOAuthEndpointUrl, isLoopbackUrl } from '../mcp/oauth-utils.js';
 
 /**
@@ -387,6 +388,10 @@ export function startCallbackServer(
       }
 
       server.listen(listenPort, () => {
+        if (abortController.signal.aborted) {
+          server.close();
+          return;
+        }
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
         const address = server.address() as net.AddressInfo;
         serverPort = address.port;
@@ -406,6 +411,7 @@ export function startCallbackServer(
 
       const onAbort = () => {
         clearCallbackTimeout();
+        portReject(abortController.signal.reason);
         if (server.listening) {
           server.close();
         }
@@ -625,8 +631,9 @@ export async function exchangeCodeForToken(
   codeVerifier: string,
   redirectPort: number,
   resource?: string,
-  options?: { allowPrivateNetwork?: boolean },
+  options?: { allowPrivateNetwork?: boolean; signal?: AbortSignal },
 ): Promise<OAuthTokenResponse> {
+  options?.signal?.throwIfAborted();
   const redirectUri = getRedirectUri(config, redirectPort);
 
   const params = new URLSearchParams({
@@ -655,21 +662,23 @@ export async function exchangeCodeForToken(
   const validatedTokenUrl = await validateOAuthEndpointUrl(config.tokenUrl, {
     allowLoopback,
     allowPrivateNetwork: options?.allowPrivateNetwork,
+    signal: options?.signal,
   });
 
-  const response = await fetch(validatedTokenUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      Accept: 'application/json, application/x-www-form-urlencoded',
-    },
-    body: params.toString(),
-  });
+  const response = await withAbortSignal(options?.signal, () =>
+    fetch(validatedTokenUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Accept: 'application/json, application/x-www-form-urlencoded',
+      },
+      body: params.toString(),
+      ...(options?.signal ? { signal: options.signal } : {}),
+    }),
+  );
 
-  return parseTokenEndpointResponse(
-    response,
-    'Token exchange',
-    'no_access_token',
+  return withAbortSignal(options?.signal, () =>
+    parseTokenEndpointResponse(response, 'Token exchange', 'no_access_token'),
   );
 }
 
@@ -687,8 +696,9 @@ export async function refreshAccessToken(
   refreshToken: string,
   tokenUrl: string,
   resource?: string,
-  options?: { allowPrivateNetwork?: boolean },
+  options?: { allowPrivateNetwork?: boolean; signal?: AbortSignal },
 ): Promise<OAuthTokenResponse> {
+  options?.signal?.throwIfAborted();
   const params = new URLSearchParams({
     grant_type: 'refresh_token',
     refresh_token: refreshToken,
@@ -717,16 +727,22 @@ export async function refreshAccessToken(
   const validatedTokenUrl = await validateOAuthEndpointUrl(tokenUrl, {
     allowLoopback,
     allowPrivateNetwork: options?.allowPrivateNetwork,
+    signal: options?.signal,
   });
 
-  const response = await fetch(validatedTokenUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      Accept: 'application/json, application/x-www-form-urlencoded',
-    },
-    body: params.toString(),
-  });
+  const response = await withAbortSignal(options?.signal, () =>
+    fetch(validatedTokenUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Accept: 'application/json, application/x-www-form-urlencoded',
+      },
+      body: params.toString(),
+      ...(options?.signal ? { signal: options.signal } : {}),
+    }),
+  );
 
-  return parseTokenEndpointResponse(response, 'Token refresh', 'unknown_error');
+  return withAbortSignal(options?.signal, () =>
+    parseTokenEndpointResponse(response, 'Token refresh', 'unknown_error'),
+  );
 }

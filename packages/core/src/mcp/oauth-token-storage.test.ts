@@ -90,6 +90,53 @@ describe('MCPOAuthTokenStorage', () => {
       vi.restoreAllMocks();
     });
 
+    it('does not save credentials returned after cancellation', async () => {
+      const controller = new AbortController();
+      let release!: (value: OAuthCredentials) => void;
+      const read = new Promise<OAuthCredentials>((resolve) => {
+        release = resolve;
+      });
+      vi.spyOn(tokenStorage, 'getCredentials').mockReturnValue(read);
+      const pending = tokenStorage
+        .saveToken(
+          'test-server',
+          mockToken,
+          undefined,
+          undefined,
+          undefined,
+          controller.signal,
+        )
+        .catch((error: unknown) => error);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      controller.abort();
+      release(mockCredentials);
+      expect(await pending).toBe(controller.signal.reason);
+      expect(fs.writeFile).not.toHaveBeenCalled();
+      expect(mockHybridTokenStorage.setCredentials).not.toHaveBeenCalled();
+    });
+
+    it.each(['setCredentials', 'deleteCredentials'] as const)(
+      'does not perform %s after a cancelled storage read',
+      async (method) => {
+        const controller = new AbortController();
+        let release!: (value: Map<string, OAuthCredentials>) => void;
+        const read = new Promise<Map<string, OAuthCredentials>>((resolve) => {
+          release = resolve;
+        });
+        vi.spyOn(tokenStorage, 'getAllCredentials').mockReturnValue(read);
+        const pending = (
+          method === 'setCredentials'
+            ? tokenStorage.setCredentials(mockCredentials, controller.signal)
+            : tokenStorage.deleteCredentials('test-server', controller.signal)
+        ).catch((error: unknown) => error);
+        controller.abort();
+        release(new Map([['test-server', mockCredentials]]));
+        expect(await pending).toBe(controller.signal.reason);
+        expect(fs.writeFile).not.toHaveBeenCalled();
+        expect(fs.unlink).not.toHaveBeenCalled();
+      },
+    );
+
     describe('getAllCredentials', () => {
       it('should return empty map when token file does not exist', async () => {
         vi.mocked(fs.readFile).mockRejectedValue({ code: 'ENOENT' });

@@ -150,6 +150,7 @@ export interface RetryAttemptPayload {
 export interface ConsentRequestPayload {
   prompt: string;
   onConfirm: (confirmed: boolean) => void;
+  signal?: AbortSignal;
 }
 
 /**

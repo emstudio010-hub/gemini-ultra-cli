@@ -35,6 +35,36 @@ describe('getConsentForOauth', () => {
       (isHeadlessMode as Mock).mockReturnValue(false);
     });
 
+    it('cancels pending consent and ignores a late confirmation', async () => {
+      const controller = new AbortController();
+      let confirm!: (answer: boolean) => void;
+      vi.spyOn(coreEvents, 'listenerCount').mockReturnValue(1);
+      const emit = vi
+        .spyOn(coreEvents, 'emitConsentRequest')
+        .mockImplementation((payload) => {
+          confirm = payload.onConfirm;
+        });
+      const pending = getConsentForOauth('fixture', controller.signal).catch(
+        (error: unknown) => error,
+      );
+      controller.abort();
+      confirm(true);
+      expect(await pending).toBe(controller.signal.reason);
+      expect(emit).toHaveBeenCalledWith(
+        expect.objectContaining({ signal: controller.signal }),
+      );
+    });
+
+    it('does not request consent when already cancelled', async () => {
+      const controller = new AbortController();
+      controller.abort();
+      const emit = vi.spyOn(coreEvents, 'emitConsentRequest');
+      await expect(
+        getConsentForOauth('fixture', controller.signal),
+      ).rejects.toBe(controller.signal.reason);
+      expect(emit).not.toHaveBeenCalled();
+    });
+
     it('should emit consent request when UI listeners are present', async () => {
       const mockEmitConsentRequest = vi.spyOn(coreEvents, 'emitConsentRequest');
       vi.spyOn(coreEvents, 'listenerCount').mockReturnValue(1);
@@ -99,6 +129,20 @@ describe('getConsentForOauth', () => {
   describe('in non-interactive mode', () => {
     beforeEach(() => {
       (isHeadlessMode as Mock).mockReturnValue(true);
+    });
+
+    it('closes the terminal prompt when consent is cancelled', async () => {
+      const controller = new AbortController();
+      const rl = { on: vi.fn(), close: vi.fn() };
+      vi.mocked(readline.createInterface).mockReturnValue(
+        rl as unknown as readline.Interface,
+      );
+      const pending = getConsentForOauth('fixture', controller.signal).catch(
+        (error: unknown) => error,
+      );
+      controller.abort();
+      expect(await pending).toBe(controller.signal.reason);
+      expect(rl.close).toHaveBeenCalledOnce();
     });
 
     it('should use readline to prompt for consent', async () => {

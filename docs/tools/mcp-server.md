@@ -174,7 +174,11 @@ Each server configuration supports the following properties:
   resources. An explicit positive `timeout` overrides that discovery budget too.
   A discovery timeout disconnects that attempt and lets startup continue. Check
   the server configuration and run `/mcp restart` to retry; slower servers can
-  use a longer explicit `timeout`.
+  use a longer explicit `timeout`. Cancellation also stops OAuth discovery,
+  registration and token requests, closes its local callback listener and
+  dismisses pending sign-in consent. Cancelled refreshes preserve existing
+  credentials. A browser already opened or a credential write already started
+  cannot be rolled back. Manual `/mcp auth` remains available for sign-in.
 - **`trust`** (boolean): When `true`, bypasses all tool call confirmations for
   this server (default: `false`)
 - **`includeTools`** (string[]): List of tool names to include from this MCP

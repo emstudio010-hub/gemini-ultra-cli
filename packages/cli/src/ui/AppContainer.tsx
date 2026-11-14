@@ -1221,19 +1221,40 @@ export const AppContainer = (props: AppContainerProps) => {
     useState<PermissionConfirmationRequest | null>(null);
 
   useEffect(() => {
+    let clearActiveConsent: (() => void) | undefined;
     const handleConsentRequest = (payload: ConsentRequestPayload) => {
-      setAuthConsentRequest({
+      if (payload.signal?.aborted) return;
+      clearActiveConsent?.();
+      const cleanup = () => {
+        payload.signal?.removeEventListener('abort', onAbort);
+        if (clearActiveConsent === cleanup) clearActiveConsent = undefined;
+      };
+      const onAbort = () => {
+        cleanup();
+        setAuthConsentRequest((current) =>
+          current === request ? null : current,
+        );
+      };
+      const request: ConfirmationRequest = {
         prompt: payload.prompt,
         onConfirm: (confirmed: boolean) => {
-          setAuthConsentRequest(null);
+          if (payload.signal?.aborted || clearActiveConsent !== cleanup) return;
+          cleanup();
+          setAuthConsentRequest((current) =>
+            current === request ? null : current,
+          );
           payload.onConfirm(confirmed);
         },
-      });
+      };
+      clearActiveConsent = cleanup;
+      payload.signal?.addEventListener('abort', onAbort, { once: true });
+      setAuthConsentRequest(request);
     };
 
     coreEvents.on(CoreEvent.ConsentRequest, handleConsentRequest);
     return () => {
       coreEvents.off(CoreEvent.ConsentRequest, handleConsentRequest);
+      clearActiveConsent?.();
     };
   }, []);
 

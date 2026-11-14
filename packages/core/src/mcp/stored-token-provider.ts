@@ -13,6 +13,7 @@ import type {
 import type { MCPServerConfig } from '../config/config.js';
 import { MCPOAuthProvider } from './oauth-provider.js';
 import { FIVE_MIN_BUFFER_MS } from './oauth-utils.js';
+import { withAbortSignal } from '../utils/withAbortSignal.js';
 
 export class DynamicStoredOAuthProvider implements OAuthClientProvider {
   readonly redirectUrl = '';
@@ -25,14 +26,17 @@ export class DynamicStoredOAuthProvider implements OAuthClientProvider {
   };
 
   private clientInfo?: OAuthClientInformation;
-  private readonly oauthProvider = new MCPOAuthProvider();
+  private readonly oauthProvider: MCPOAuthProvider;
   private cachedToken?: OAuthTokens;
   private tokenExpiryTime?: number;
 
   constructor(
     private readonly serverName: string,
     private readonly serverConfig: MCPServerConfig,
-  ) {}
+    private readonly signal?: AbortSignal,
+  ) {
+    this.oauthProvider = new MCPOAuthProvider(undefined, signal);
+  }
 
   clientInformation(): OAuthClientInformation | undefined {
     return this.clientInfo;
@@ -51,15 +55,18 @@ export class DynamicStoredOAuthProvider implements OAuthClientProvider {
   }
 
   async tokens(): Promise<OAuthTokens | undefined> {
+    this.signal?.throwIfAborted();
     if (this.isCachedTokenValid()) {
       return this.cachedToken;
     }
 
     const oauthConfig = this.serverConfig.oauth ?? {};
 
-    const tokenMeta = await this.oauthProvider.getValidTokenWithMetadata(
-      this.serverName,
-      oauthConfig,
+    const tokenMeta = await withAbortSignal(this.signal, () =>
+      this.oauthProvider.getValidTokenWithMetadata(
+        this.serverName,
+        oauthConfig,
+      ),
     );
 
     if (!tokenMeta?.accessToken) {

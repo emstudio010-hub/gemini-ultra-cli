@@ -9,6 +9,7 @@ import { isIP } from 'node:net';
 import type { MCPOAuthConfig } from './oauth-provider.js';
 import { getErrorMessage } from '../utils/errors.js';
 import { debugLogger } from '../utils/debugLogger.js';
+import { withAbortSignal } from '../utils/withAbortSignal.js';
 import {
   isAddressPrivate,
   isEnterprisePrivateAddress,
@@ -52,6 +53,7 @@ export function isLoopbackUrl(urlStr: string): boolean {
  * Options for validating OAuth endpoint URLs.
  */
 export interface OAuthUrlValidationOptions {
+  signal?: AbortSignal;
   allowLoopback?: boolean;
   allowPrivateNetwork?: boolean;
   expectedOrigin?: string;
@@ -69,6 +71,7 @@ export async function validateOAuthEndpointUrl(
   urlStr: string,
   options?: OAuthUrlValidationOptions,
 ): Promise<string> {
+  options?.signal?.throwIfAborted();
   let resolvedUrl = urlStr.trim();
   if (options?.allowRelative && options.baseUri) {
     try {
@@ -149,7 +152,9 @@ export async function validateOAuthEndpointUrl(
 
   // Asynchronous DNS resolution to prevent DNS rebinding / SSRF
   try {
-    const addresses = await lookup(hostname, { all: true });
+    const addresses = await withAbortSignal(options?.signal, () =>
+      lookup(hostname, { all: true }),
+    );
     if (!addresses || addresses.length === 0) {
       throw new OAuthSecurityError(
         `Failed to resolve hostname "${hostname}" for OAuth endpoint "${resolvedUrl}".`,
@@ -170,6 +175,7 @@ export async function validateOAuthEndpointUrl(
       }
     }
   } catch (error) {
+    options?.signal?.throwIfAborted();
     if (error instanceof OAuthSecurityError) {
       throw error;
     }
@@ -269,6 +275,7 @@ export class OAuthUtils {
       allowLoopback?: boolean;
       expectedOrigin?: string;
       allowPrivateNetwork?: boolean;
+      signal?: AbortSignal;
     },
   ): Promise<OAuthProtectedResourceMetadata | null> {
     try {
@@ -276,15 +283,23 @@ export class OAuthUtils {
         allowLoopback: options?.allowLoopback,
         expectedOrigin: options?.expectedOrigin,
         allowPrivateNetwork: options?.allowPrivateNetwork,
+        signal: options?.signal,
       });
 
-      const response = await fetch(validatedUrl);
+      const response = await withAbortSignal(options?.signal, () =>
+        options?.signal
+          ? fetch(validatedUrl, { signal: options.signal })
+          : fetch(validatedUrl),
+      );
       if (!response.ok) {
         return null;
       }
       // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
-      return (await response.json()) as OAuthProtectedResourceMetadata;
+      return (await withAbortSignal(options?.signal, () =>
+        response.json(),
+      )) as OAuthProtectedResourceMetadata;
     } catch (error) {
+      options?.signal?.throwIfAborted();
       if (error instanceof OAuthSecurityError) {
         throw error;
       }
@@ -304,7 +319,11 @@ export class OAuthUtils {
    */
   static async fetchAuthorizationServerMetadata(
     authServerMetadataUrl: string,
-    options?: { allowLoopback?: boolean; allowPrivateNetwork?: boolean },
+    options?: {
+      allowLoopback?: boolean;
+      allowPrivateNetwork?: boolean;
+      signal?: AbortSignal;
+    },
   ): Promise<OAuthAuthorizationServerMetadata | null> {
     try {
       const validatedUrl = await validateOAuthEndpointUrl(
@@ -312,16 +331,24 @@ export class OAuthUtils {
         {
           allowLoopback: options?.allowLoopback,
           allowPrivateNetwork: options?.allowPrivateNetwork,
+          signal: options?.signal,
         },
       );
 
-      const response = await fetch(validatedUrl);
+      const response = await withAbortSignal(options?.signal, () =>
+        options?.signal
+          ? fetch(validatedUrl, { signal: options.signal })
+          : fetch(validatedUrl),
+      );
       if (!response.ok) {
         return null;
       }
       // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
-      return (await response.json()) as OAuthAuthorizationServerMetadata;
+      return (await withAbortSignal(options?.signal, () =>
+        response.json(),
+      )) as OAuthAuthorizationServerMetadata;
     } catch (error) {
+      options?.signal?.throwIfAborted();
       if (error instanceof OAuthSecurityError) {
         throw error;
       }
@@ -367,11 +394,16 @@ export class OAuthUtils {
    */
   static async discoverAuthorizationServerMetadata(
     authServerUrl: string,
-    options?: { allowLoopback?: boolean; allowPrivateNetwork?: boolean },
+    options?: {
+      allowLoopback?: boolean;
+      allowPrivateNetwork?: boolean;
+      signal?: AbortSignal;
+    },
   ): Promise<OAuthAuthorizationServerMetadata | null> {
     const validatedBaseUrl = await validateOAuthEndpointUrl(authServerUrl, {
       allowLoopback: options?.allowLoopback,
       allowPrivateNetwork: options?.allowPrivateNetwork,
+      signal: options?.signal,
     });
 
     const authServerUrlObj = new URL(validatedBaseUrl);
@@ -444,8 +476,9 @@ export class OAuthUtils {
    */
   static async discoverOAuthConfig(
     serverUrl: string,
-    options?: { allowPrivateNetwork?: boolean },
+    options?: { allowPrivateNetwork?: boolean; signal?: AbortSignal },
   ): Promise<MCPOAuthConfig | null> {
+    options?.signal?.throwIfAborted();
     try {
       const allowLoopback = isLoopbackUrl(serverUrl);
       const allowPrivateNetwork = options?.allowPrivateNetwork;
@@ -456,7 +489,12 @@ export class OAuthUtils {
       const wellKnownUrls = this.buildWellKnownUrls(serverUrl);
       let resourceMetadata = await this.fetchProtectedResourceMetadata(
         wellKnownUrls.protectedResource,
-        { allowLoopback, expectedOrigin, allowPrivateNetwork },
+        {
+          allowLoopback,
+          expectedOrigin,
+          allowPrivateNetwork,
+          signal: options?.signal,
+        },
       );
 
       // Fallback: If path-based discovery fails and we have a path, try root-based discovery
@@ -467,7 +505,12 @@ export class OAuthUtils {
           const rootBasedUrls = this.buildWellKnownUrls(serverUrl, true);
           resourceMetadata = await this.fetchProtectedResourceMetadata(
             rootBasedUrls.protectedResource,
-            { allowLoopback, expectedOrigin, allowPrivateNetwork },
+            {
+              allowLoopback,
+              expectedOrigin,
+              allowPrivateNetwork,
+              signal: options?.signal,
+            },
           );
         }
       }
@@ -491,6 +534,7 @@ export class OAuthUtils {
 
       const authServerDiscoveryOptions = {
         allowLoopback,
+        signal: options?.signal,
         ...(allowPrivateNetwork !== undefined ? { allowPrivateNetwork } : {}),
       };
 
@@ -535,6 +579,7 @@ export class OAuthUtils {
 
       return null;
     } catch (error) {
+      options?.signal?.throwIfAborted();
       if (
         error instanceof ResourceMismatchError ||
         error instanceof OAuthSecurityError
@@ -573,8 +618,9 @@ export class OAuthUtils {
   static async discoverOAuthFromWWWAuthenticate(
     wwwAuthenticate: string,
     mcpServerUrl?: string,
-    options?: { allowPrivateNetwork?: boolean },
+    options?: { allowPrivateNetwork?: boolean; signal?: AbortSignal },
   ): Promise<MCPOAuthConfig | null> {
+    options?.signal?.throwIfAborted();
     const resourceMetadataUri =
       this.parseWWWAuthenticateHeader(wwwAuthenticate);
     if (!resourceMetadataUri) {
@@ -595,6 +641,7 @@ export class OAuthUtils {
         allowRelative: true,
         baseUri: mcpServerUrl,
         allowPrivateNetwork,
+        signal: options?.signal,
       },
     );
 
@@ -604,6 +651,7 @@ export class OAuthUtils {
         allowLoopback,
         expectedOrigin,
         allowPrivateNetwork,
+        signal: options?.signal,
       },
     );
 
@@ -631,6 +679,7 @@ export class OAuthUtils {
       authServerUrl,
       {
         allowLoopback,
+        signal: options?.signal,
         ...(allowPrivateNetwork !== undefined ? { allowPrivateNetwork } : {}),
       },
     );

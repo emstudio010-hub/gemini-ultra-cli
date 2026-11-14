@@ -834,6 +834,16 @@ describe('oauth-flow', () => {
       }
     });
 
+    it('rejects both pending promises when cancelled before listening', async () => {
+      const server = startCallbackServer('early-cancel-state');
+      const reason = new Error('Cancelled before listening');
+      const port = server.port.catch((error: unknown) => error);
+      const response = server.response.catch((error: unknown) => error);
+      server.cancel?.(reason);
+      expect(await port).toBe(reason);
+      expect(await response).toBe(reason);
+    });
+
     it('should close the server and reject response when cancel is called', async () => {
       const server = startCallbackServer('cancel-state');
       await server.port;

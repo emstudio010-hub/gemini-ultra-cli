@@ -19,6 +19,7 @@ import {
 } from './oauth-utils.js';
 import { coreEvents } from '../utils/events.js';
 import { debugLogger } from '../utils/debugLogger.js';
+import { withAbortSignal } from '../utils/withAbortSignal.js';
 import { getConsentForOauth } from '../utils/authConsent.js';
 import {
   generatePKCEParams,
@@ -90,7 +91,10 @@ export interface OAuthClientRegistrationResponse {
 export class MCPOAuthProvider {
   private readonly tokenStorage: MCPOAuthTokenStorage;
 
-  constructor(tokenStorage: MCPOAuthTokenStorage = new MCPOAuthTokenStorage()) {
+  constructor(
+    tokenStorage: MCPOAuthTokenStorage = new MCPOAuthTokenStorage(),
+    private readonly signal?: AbortSignal,
+  ) {
     this.tokenStorage = tokenStorage;
   }
 
@@ -116,6 +120,7 @@ export class MCPOAuthProvider {
       {
         allowLoopback,
         allowPrivateNetwork: config.allowPrivateNetwork,
+        signal: this.signal,
       },
     );
 
@@ -130,23 +135,30 @@ export class MCPOAuthProvider {
       scope: config.scopes?.join(' ') || '',
     };
 
-    const response = await fetch(validatedRegistrationUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(registrationRequest),
-    });
+    const response = await withAbortSignal(this.signal, () =>
+      fetch(validatedRegistrationUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(registrationRequest),
+        ...(this.signal ? { signal: this.signal } : {}),
+      }),
+    );
 
     if (!response.ok) {
-      const errorText = await response.text();
+      const errorText = await withAbortSignal(this.signal, () =>
+        response.text(),
+      );
       throw new Error(
         `Client registration failed: ${response.status} ${response.statusText} - ${errorText}`,
       );
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
-    return (await response.json()) as OAuthClientRegistrationResponse;
+    return (await withAbortSignal(this.signal, () =>
+      response.json(),
+    )) as OAuthClientRegistrationResponse;
   }
 
   /**
@@ -157,7 +169,7 @@ export class MCPOAuthProvider {
    */
   private async discoverOAuthFromMCPServer(
     mcpServerUrl: string,
-    options?: { allowPrivateNetwork?: boolean },
+    options?: { allowPrivateNetwork?: boolean; signal?: AbortSignal },
   ): Promise<MCPOAuthConfig | null> {
     // Use the full URL with path preserved for OAuth discovery
     return OAuthUtils.discoverOAuthConfig(mcpServerUrl, options);
@@ -166,7 +178,7 @@ export class MCPOAuthProvider {
   private async discoverAuthServerMetadataForRegistration(
     issuer: string,
     mcpServerUrl?: string,
-    options?: { allowPrivateNetwork?: boolean },
+    options?: { allowPrivateNetwork?: boolean; signal?: AbortSignal },
   ): Promise<{
     issuerUrl: string;
     metadata: NonNullable<
@@ -229,6 +241,7 @@ export class MCPOAuthProvider {
         issuerCandidate,
         {
           allowLoopback,
+          signal: this.signal,
           ...(options?.allowPrivateNetwork !== undefined
             ? { allowPrivateNetwork: options.allowPrivateNetwork }
             : {}),
@@ -285,6 +298,7 @@ export class MCPOAuthProvider {
     tokenUrl: string,
     mcpServerUrl?: string,
   ): Promise<OAuthTokenResponse> {
+    this.signal?.throwIfAborted();
     if (!config.clientId) {
       throw new Error('Missing required clientId for token refresh');
     }
@@ -299,7 +313,7 @@ export class MCPOAuthProvider {
       refreshToken,
       tokenUrl,
       this.buildResourceParam(mcpServerUrl),
-      { allowPrivateNetwork: config.allowPrivateNetwork },
+      { allowPrivateNetwork: config.allowPrivateNetwork, signal: this.signal },
     );
   }
 
@@ -317,6 +331,7 @@ export class MCPOAuthProvider {
     config: MCPOAuthConfig,
     mcpServerUrl?: string,
   ): Promise<OAuthToken> {
+    this.signal?.throwIfAborted();
     // Helper function to display messages through handler or fallback to console.log
     const displayMessage = (message: string) => {
       coreEvents.emitFeedback('info', message);
@@ -333,10 +348,13 @@ export class MCPOAuthProvider {
           ? { Accept: 'text/event-stream' }
           : { Accept: 'application/json' };
 
-        const response = await fetch(mcpServerUrl, {
-          method: 'HEAD',
-          headers,
-        });
+        const response = await withAbortSignal(this.signal, () =>
+          fetch(mcpServerUrl, {
+            method: 'HEAD',
+            headers,
+            ...(this.signal ? { signal: this.signal } : {}),
+          }),
+        );
 
         if (response.status === 401 || response.status === 307) {
           const wwwAuthenticate = response.headers.get('www-authenticate');
@@ -346,7 +364,10 @@ export class MCPOAuthProvider {
               await OAuthUtils.discoverOAuthFromWWWAuthenticate(
                 wwwAuthenticate,
                 mcpServerUrl,
-                { allowPrivateNetwork: config.allowPrivateNetwork },
+                {
+                  allowPrivateNetwork: config.allowPrivateNetwork,
+                  signal: this.signal,
+                },
               );
             if (discoveredConfig) {
               // Merge discovered config with existing config, preserving clientId and clientSecret
@@ -367,6 +388,7 @@ export class MCPOAuthProvider {
           }
         }
       } catch (error) {
+        this.signal?.throwIfAborted();
         // Re-throw security validation errors
         if (
           error instanceof ResourceMismatchError ||
@@ -384,7 +406,10 @@ export class MCPOAuthProvider {
       if (!config.authorizationUrl) {
         const discoveredConfig = await this.discoverOAuthFromMCPServer(
           mcpServerUrl,
-          { allowPrivateNetwork: config.allowPrivateNetwork },
+          {
+            allowPrivateNetwork: config.allowPrivateNetwork,
+            signal: this.signal,
+          },
         );
         if (discoveredConfig) {
           // Merge discovered config with existing config, preserving clientId and clientSecret
@@ -421,16 +446,19 @@ export class MCPOAuthProvider {
       await validateOAuthEndpointUrl(config.authorizationUrl, {
         allowLoopback,
         allowPrivateNetwork: config.allowPrivateNetwork,
+        signal: this.signal,
       });
     }
     if (config.tokenUrl) {
       await validateOAuthEndpointUrl(config.tokenUrl, {
         allowLoopback,
         allowPrivateNetwork: config.allowPrivateNetwork,
+        signal: this.signal,
       });
     }
 
     // Generate PKCE parameters
+    this.signal?.throwIfAborted();
     const pkceParams = generatePKCEParams();
 
     // Determine preferred port from redirectUri if available
@@ -454,6 +482,11 @@ export class MCPOAuthProvider {
       requireIssInResponse,
     );
     callbackServer.response.catch(() => {});
+    const cancelCallback = () =>
+      callbackServer.cancel?.(
+        this.signal?.reason instanceof Error ? this.signal.reason : undefined,
+      );
+    this.signal?.addEventListener('abort', cancelCallback, { once: true });
 
     let code: string;
     let redirectPort: number;
@@ -463,7 +496,10 @@ export class MCPOAuthProvider {
     try {
       // Wait for server to start and get the allocated port
       // We need this port for client registration and auth URL building
-      redirectPort = await callbackServer.port;
+      redirectPort = await withAbortSignal(
+        this.signal,
+        () => callbackServer.port,
+      );
       debugLogger.debug(`Callback server listening on port ${redirectPort}`);
 
       // If no client ID is provided, try dynamic client registration
@@ -484,7 +520,10 @@ export class MCPOAuthProvider {
             await this.discoverAuthServerMetadataForRegistration(
               config.issuer,
               mcpServerUrl,
-              { allowPrivateNetwork: config.allowPrivateNetwork },
+              {
+                allowPrivateNetwork: config.allowPrivateNetwork,
+                signal: this.signal,
+              },
             );
           registrationUrl = authServerMetadata.registration_endpoint;
         }
@@ -497,6 +536,7 @@ export class MCPOAuthProvider {
             redirectPort,
             mcpServerUrl,
           );
+          this.signal?.throwIfAborted();
 
           config.clientId = clientRegistration.client_id;
           if (clientRegistration.client_secret) {
@@ -538,8 +578,11 @@ export class MCPOAuthProvider {
         resource,
       );
 
-      const userConsent = await getConsentForOauth(
-        `Authentication required for MCP Server: '${serverName}.'`,
+      const userConsent = await withAbortSignal(this.signal, () =>
+        getConsentForOauth(
+          `Authentication required for MCP Server: '${serverName}.'`,
+          ...(this.signal ? ([this.signal] as const) : ([] as const)),
+        ),
       );
       if (!userConsent) {
         throw new FatalCancellationError('Authentication cancelled by user.');
@@ -555,8 +598,9 @@ ${authUrl}
 
       // Open browser securely (callback server is already running)
       try {
-        await openBrowserSecurely(authUrl);
+        await withAbortSignal(this.signal, () => openBrowserSecurely(authUrl));
       } catch (error) {
+        this.signal?.throwIfAborted();
         debugLogger.warn(
           'Failed to open browser automatically:',
           getErrorMessage(error),
@@ -564,10 +608,15 @@ ${authUrl}
       }
 
       // Wait for callback
-      ({ code } = await callbackServer.response);
+      ({ code } = await withAbortSignal(
+        this.signal,
+        () => callbackServer.response,
+      ));
     } catch (error) {
       callbackServer.cancel?.(error instanceof Error ? error : undefined);
       throw error;
+    } finally {
+      this.signal?.removeEventListener('abort', cancelCallback);
     }
 
     debugLogger.debug(
@@ -581,7 +630,7 @@ ${authUrl}
       pkceParams.codeVerifier,
       redirectPort,
       resource,
-      { allowPrivateNetwork: config.allowPrivateNetwork },
+      { allowPrivateNetwork: config.allowPrivateNetwork, signal: this.signal },
     );
 
     // Convert to our token format
@@ -602,17 +651,22 @@ ${authUrl}
 
     // Save token
     try {
-      await this.tokenStorage.saveToken(
-        serverName,
-        token,
-        config.clientId,
-        config.tokenUrl,
-        mcpServerUrl,
+      await withAbortSignal(this.signal, () =>
+        this.tokenStorage.saveToken(
+          serverName,
+          token,
+          config.clientId,
+          config.tokenUrl,
+          mcpServerUrl,
+          ...(this.signal ? ([this.signal] as const) : ([] as const)),
+        ),
       );
       debugLogger.debug('✓ Authentication successful! Token saved.');
 
       // Verify token was saved
-      const savedToken = await this.tokenStorage.getCredentials(serverName);
+      const savedToken = await withAbortSignal(this.signal, () =>
+        this.tokenStorage.getCredentials(serverName),
+      );
       if (savedToken && savedToken.token && savedToken.token.accessToken) {
         // Avoid leaking token material; log a short SHA-256 fingerprint instead.
         const tokenFingerprint = crypto
@@ -629,6 +683,7 @@ ${authUrl}
         );
       }
     } catch (saveError) {
+      this.signal?.throwIfAborted();
       debugLogger.error('Failed to save auth token.', saveError);
       throw saveError;
     }
@@ -648,7 +703,9 @@ ${authUrl}
     config: MCPOAuthConfig,
   ): Promise<string | null> {
     debugLogger.debug(`Getting valid token for server: ${serverName}`);
-    const credentials = await this.tokenStorage.getCredentials(serverName);
+    const credentials = await withAbortSignal(this.signal, () =>
+      this.tokenStorage.getCredentials(serverName),
+    );
 
     if (!credentials) {
       debugLogger.debug(`No credentials found for server: ${serverName}`);
@@ -670,17 +727,21 @@ ${authUrl}
     // persisted during dynamic client registration when the static config
     // does not provide one.
     const clientId = config.clientId ?? credentials.clientId;
-    if (token.refreshToken && clientId && credentials.tokenUrl) {
+    const tokenUrl = credentials.tokenUrl;
+    const refreshToken = token.refreshToken;
+    if (refreshToken && clientId && tokenUrl) {
       try {
         debugLogger.log(
           `Refreshing expired token for MCP server: ${serverName}`,
         );
 
-        const newTokenResponse = await this.refreshAccessToken(
-          { ...config, clientId },
-          token.refreshToken,
-          credentials.tokenUrl,
-          credentials.mcpServerUrl,
+        const newTokenResponse = await withAbortSignal(this.signal, () =>
+          this.refreshAccessToken(
+            { ...config, clientId },
+            refreshToken,
+            tokenUrl,
+            credentials.mcpServerUrl,
+          ),
         );
 
         // Update stored token
@@ -695,23 +756,32 @@ ${authUrl}
           newToken.expiresAt = Date.now() + newTokenResponse.expires_in * 1000;
         }
 
-        await this.tokenStorage.saveToken(
-          serverName,
-          newToken,
-          clientId,
-          credentials.tokenUrl,
-          credentials.mcpServerUrl,
+        await withAbortSignal(this.signal, () =>
+          this.tokenStorage.saveToken(
+            serverName,
+            newToken,
+            clientId,
+            credentials.tokenUrl,
+            credentials.mcpServerUrl,
+            ...(this.signal ? ([this.signal] as const) : ([] as const)),
+          ),
         );
 
         return newToken.accessToken;
       } catch (error) {
+        this.signal?.throwIfAborted();
         coreEvents.emitFeedback(
           'error',
           'Failed to refresh auth token.',
           error,
         );
         // Remove invalid token
-        await this.tokenStorage.deleteCredentials(serverName);
+        await withAbortSignal(this.signal, () =>
+          this.tokenStorage.deleteCredentials(
+            serverName,
+            ...(this.signal ? ([this.signal] as const) : ([] as const)),
+          ),
+        );
       }
     }
 
@@ -727,20 +797,26 @@ ${authUrl}
     scope?: string;
     refreshToken?: string;
   } | null> {
-    const credentials = await this.tokenStorage.getCredentials(serverName);
+    const credentials = await withAbortSignal(this.signal, () =>
+      this.tokenStorage.getCredentials(serverName),
+    );
     if (!credentials) return null;
 
     let current = credentials.token;
 
     if (this.tokenStorage.isTokenExpired(current)) {
       const clientId = config.clientId ?? credentials.clientId;
-      if (current.refreshToken && clientId && credentials.tokenUrl) {
+      const tokenUrl = credentials.tokenUrl;
+      const refreshToken = current.refreshToken;
+      if (refreshToken && clientId && tokenUrl) {
         try {
-          const newTokenResponse = await this.refreshAccessToken(
-            { ...config, clientId },
-            current.refreshToken,
-            credentials.tokenUrl,
-            credentials.mcpServerUrl,
+          const newTokenResponse = await withAbortSignal(this.signal, () =>
+            this.refreshAccessToken(
+              { ...config, clientId },
+              refreshToken,
+              tokenUrl,
+              credentials.mcpServerUrl,
+            ),
           );
 
           const refreshed: OAuthToken = {
@@ -756,22 +832,31 @@ ${authUrl}
               Date.now() + newTokenResponse.expires_in * 1000;
           }
 
-          await this.tokenStorage.saveToken(
-            serverName,
-            refreshed,
-            clientId,
-            credentials.tokenUrl,
-            credentials.mcpServerUrl,
+          await withAbortSignal(this.signal, () =>
+            this.tokenStorage.saveToken(
+              serverName,
+              refreshed,
+              clientId,
+              credentials.tokenUrl,
+              credentials.mcpServerUrl,
+              ...(this.signal ? ([this.signal] as const) : ([] as const)),
+            ),
           );
 
           current = refreshed;
         } catch (error) {
+          this.signal?.throwIfAborted();
           coreEvents.emitFeedback(
             'error',
             'Failed to refresh auth token.',
             error,
           );
-          await this.tokenStorage.deleteCredentials(serverName);
+          await withAbortSignal(this.signal, () =>
+            this.tokenStorage.deleteCredentials(
+              serverName,
+              ...(this.signal ? ([this.signal] as const) : ([] as const)),
+            ),
+          );
           return null;
         }
       } else {

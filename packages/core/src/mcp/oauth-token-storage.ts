@@ -9,6 +9,7 @@ import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { Storage } from '../config/storage.js';
 import { getErrorMessage } from '../utils/errors.js';
+import { withAbortSignal } from '../utils/withAbortSignal.js';
 import type {
   OAuthToken,
   OAuthCredentials,
@@ -99,11 +100,17 @@ export class MCPOAuthTokenStorage implements TokenStorage {
     return Array.from(tokens.keys());
   }
 
-  async setCredentials(credentials: OAuthCredentials): Promise<void> {
+  async setCredentials(
+    credentials: OAuthCredentials,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    signal?.throwIfAborted();
     if (this.useEncryptedFile) {
       return this.hybridTokenStorage.setCredentials(credentials);
     }
-    const tokens = await this.getAllCredentials();
+    const tokens = await withAbortSignal(signal, () =>
+      this.getAllCredentials(),
+    );
     tokens.set(credentials.serverName, credentials);
 
     const tokenArray = Array.from(tokens.values());
@@ -111,12 +118,14 @@ export class MCPOAuthTokenStorage implements TokenStorage {
 
     try {
       await fs.mkdir(path.dirname(tokenFile), { recursive: true });
+      signal?.throwIfAborted();
       await fs.writeFile(
         tokenFile,
         JSON.stringify(tokenArray, null, 2),
         { mode: 0o600 }, // Restrict file permissions
       );
     } catch (error) {
+      signal?.throwIfAborted();
       coreEvents.emitFeedback(
         'error',
         `Failed to save MCP OAuth token: ${getErrorMessage(error)}`,
@@ -141,10 +150,13 @@ export class MCPOAuthTokenStorage implements TokenStorage {
     clientId?: string,
     tokenUrl?: string,
     mcpServerUrl?: string,
+    signal?: AbortSignal,
   ): Promise<void> {
-    await this.ensureConfigDir();
+    await withAbortSignal(signal, () => this.ensureConfigDir());
 
-    const existing = await this.getCredentials(serverName);
+    const existing = await withAbortSignal(signal, () =>
+      this.getCredentials(serverName),
+    );
     const mergedRefreshToken =
       token.refreshToken || existing?.token.refreshToken;
 
@@ -165,7 +177,7 @@ export class MCPOAuthTokenStorage implements TokenStorage {
     if (this.useEncryptedFile) {
       return this.hybridTokenStorage.setCredentials(credential);
     }
-    await this.setCredentials(credential);
+    await this.setCredentials(credential, signal);
   }
 
   /**
@@ -187,11 +199,17 @@ export class MCPOAuthTokenStorage implements TokenStorage {
    *
    * @param serverName The name of the MCP server
    */
-  async deleteCredentials(serverName: string): Promise<void> {
+  async deleteCredentials(
+    serverName: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    signal?.throwIfAborted();
     if (this.useEncryptedFile) {
       return this.hybridTokenStorage.deleteCredentials(serverName);
     }
-    const tokens = await this.getAllCredentials();
+    const tokens = await withAbortSignal(signal, () =>
+      this.getAllCredentials(),
+    );
 
     if (tokens.delete(serverName)) {
       const tokenArray = Array.from(tokens.values());

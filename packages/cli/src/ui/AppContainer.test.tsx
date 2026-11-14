@@ -3207,6 +3207,51 @@ describe('AppContainer State Management', () => {
       unmount!();
     });
 
+    it('dismisses cancelled consent without affecting a newer request', async () => {
+      let unmount!: () => void;
+      await act(async () => {
+        ({ unmount } = await renderAppContainer());
+      });
+      await waitFor(() => expect(capturedUIState).toBeTruthy());
+      const handler = mockCoreEvents.on.mock.calls.find(
+        (call: unknown[]) => call[0] === CoreEvent.ConsentRequest,
+      )?.[1];
+      const old = new AbortController();
+      const current = new AbortController();
+      const oldConfirm = vi.fn();
+      const newConfirm = vi.fn();
+      await act(() =>
+        handler({ prompt: 'Old', onConfirm: oldConfirm, signal: old.signal }),
+      );
+      const staleRequest = capturedUIState.authConsentRequest;
+      await act(() =>
+        handler({
+          prompt: 'Current',
+          onConfirm: newConfirm,
+          signal: current.signal,
+        }),
+      );
+      act(() => old.abort());
+      expect(capturedUIState.authConsentRequest?.prompt).toBe('Current');
+      act(() => staleRequest?.onConfirm(true));
+      expect(oldConfirm).not.toHaveBeenCalled();
+      expect(capturedUIState.authConsentRequest?.prompt).toBe('Current');
+      const cancelledRequest = capturedUIState.authConsentRequest;
+      act(() => current.abort());
+      expect(capturedUIState.authConsentRequest).toBeNull();
+      act(() => cancelledRequest?.onConfirm(true));
+      expect(newConfirm).not.toHaveBeenCalled();
+      await act(() =>
+        handler({
+          prompt: 'Already cancelled',
+          onConfirm: newConfirm,
+          signal: current.signal,
+        }),
+      );
+      expect(capturedUIState.authConsentRequest).toBeNull();
+      unmount();
+    });
+
     it('unsubscribes from ConsentRequest on unmount', async () => {
       let unmount: () => void;
       await act(async () => {
