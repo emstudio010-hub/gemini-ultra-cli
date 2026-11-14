@@ -34,10 +34,35 @@ import {
 } from './types.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { sanitizeErrorMessage } from '../utils/agent-sanitization-utils.js';
+import { debugLogger } from '../utils/debugLogger.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/** Observability must not change execution outcomes or prevent settlement. */
+function isolateObserver<T>(
+  callback: (value: T) => void,
+  onFailure: () => void,
+): (value: T) => void {
+  let failed = false;
+  const fail = () => {
+    if (failed) return;
+    failed = true;
+    onFailure();
+  };
+  return (value) => {
+    if (failed) return;
+    try {
+      // Async functions are assignable to void callbacks. Observe rejections
+      // without waiting on UI/telemetry work in the agent's execution loop.
+      const pending: unknown = callback(value);
+      if (pending !== undefined) void Promise.resolve(pending).catch(fail);
+    } catch {
+      fail();
+    }
+  };
+}
 
 function isAbortLikeError(err: unknown): boolean {
   return err instanceof Error && err.name === 'AbortError';
@@ -69,7 +94,10 @@ function mapTerminateMode(mode: AgentTerminateMode): StreamEndReason {
 
 class LocalSubagentProtocol implements AgentProtocol {
   private _events: AgentEvent[] = [];
-  private _subscribers = new Set<(event: AgentEvent) => void>();
+  private _subscribers = new Map<
+    (event: AgentEvent) => void,
+    (event: AgentEvent) => void
+  >();
   private _streamId: string = randomUUID();
   private _eventCounter = 0;
   private _agentStartEmitted = false;
@@ -93,7 +121,14 @@ class LocalSubagentProtocol implements AgentProtocol {
     private readonly _rawActivityCallback?: (
       activity: SubagentActivityEvent,
     ) => void,
-  ) {}
+  ) {
+    if (_rawActivityCallback)
+      this._rawActivityCallback = isolateObserver(_rawActivityCallback, () => {
+        debugLogger.warn(
+          'Local subagent activity observer failed and was detached.',
+        );
+      });
+  }
 
   // ---------------------------------------------------------------------------
   // AgentProtocol interface
@@ -104,9 +139,19 @@ class LocalSubagentProtocol implements AgentProtocol {
   }
 
   subscribe(callback: (event: AgentEvent) => void): Unsubscribe {
-    this._subscribers.add(callback);
+    const observer =
+      this._subscribers.get(callback) ??
+      isolateObserver(callback, () => {
+        if (this._subscribers.get(callback) === observer)
+          this._subscribers.delete(callback);
+        debugLogger.warn(
+          'Local subagent event observer failed and was detached.',
+        );
+      });
+    this._subscribers.set(callback, observer);
     return () => {
-      this._subscribers.delete(callback);
+      if (this._subscribers.get(callback) === observer)
+        this._subscribers.delete(callback);
     };
   }
 
@@ -329,7 +374,7 @@ class LocalSubagentProtocol implements AgentProtocol {
 
   private _emit(events: AgentEvent[]): void {
     if (events.length === 0) return;
-    const subscribers = [...this._subscribers];
+    const subscribers = [...this._subscribers.values()];
     for (const event of events) {
       this._events.push(event);
       if (event.type === 'agent_end') {
