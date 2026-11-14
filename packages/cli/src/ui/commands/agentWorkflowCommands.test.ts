@@ -52,6 +52,60 @@ function commandContext() {
   return { config, context };
 }
 
+it('retains original constraints and every saved acceptance criterion across interview resume and finish', async () => {
+  const { config, context } = commandContext();
+  const objective =
+    'Keep the original project data; support offline use; do not install extra tools.';
+  await grillMeCommand.action!(context, objective);
+  const record = latestAgentWorkflow(root, 'grill-me')!;
+  record.brief = 'Improve the local workflow.';
+  record.milestones = [
+    {
+      title: 'Read existing data',
+      acceptance: 'Retain the source bytes and preserve custom fields.',
+      completed: false,
+    },
+    {
+      title: 'Write the report',
+      acceptance: 'Describe missing tools without downloading them.',
+      completed: false,
+    },
+  ];
+  record.phase = 'ready';
+  saveAgentWorkflow(root, record);
+  const resume = await grillMeCommand.subCommands!.find(
+    (item) => item.name === 'resume',
+  )!.action!(context, record.id);
+  expect(resume).toMatchObject({ type: 'submit_prompt' });
+  if (resume?.type !== 'submit_prompt')
+    throw new Error('Expected interview prompt');
+  expect(resume.content).toContain(objective);
+  for (const milestone of record.milestones) {
+    expect(resume.content).toContain(milestone.title);
+    expect(resume.content).toContain(milestone.acceptance);
+  }
+  expect(config.getApprovalMode()).toBe(ApprovalMode.PLAN);
+  const resumed = readAgentWorkflow(root, record.id);
+  expect(resumed.milestones).toEqual(record.milestones);
+  resumed.phase = 'ready';
+  saveAgentWorkflow(root, resumed);
+  const finished = await grillMeCommand.subCommands!.find(
+    (item) => item.name === 'finish',
+  )!.action!(context, '');
+  expect(finished).toMatchObject({ type: 'submit_prompt' });
+  if (finished?.type !== 'submit_prompt') throw new Error('Expected handoff');
+  expect(finished.content).toContain(objective);
+  expect(finished.content).toContain(record.brief);
+  for (const milestone of record.milestones)
+    expect(finished.content).toContain(milestone.acceptance);
+  expect(readAgentWorkflow(root, record.id)).toMatchObject({
+    phase: 'completed',
+    objective,
+    brief: record.brief,
+  });
+  expect(config.getApprovalMode()).toBe(ApprovalMode.DEFAULT);
+});
+
 it.each([
   { command: teamworkCommand, operation: 'approve' },
   { command: teamworkCommand, operation: 'resume' },
