@@ -10,7 +10,7 @@ import {
   type IncomingMessage,
   type ServerResponse,
 } from 'node:http';
-import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import {
   ApprovalMode,
@@ -35,6 +35,7 @@ import {
   readAgentTaskDetails,
   agentTaskSelectionSchema,
   type Config,
+  type ExternalProviderProfile,
 } from '@google/gemini-cli-core';
 import { registerCleanup } from '../utils/cleanup.js';
 
@@ -53,6 +54,12 @@ let address = '';
 let token = '';
 let submitting = false;
 let preflight: ReturnType<typeof runDrillPreflight> | undefined;
+
+function providerRevision(provider: ExternalProviderProfile): string {
+  return createHmac('sha256', token)
+    .update(JSON.stringify(provider))
+    .digest('hex');
+}
 
 export function connectDrillSession(next: DrillSession): () => void {
   session = next;
@@ -204,31 +211,31 @@ async function handleRequest(
       grant: readDrillGrant(),
       activeProviderId: mgr.getActiveProvider()?.id || '',
       activeModel: mgr.getActiveModel() || config.getModel(),
-      providers: mgr
-        .listProviders()
-        .map(
-          ({
-            id,
-            name,
-            models,
-            defaultModel,
-            baseUrl,
-            protocol,
-            apiKey,
-            maxOutputTokens,
-            contextWindow,
-          }) => ({
-            id,
-            name,
-            models,
-            defaultModel,
-            baseUrl,
-            protocol,
-            maxOutputTokens,
-            contextWindow,
-            hasKey: Boolean(apiKey),
-          }),
-        ),
+      providers: mgr.listProviders().map((provider) => {
+        const {
+          id,
+          name,
+          models,
+          defaultModel,
+          baseUrl,
+          protocol,
+          apiKey,
+          maxOutputTokens,
+          contextWindow,
+        } = provider;
+        return {
+          id,
+          name,
+          models,
+          defaultModel,
+          baseUrl,
+          protocol,
+          maxOutputTokens,
+          contextWindow,
+          hasKey: Boolean(apiKey),
+          revision: providerRevision(provider),
+        };
+      }),
       facts: store.queryFacts(config.getSessionId()).slice(0, 50),
       patches: store.queryPatchTransactions(config.getSessionId()),
     });
@@ -371,6 +378,10 @@ async function handleRequest(
     const parsed = z
       .object({
         id: z.string().optional(),
+        revision: z
+          .string()
+          .regex(/^[a-f0-9]{64}$/)
+          .optional(),
         name: z.string().trim().min(1).max(64),
         baseUrl: z.string().url(),
         apiKey: z.string(),
@@ -397,7 +408,7 @@ async function handleRequest(
         400,
         '请检查名称、端点、模型和 Token 设置（必须为正整数）。 / Check the name, endpoint, models and positive integer token settings.',
       );
-    const { maxOutputTokens, contextWindow, ...input } = parsed.data;
+    const { maxOutputTokens, contextWindow, revision, ...input } = parsed.data;
     const existing = input.id ? mgr.getProviderById(input.id) : undefined;
     if (input.id && !existing)
       throw new RequestError(404, 'Provider no longer exists.');
@@ -429,6 +440,14 @@ async function handleRequest(
       }
       return;
     }
+    if (existing && revision !== providerRevision(existing))
+      throw new RequestError(
+        409,
+        I18nManager.getInstance().t(
+          '供应商已在其他界面更新。当前输入保留，请重新选择供应商后再编辑保存。',
+          'Provider changed in another view. Input retained; select the provider again before editing and saving.',
+        ),
+      );
     if (!input.models.length)
       throw new RequestError(
         400,
@@ -452,6 +471,7 @@ async function handleRequest(
     });
     reply(res, 200, {
       id: provider.id,
+      revision: providerRevision(provider),
       message: I18nManager.getInstance().t(
         '供应商已保存，请在模型选择器中激活。',
         'Provider saved. Activate it with the model selector.',

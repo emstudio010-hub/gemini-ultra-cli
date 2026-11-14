@@ -247,6 +247,12 @@ Other observers continue receiving events, and the agent keeps its original
 completion or failure result. Asynchronous observer work is not awaited by the
 agent loop.
 
+Drill Cockpit provider edits carry the revision captured when you select the
+provider. If another view changes that provider, saving returns a conflict and
+keeps your draft. Select the provider again to load its current values before
+editing. Background status refreshes do not update an open draft's revision. New
+providers do not require a revision; editing an existing provider does.
+
 Language changes are saved before UI listeners are notified. A failing listener
 is detached without turning a successful save into a failure; other listeners
 still receive the update. If saving the preference fails, the previous language
