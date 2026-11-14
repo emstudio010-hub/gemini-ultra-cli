@@ -923,11 +923,15 @@ export class SwarmEngine {
       throw new Error(
         'Members are still working, queued or paused. Resolve them before completion.',
       );
-    const verifier = swarm.members.find((member) => {
+    const auditors = swarm.members.filter(
+      (member) =>
+        member.agent === 'workflow-auditor' && member.state !== 'killed',
+    );
+    const verifier = auditors[0];
+    const allAccepted = auditors.every((member) => {
       if (
-        member.agent !== 'workflow-auditor' ||
-        member.state === 'killed' ||
-        member.verifiedRevision !== swarm.revision
+        member.verifiedRevision !== swarm.revision ||
+        member.verifiedTree !== verifier?.verifiedTree
       )
         return false;
       // Old saved approval markers cannot authorize a verdict that no longer
@@ -944,9 +948,9 @@ export class SwarmEngine {
         reviewFilesUnchanged(directory, member.reviewedFiles)
       );
     });
-    if (!verifier)
+    if (!verifier || !allAccepted)
       throw new Error(
-        'A current independent verifier verdict and unchanged reviewed files are required before finishing.',
+        'A current independent verifier verdict and unchanged reviewed files are required from every active auditor before finishing.',
       );
     for (const member of swarm.members)
       readSwarmResultText(this.root, this.id, member);
