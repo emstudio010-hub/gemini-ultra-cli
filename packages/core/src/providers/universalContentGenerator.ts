@@ -46,6 +46,7 @@ import {
 } from './providerReasoning.js';
 import {
   chatSchema,
+  selectChatChoice,
   responsesSchema,
   anthropicSchema,
   geminiSchema,
@@ -610,7 +611,7 @@ export class UniversalContentGenerator implements ContentGenerator {
     const data = parseProviderValue(raw, chatSchema, 'OpenAI');
     if (data.error)
       throw new Error(`OpenAI Provider error: ${JSON.stringify(data.error)}`);
-    const choice = data.choices?.[0];
+    const choice = selectChatChoice(data.choices);
     if (!choice?.message)
       throw new Error('OpenAI: response contains no message.');
     if (choice?.finish_reason === 'length')
@@ -725,6 +726,7 @@ export class UniversalContentGenerator implements ContentGenerator {
     >();
     const toolCallIndices = new Map<string, number>();
     let completed = false;
+    let sawPrimaryChoice = false;
     let usage: GenerateContentResponseUsageMetadata | undefined;
     for await (const { data: dataStr } of this.readSse(
       res,
@@ -739,12 +741,15 @@ export class UniversalContentGenerator implements ContentGenerator {
       if (chunk.error)
         throw new Error(`OpenAI stream error: ${JSON.stringify(chunk.error)}`);
       usage = providerUsage(chunk.usage, 'openai-chat') ?? usage;
-      const stopReason = chunk.choices?.[0]?.finish_reason;
+      const choice = selectChatChoice(chunk.choices);
+      if (!choice) continue;
+      sawPrimaryChoice = true;
+      const stopReason = choice.finish_reason;
       if (stopReason && !['stop', 'tool_calls'].includes(stopReason)) {
         // Some endpoints include the last visible text in the terminating
         // frame. Preserve that unaccepted draft before surfacing the failure;
         // never parse or emit tool calls from a truncated response.
-        const text = chunk.choices?.[0]?.delta?.content;
+        const text = choice.delta?.content;
         if (text) yield this.buildGeminiResponse([{ text }], undefined, false);
         throw new Error(
           stopReason === 'length'
@@ -752,8 +757,8 @@ export class UniversalContentGenerator implements ContentGenerator {
             : 'OpenAI response ended abnormally; response is incomplete.',
         );
       }
-      if (chunk.choices?.[0]?.finish_reason) completed = true;
-      const delta = chunk.choices?.[0]?.delta;
+      if (choice.finish_reason) completed = true;
+      const delta = choice.delta;
       if (!delta) {
         continue;
       }
@@ -827,6 +832,8 @@ export class UniversalContentGenerator implements ContentGenerator {
       }
     }
 
+    if (!sawPrimaryChoice)
+      throw new Error('OpenAI stream contains no primary candidate.');
     if (!completed)
       throw new Error(
         'OpenAI stream ended before completion; response may be incomplete.',

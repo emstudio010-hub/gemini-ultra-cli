@@ -219,6 +219,14 @@ identical final arguments remain valid. A declared call may still complete from
 argument deltas when an endpoint omits the separate final-arguments event. These
 checks do not repair malformed JSON.
 
+For OpenAI Chat responses, the adapter selects candidate index `0`, including
+when candidates arrive out of order or in separate stream frames. Other
+candidates do not contribute text, reasoning, tool arguments, or stop reasons. A
+single choice may omit its index for compatible endpoints. Multiple choices with
+missing or repeated indices are rejected, and a response containing only other
+candidate indices cannot complete successfully. Empty usage-only stream frames
+remain supported.
+
 ## Existing GitHub issues similar to yours or creating new issues
 
 If you encounter an issue that was not covered here in this _Troubleshooting

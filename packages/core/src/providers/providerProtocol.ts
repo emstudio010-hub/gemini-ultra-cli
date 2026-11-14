@@ -30,6 +30,7 @@ export const chatSchema = z.object({
   choices: z
     .array(
       z.object({
+        index: z.number().int().nonnegative().optional(),
         finish_reason: text,
         message: message.optional(),
         delta: message.optional(),
@@ -37,6 +38,22 @@ export const chatSchema = z.object({
     )
     .optional(),
 });
+
+/** Select the requested default candidate without mixing alternative streams. */
+export function selectChatChoice<T extends { index?: number }>(
+  choices?: T[],
+): T | undefined {
+  if (!choices?.length) return undefined;
+  // Some compatible endpoints omit the index when only one choice is sent.
+  if (choices.length === 1 && choices[0].index === undefined) return choices[0];
+  const indices = new Set<number>();
+  for (const choice of choices) {
+    if (choice.index === undefined || indices.has(choice.index))
+      throw new Error('OpenAI: response contains ambiguous candidate indices.');
+    indices.add(choice.index);
+  }
+  return choices.find((choice) => choice.index === 0);
+}
 export const responsesSchema = z.object({
   type: z.string(),
   delta: z.string().optional(),
