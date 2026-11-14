@@ -378,6 +378,64 @@ it.each(['before-scope', 'during-scope'] as const)(
   },
 );
 
+it.each(['generate', 'stream', 'tokens', 'capacity'] as const)(
+  'keeps a removed scoped provider local during %s without breaking optional metadata or spending budget',
+  async (operation) => {
+    const record = createAgentWorkflow(
+      root,
+      'boost',
+      'Preserve removed routes',
+      'default',
+    );
+    const budgetFile = path.join(
+      root,
+      'agent-workflows',
+      `${record.id}.budget.json`,
+    );
+    const budgetBefore = fs.readFileSync(budgetFile);
+    const routed = new UniversalContentGenerator(fallback, {
+      storage: { getProjectTempDir: () => root },
+    } as unknown as Config);
+    const used: string[][] = [];
+    await withAgentModel(
+      'research:research-model',
+      async () => {
+        ProviderManager.getInstance().removeProviderById('research');
+        const providerBefore = fs.readFileSync(providersFile);
+        const input = {
+          model: 'main-model',
+          contents: 'Keep this request local',
+        };
+        const run = async (): Promise<unknown> =>
+          operation === 'generate'
+            ? routed.generateContent(input, 'fixture', LlmRole.SUBAGENT)
+            : operation === 'stream'
+              ? routed.generateContentStream(input, 'fixture', LlmRole.SUBAGENT)
+              : operation === 'tokens'
+                ? routed.countTokens(input)
+                : routed.getModelContextWindow(input.model);
+        if (operation === 'capacity')
+          await expect(run()).resolves.toBeUndefined();
+        else
+          await expect(run()).rejects.toMatchObject({
+            name: 'ProviderRouteError',
+            message: expect.stringContaining('provider is unavailable'),
+          });
+        expect(fs.readFileSync(providersFile)).toEqual(providerBefore);
+      },
+      (models) => used.push(models),
+    );
+    expect(used).toEqual([[]]);
+    expect(currentAgentModel()).toBeUndefined();
+    expect(fs.readFileSync(budgetFile)).toEqual(budgetBefore);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(fallback.generateContent).not.toHaveBeenCalled();
+    expect(fallback.generateContentStream).not.toHaveBeenCalled();
+    expect(fallback.countTokens).not.toHaveBeenCalled();
+    expect(fallback.getModelContextWindow).not.toHaveBeenCalled();
+  },
+);
+
 it('isolates parallel member routes and capacity lookup without changing the provider file or main route', async () => {
   const original = fs.readFileSync(providersFile, 'utf8');
   const used: string[][] = [];

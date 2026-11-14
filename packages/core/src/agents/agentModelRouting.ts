@@ -6,6 +6,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { z } from 'zod';
 import { ProviderManager } from '../providers/providerManager.js';
+import { ProviderRouteError } from '../providers/providerRouteError.js';
 
 export const workflowRoleSchema = z.enum([
   'researcher',
@@ -54,7 +55,7 @@ export function normalizeAgentModel(value: string): string | undefined {
     spec.slice(0, separator),
   );
   if (!provider || !spec.slice(separator + 1))
-    throw new Error(
+    throw new ProviderRouteError(
       'Selected member provider is unavailable. Configure it locally or choose inherit.',
     );
   return `${provider.id}:${spec.slice(separator + 1)}`;

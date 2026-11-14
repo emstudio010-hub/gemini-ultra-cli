@@ -1874,3 +1874,8 @@ WI-236/E-527至528/F-194：API正文等待前捕获current，正文等待期间�
 ## 2026-11-15 演练台提交占用的会话归属与失败释放
 
 WI-237/E-529至530/F-195：全局submitting使旧Config挂起阻塞新Config，submit同步throw在finally前逃出而永久busy；现WeakMap按Config持本次占用身份，状态/POST仅查自己，Promise统一捕获sync/async失败并终端反馈，finally仅清本次身份。同Config重连/控制台stop-start保留真实pending，不擅自取消或重试，202仅接纳。baseline新4中2行为失败/2正常控制，修后4+旧Admission4=8不同过，CLI编译/双TS零warninglint/纯格式修后3文件check/diff0，无全量冒烟。Windows实际双Config/编译Cockpit/native HTTP：A旧pending不挡B，A晚结束不解B、重复409；同Config重连与服务重启仍锁直到结束；sync/async失败各反馈一次且释放，最终正常控制可接纳。20条件true/32759ms/19loopback API（含状态）/首次退出0/0模型外部fetch付费旧任务重跑；回调仅模拟UI任务收件不证明LLM协作质量。个人文件/四旧失败SHA与false/ULQ凭据删除/全局83保全true，三份同SHA，goal active，无打包重装升版CI子代理。详见docs/ultra-cockpit-submission-handoff.md。
+
+
+## 2026-11-15 成员供应商失效的本地诊断与显式恢复
+
+WI-238/E-531至532/F-196：有效成员scope内供应商被删除后，normalizeAgentModel原普通Error会打断可选容量读取，并绕开已有本地路由错误分类；现仅缺失供应商改抛ProviderRouteError，容量unknown、生成/流/计数本地严格拒绝，不切供应商/重试/花请求预算，失败turn仍累计。baseline新增4实际失败，修后4+旧19共23相关通过，core编译/双TS零warninglint/纯格式后check与diff0，无CLI重编/全量冒烟。Windows编译Swarm与Provider原生loopback：删路由0请求且失败暂停，同ID恢复后显式唤醒research成功，累计失败和模型记录保留，父仍primary。首导入dist路径错误保全；首完整结果18/19true、7382ms/2HTTP，错误要求失败result为空而非保留诊断，passed=false精确SHA b7a8d4ac61a7965d2096487572e78a3f4896ac6e2a5346706938b6e2d3568f18保留，assert后Node UV句柄断言异常退出亦保留未归因。仅补失败诊断/归档6条件true/6818ms/0HTTP/退出0，不重跑恢复父请求；严格组合证据passed=true不改原false。runner可控，不证明Local执行器或LLM复杂质量；0外部付费旧任务重跑。个人文件/四真实失败SHA与false/临时凭据删除/全局83保全true，三份交接同SHA、goal active，不打包重装升版CI子代理。持续四目标：启动加载、双语/演练台/配置、真实协作恢复和独立验收、红队逆向可移植性；源码与Windows先，功能收敛后最后统一包。详见docs/ultra-agent-route-removal-handoff.md。
