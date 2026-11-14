@@ -1977,3 +1977,8 @@ WI-254/E-563至564/F-212：完整loadCliConfig原等待ExtensionManager.loadExte
 ## 2026-11-15 扩展发现首屏 Windows 链
 
 WI-255/E-565至566/F-213：编译dist的真实loadCliConfig在隔离profile/workspace中接入不合作ExtensionManager.loadExtensions fixture，约5600ms后返回Config并使用SimpleExtensionLoader，迟到promise被观察；四条件全true、0模型/外部请求。源码3项扩展边界、CLI编译/lint/格式通过；整机ConPTY认证冷启动仍单列，不冒称完成。个人配置/四旧失败/ULQ凭据/全局83保全，三份同SHA，goal active。下一查认证/设置等待。详见docs/ultra-extension-startup-windows-handoff.md。
+
+
+## 2026-11-15 模型目录请求生命周期接入
+
+WI-256/E-567/F-214：ProviderManager目录已有8秒/2MiB/AbortSignal，但CLI /provider add未传Agent Config lifecycle；现传可选signal，关闭会话不再接纳迟到列表，旧无Config上下文兼容。CLI tsc/lint/格式及既有目录取消链通过，无真实供应商/个人配置改动。goal active，详见docs/ultra-provider-catalog-cancellation-handoff.md。

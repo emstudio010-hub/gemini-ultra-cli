@@ -134,6 +134,8 @@ export const providerCommand: SlashCommand = {
             const fetched = await mgr.fetchModelsFromEndpoint({
               baseUrl,
               apiKey,
+              signal:
+                context.services.agentContext?.config.getLifecycleSignal?.(),
             });
             models = fetched.models;
             if (!models.length) {
