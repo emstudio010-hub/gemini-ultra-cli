@@ -1864,3 +1864,8 @@ WI-234/E-523至524/F-192：用户重建active goal，保留源码/Windows优先�
 ## 2026-11-15 演练台供应商草稿版本与冲突保护
 
 WI-235/E-525至526/F-193：网页编辑未比版本会覆盖终端或其他标签更新，状态轮询select丢已删除id又可能误创建。现完整provider按当前token作HMAC版本，状态API不出key/header，已有id保存要求匹配revision（缺/旧409、草稿保留），当前保存返新版本、其他provider修改不误冲突、key变化亦使旧版本失效。页面选择时捕获草稿id/revision，轮询不自动升级，删除导致DOM空仍沿原id404不重建，成功后才采纳新身份/版本、显式新增清空。新3HTTP场景baseline3失败、修后3过，CLI编译/3TS零warninglint/文档纯换行后4文件格式diff0，无全量冒烟。Windows真实Config/Cockpit HTTP/ProviderManager及编译输出页面原处理段VM最小DOM：旧/缺/key改版本拒绝不写、当前及新增可存、默认/活跃模型/key保持、无关provider不冲突、删除不重建，页面草稿版本归属/冲突保留/成功刷新通过。17条件true/6463ms/10loopback API/首次退出0，0模型外部付费旧任务重跑；非渲染浏览器或完整质量验收。个人文件/四旧失败SHA与false/ULQ凭据删除/全局83保全true，三份同SHA，goal active，无打包重装升版CI子代理。详见docs/ultra-cockpit-provider-revision-handoff.md。
+
+
+## 2026-11-15 演练台POST完整正文后的会话接纳复核
+
+WI-236/E-527至528/F-194：API正文等待前捕获current，正文等待期间会话busy/断开/更换后仍用旧isReady/submit；现读完正文复取latest，缺失或Config不同409，busy检查与任务提交均用latest，同Config空闲更新callback可正常接纳。设置POST同门禁，不改已接纳任务/预算/重试/submitting语义。首baseline夹具finish TDZ不计缺陷，修夹具后4行为实际失败；修后新4过，测试emit包装类型注解修后CLI编译/双TS零warninglint/3文件格式diff0，无全量冒烟。Windows实际双Config.initialize/编译Cockpit/native HTTP分段正文：忙/断开/异Config不调用任一submit，同Config用最新回调，busy期间设置拒绝且配置字节保持，正常控制接纳一次。10条件true/6517ms/6loopback API/首次退出0，0模型外部fetch付费旧任务重跑；回调仅记录收件不是实际任务交付。个人文件/四旧失败SHA与false/ULQ凭据删除/全局83保全true，三份同SHA，goal active，无打包重装升版CI子代理。接续占用状态归属/同步提交异常及晚收尾，真实质量与最后分发仍待。详见docs/ultra-cockpit-session-admission-handoff.md。

@@ -247,6 +247,11 @@ Other observers continue receiving events, and the agent keeps its original
 completion or failure result. Asynchronous observer work is not awaited by the
 agent loop.
 
+Drill Cockpit checks the current CLI session again after receiving a complete
+POST body. A disconnected or replaced session rejects the request; a busy
+session does not accept a task or settings change based on an earlier idle
+state. If the same session remains ready, its latest submit callback is used.
+
 Drill Cockpit provider edits carry the revision captured when you select the
 provider. If another view changes that provider, saving returns a conflict and
 keeps your draft. Select the provider again to load its current values before

@@ -280,7 +280,16 @@ async function handleRequest(
   }
   if (req.method !== 'POST') throw new RequestError(404, '接口不存在。');
   const body = await readJson(req);
-  if (!current.isReady() || submitting)
+  const latest = session;
+  if (!latest || latest.config !== config)
+    throw new RequestError(
+      409,
+      I18nManager.getInstance().t(
+        'CLI 会话已关闭或切换，请在当前会话重新打开演练台后再提交。',
+        'CLI session closed or changed. Reopen the cockpit in the current session before submitting.',
+      ),
+    );
+  if (!latest.isReady() || submitting)
     throw new RequestError(
       409,
       '会话忙碌或正在等待确认，请回到终端完成当前操作。',
@@ -338,7 +347,7 @@ async function handleRequest(
     const prompt = z.string().trim().min(1).safeParse(body['prompt']);
     if (!prompt.success) throw new RequestError(400, '请先输入任务。');
     submitting = true;
-    void current
+    void latest
       .submit(prompt.data)
       .catch((error: unknown) => {
         coreEvents.emitFeedback(
