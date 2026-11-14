@@ -12,6 +12,7 @@ import { savedWorkflowBudgetSummary } from './workflowBudget.js';
 import { workflowReportArchivePath } from './workflowReportText.js';
 import { swarmResultArchivePath } from './swarmResultText.js';
 import { workflowReportCount } from './workflowReportHistory.js';
+import { swarmFailureHistorySummary } from './swarmFailureHistory.js';
 
 export const agentTaskSelectionSchema = z
   .object({
@@ -110,6 +111,7 @@ export function readAgentTaskDetails(root: string, selection: unknown) {
         agent: member.agent,
         state: member.state,
         turns: member.turns,
+        failureHistory: swarmFailureHistorySummary(root, id, member),
         review:
           member.agent === 'workflow-auditor' ? reviewScope(member) : undefined,
         preview: member.result.slice(0, 1200),

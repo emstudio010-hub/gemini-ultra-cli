@@ -5,6 +5,51 @@
  */
 import type { UiLocale } from '@google/gemini-cli-core';
 
+/** Saved references only; rendering never checks archive contents or changes state. */
+export function agentFailureHistoryText(
+  history: {
+    count: number;
+    incomplete: boolean;
+    omitted: number;
+    recent: Array<{ turn: number; outcome: string; fullResultPath: string }>;
+  },
+  locale: UiLocale,
+  compact = false,
+): string {
+  if (!history.count && !history.incomplete) return '';
+  const zh = locale === 'zh';
+  const heading = zh
+    ? `失败历史：${history.count} 次`
+    : `Failed attempts: ${history.count}`;
+  const note = history.incomplete
+    ? zh
+      ? '历史不完整，完整导出不可用'
+      : 'History incomplete; full export unavailable'
+    : zh
+      ? '仅保存的归档引用，未校验正文'
+      : 'Saved archive references; contents not checked';
+  if (compact) return `${heading} · ${note}`;
+  const outcomes: Record<string, string> = {
+    incomplete: '未完成',
+    stopped: '已停止',
+    timeout: '超时',
+    error: '错误',
+    review: '复核错误',
+    admission: '调度错误',
+  };
+  const paths = history.recent.map(
+    (item) =>
+      `${zh ? '回合' : 'Turn'} ${item.turn} · ${zh ? (outcomes[item.outcome] ?? item.outcome) : item.outcome}\n${item.fullResultPath}`,
+  );
+  if (history.omitted)
+    paths.push(
+      zh
+        ? `另有 ${history.omitted} 次记录，请用 /swarm reports 导出。`
+        : `${history.omitted} earlier attempts; use /swarm reports to export.`,
+    );
+  return [heading, note, ...paths].join('\n');
+}
+
 const states: Record<string, string> = {
   scoping: '需求对齐中',
   ready: '已就绪',

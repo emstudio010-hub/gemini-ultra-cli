@@ -23,6 +23,7 @@ import { swarmContextSnapshot, swarmMemberContext } from './swarmContext.js';
 import {
   swarmFailedAttemptsSchema,
   retainFailedSwarmAttempt,
+  swarmFailureHistorySummary,
 } from './swarmFailureHistory.js';
 import { SwarmBudgetError } from './swarmBudgetError.js';
 import { I18nManager } from '../i18n/i18nManager.js';
@@ -453,6 +454,7 @@ export function swarmSnapshot(root: string, id: string) {
       : swarm.budget,
     members: swarm.members.map((member) => ({
       ...member,
+      failureHistory: swarmFailureHistorySummary(root, id, member),
       result: member.result.slice(0, 2000),
       lastError: member.lastError?.slice(0, 2000),
       ...(member.fullResult

@@ -129,6 +129,63 @@ it.each(['zh', 'en'] as const)(
   },
 );
 
+it.each(['zh', 'en'] as const)(
+  'shows bounded failed-attempt history and saved gaps in %s status',
+  async (locale) => {
+    I18nManager.getInstance().setLocale(locale);
+    const task = createSwarm(root, 'Recovered task');
+    const file = path.join(root, 'swarms', task.id, 'members.json');
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        ...task,
+        members: [
+          {
+            name: 'reader',
+            agent: 'researcher',
+            brief: 'Read only',
+            state: 'waiting',
+            result: 'Current result',
+            failureHistoryIncomplete: true,
+            failedAttempts: Array.from({ length: 6 }, (_, index) => ({
+              turn: index + 1,
+              outcome: 'incomplete',
+              fullResult: {
+                sha256: String(index + 1).repeat(64),
+                bytes: 10,
+                chars: 10,
+              },
+            })),
+          },
+        ],
+      }),
+    );
+    const before = savedFiles();
+    const { context } = resumeContext();
+    await swarmCommand.subCommands!.find(
+      (command) => command.name === 'status',
+    )!.action!(context, task.id);
+    const text = JSON.stringify(vi.mocked(context.ui.addItem).mock.calls);
+    expect(text).toContain(
+      locale === 'zh' ? '失败历史：6 次' : 'Failed attempts: 6',
+    );
+    expect(text).toContain(
+      locale === 'zh'
+        ? '历史不完整，完整导出不可用'
+        : 'History incomplete; full export unavailable',
+    );
+    expect(text).toContain(
+      locale === 'zh' ? '另有 2 次记录' : '2 earlier attempts',
+    );
+    expect(text).toContain(locale === 'zh' ? '回合 3' : 'Turn 3');
+    expect(text).not.toContain(locale === 'zh' ? '回合 1' : 'Turn 1');
+    expect(text).not.toContain(
+      locale === 'zh' ? 'Failed attempts:' : '失败历史：',
+    );
+    expect(savedFiles()).toEqual(before);
+  },
+);
+
 it('resumes the specified historical swarm rather than the newer terminal task, preserving spent requests', async () => {
   const older = createSwarm(root, 'Historical selected swarm');
   consumeSwarmRequest(root);

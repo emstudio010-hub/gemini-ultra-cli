@@ -6,7 +6,11 @@
 import { useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
 import stripAnsi from 'strip-ansi';
-import { readSwarm, readSwarmBoard } from '@google/gemini-cli-core';
+import {
+  readSwarm,
+  readSwarmBoard,
+  swarmFailureHistorySummary,
+} from '@google/gemini-cli-core';
 import { useKeypress } from '../hooks/useKeypress.js';
 import { useLocale } from '../hooks/useLocale.js';
 import { theme } from '../semantic-colors.js';
@@ -15,6 +19,7 @@ import {
   agentTaskStateLabel,
   agentReviewScopeText,
   agentTaskDiagnosticLabel,
+  agentFailureHistoryText,
 } from '../utils/agentTaskLabels.js';
 
 function safe(text: string): string {
@@ -143,6 +148,27 @@ export function SwarmBoard({
                 : 'Waiting for the coordinator to add members')}
           </Text>
           <Box marginTop={1} flexDirection="column">
+            {view.swarm?.members
+              .filter(
+                (member) =>
+                  member.failedAttempts?.length ||
+                  member.failureHistoryIncomplete,
+              )
+              .map((member) => (
+                <Text
+                  key={`failure-${member.name}`}
+                  color={
+                    member.failureHistoryIncomplete
+                      ? theme.status.error
+                      : theme.text.secondary
+                  }
+                  wrap="truncate-end"
+                >
+                  {safe(
+                    `@${member.name} ${agentFailureHistoryText(swarmFailureHistorySummary(root, id, member), locale, true)}`,
+                  )}
+                </Text>
+              ))}
             {reviewers.slice(-2).map((member) => (
               <Box key={member.name} flexDirection="column">
                 <Text color={theme.text.secondary} wrap="truncate-end">

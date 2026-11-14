@@ -47,6 +47,19 @@ it('renders the saved roster, refreshes public posts and closes with Escape', as
   await engine.wait(new AbortController().signal);
   // The UI describes a saved snapshot, even after the real file disappears.
   fs.unlinkSync(path.join(root, 'REPORT.md'));
+  const memberFile = path.join(root, 'swarms', swarm.id, 'members.json');
+  const savedMembers = JSON.parse(fs.readFileSync(memberFile, 'utf8'));
+  Object.assign(savedMembers.members[0], {
+    failureHistoryIncomplete: true,
+    failedAttempts: [
+      {
+        turn: 1,
+        outcome: 'error',
+        fullResult: { sha256: 'a'.repeat(64), bytes: 10, chars: 10 },
+      },
+    ],
+  });
+  fs.writeFileSync(memberFile, JSON.stringify(savedMembers));
   const onClose = vi.fn();
   const rendered = await renderWithProviders(
     <SwarmBoard root={root} id={swarm.id} onClose={onClose} />,
@@ -57,6 +70,10 @@ it('renders the saved roster, refreshes public posts and closes with Escape', as
     expect(rendered.lastFrame()).toContain('Review scope: 1 file');
     expect(rendered.lastFrame()).toContain('snapshot saved');
     expect(rendered.lastFrame()).toContain('Snapshots are historical');
+    expect(rendered.lastFrame()).toContain('Failed attempts: 1');
+    expect(rendered.lastFrame()).toContain(
+      'History incomplete; full export unavailable',
+    );
     engine.post('coordinator', 'UPDATED_ENTRY\u001b[2J');
     await waitFor(() =>
       expect(rendered.lastFrame()).toContain('UPDATED_ENTRY'),
@@ -76,6 +93,8 @@ it('renders the saved roster, refreshes public posts and closes with Escape', as
     expect(rendered.lastFrame()).toContain('复核范围：1 个文件');
     expect(rendered.lastFrame()).toContain('快照已保存');
     expect(rendered.lastFrame()).toContain('快照是历史记录');
+    expect(rendered.lastFrame()).toContain('失败历史：1 次');
+    expect(rendered.lastFrame()).toContain('历史不完整，完整导出不可用');
     expect(fs.readFileSync(stateFile).equals(beforeLocaleChange)).toBe(true);
     await act(async () => {
       i18n.setLocale('en');

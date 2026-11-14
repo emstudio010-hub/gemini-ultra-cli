@@ -40,6 +40,7 @@ import {
   agentRoleModelsText,
   agentReviewScopeText,
   agentTaskDiagnosticLabel,
+  agentFailureHistoryText,
 } from '../utils/agentTaskLabels.js';
 
 async function action(
@@ -155,7 +156,7 @@ async function action(
         const snapshot = swarmSnapshot(root, swarm.id);
         context.ui.addItem({
           type: MessageType.INFO,
-          text: `${i18n.t('蜂群', 'Swarm')} ${agentTaskStateLabel(snapshot.phase, i18n.getLocale())}\n${snapshot.objective}\n${i18n.t('角色模型', 'Role models')}: ${agentRoleModelsText(snapshot.roleModels, i18n.getLocale())}\n${i18n.t('累计预算', 'Cumulative budget')}: ${JSON.stringify(snapshot.budget)}\n${snapshot.stopReason}\n${snapshot.members.map((member) => `@${member.name}: ${agentTaskStateLabel(member.state, i18n.getLocale())} · ${agentTaskModelLabel(member.model ?? snapshot.roleModels[member.agent], i18n.getLocale())} · ${member.modelsUsed.join(', ')}${member.agent === 'workflow-auditor' ? '\n' + agentReviewScopeText(member, i18n.getLocale()) : ''}${member.lastError ? `\n${i18n.t('最近一轮错误', 'Latest turn error')}: ${agentTaskDiagnosticLabel(member.lastError, i18n.getLocale())}` : ''}${member.fullResultPath ? `\n${i18n.t('完整成员结果', 'Full member result')}: ${member.fullResultPath}` : ''}`).join('\n')}\n${snapshot.boardPath}\nID: ${snapshot.id}`,
+          text: `${i18n.t('蜂群', 'Swarm')} ${agentTaskStateLabel(snapshot.phase, i18n.getLocale())}\n${snapshot.objective}\n${i18n.t('角色模型', 'Role models')}: ${agentRoleModelsText(snapshot.roleModels, i18n.getLocale())}\n${i18n.t('累计预算', 'Cumulative budget')}: ${JSON.stringify(snapshot.budget)}\n${snapshot.stopReason}\n${snapshot.members.map((member) => `@${member.name}: ${agentTaskStateLabel(member.state, i18n.getLocale())} · ${agentTaskModelLabel(member.model ?? snapshot.roleModels[member.agent], i18n.getLocale())} · ${member.modelsUsed.join(', ')}${member.agent === 'workflow-auditor' ? '\n' + agentReviewScopeText(member, i18n.getLocale()) : ''}${member.lastError ? `\n${i18n.t('最近一轮错误', 'Latest turn error')}: ${agentTaskDiagnosticLabel(member.lastError, i18n.getLocale())}` : ''}${agentFailureHistoryText(member.failureHistory, i18n.getLocale()) ? '\n' + agentFailureHistoryText(member.failureHistory, i18n.getLocale()) : ''}${member.fullResultPath ? `\n${i18n.t('完整成员结果', 'Full member result')}: ${member.fullResultPath}` : ''}`).join('\n')}\n${snapshot.boardPath}\nID: ${snapshot.id}`,
         });
         return;
       }

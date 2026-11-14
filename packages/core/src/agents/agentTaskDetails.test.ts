@@ -10,6 +10,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { readAgentTaskDetails } from './agentTaskDetails.js';
 import { createSwarm } from './swarm.js';
+import { saveSwarmResultText } from './swarmResultText.js';
 
 let root: string;
 beforeEach(() => {
@@ -60,6 +61,61 @@ function contents(directory: string): Record<string, Buffer> {
     }),
   );
 }
+it('shows bounded failed-attempt references and a saved history gap without reading archives or mutating records', () => {
+  const task = createSwarm(root, 'Recovered task with historical failures');
+  const file = path.join(root, 'swarms', task.id, 'members.json');
+  const attempts = Array.from({ length: 6 }, (_, index) => ({
+    turn: index + 1,
+    outcome: 'incomplete',
+    fullResult: saveSwarmResultText(
+      root,
+      task.id,
+      `Failed evidence ${index}`,
+      true,
+    ).fullResult,
+  }));
+  fs.writeFileSync(
+    file,
+    JSON.stringify({
+      ...task,
+      members: [
+        {
+          name: 'reader',
+          agent: 'researcher',
+          brief: 'Read only',
+          state: 'waiting',
+          result: 'Recovered evidence',
+          failedAttempts: attempts,
+          failureHistoryIncomplete: true,
+        },
+      ],
+    }),
+  );
+  // The view must describe saved references even if archive storage is unavailable.
+  const archiveDir = path.join(root, 'swarms', task.id, 'results');
+  for (const entry of fs.readdirSync(archiveDir))
+    fs.unlinkSync(path.join(archiveDir, entry));
+  const before = contents(root);
+  const detail = readAgentTaskDetails(root, { mode: 'swarm', id: task.id });
+  expect(detail.kind).toBe('swarm');
+  if (detail.kind !== 'swarm') throw new Error('Expected swarm details');
+  expect(detail.members[0].failureHistory).toMatchObject({
+    count: 6,
+    omitted: 2,
+    incomplete: true,
+    archivesChecked: false,
+  });
+  expect(
+    detail.members[0].failureHistory.recent.map((item) => item.turn),
+  ).toEqual([3, 4, 5, 6]);
+  expect(
+    detail.members[0].failureHistory.recent.every((item) =>
+      item.fullResultPath.includes('full-'),
+    ),
+  ).toBe(true);
+  expect(JSON.stringify(detail)).not.toContain('Failed evidence');
+  expect(contents(root)).toEqual(before);
+});
 it('reads all four task kinds by ID without rebinding or creating missing legacy budgets', () => {
   const swarm = createSwarm(root, 'Saved swarm');
   const records = ['boost', 'teamwork', 'grill-me'].map(workflow);

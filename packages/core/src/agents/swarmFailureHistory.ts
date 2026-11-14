@@ -70,3 +70,23 @@ export function swarmFailedAttemptsIndex(
     'failures',
   );
 }
+
+/** Metadata only: do not read or create archive/index files while displaying status. */
+export function swarmFailureHistorySummary(
+  root: string,
+  id: string,
+  member: { failedAttempts?: Attempts; failureHistoryIncomplete?: boolean },
+) {
+  const attempts = member.failedAttempts ?? [];
+  return {
+    count: attempts.length,
+    incomplete: !!member.failureHistoryIncomplete,
+    omitted: Math.max(0, attempts.length - 4),
+    archivesChecked: false as const,
+    recent: attempts.slice(-4).map((attempt) => ({
+      turn: attempt.turn,
+      outcome: attempt.outcome,
+      fullResultPath: swarmResultArchivePath(root, id, attempt.fullResult),
+    })),
+  };
+}
