@@ -17,7 +17,15 @@ export async function withAbortSignal<T>(
     signal.addEventListener('abort', onAbort, { once: true });
   });
   try {
-    const result = await Promise.race([operation(), cancelled]);
+    // A synchronous operation can abort its signal and then throw. Attach both
+    // rejections to the race even in that case, avoiding an unobserved abort.
+    let pending: Promise<T>;
+    try {
+      pending = operation();
+    } catch (error) {
+      pending = Promise.reject(error);
+    }
+    const result = await Promise.race([pending, cancelled]);
     signal.throwIfAborted();
     return result;
   } finally {

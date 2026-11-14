@@ -18,6 +18,7 @@ import { handleFallback } from '../fallback/handler.js';
 import { getResponseText } from '../utils/partUtils.js';
 import { reportError } from '../utils/errorReporting.js';
 import { getErrorMessage } from '../utils/errors.js';
+import { withAbortSignal } from '../utils/withAbortSignal.js';
 import {
   logMalformedJsonResponse,
   logNetworkRetryAttempt,
@@ -128,9 +129,20 @@ export class BaseLlmClient {
     private readonly authType?: AuthType,
   ) {}
 
+  private requestSignal(signal?: AbortSignal): AbortSignal {
+    const lifecycle = this.config.getLifecycleSignal();
+    const combined = signal ? AbortSignal.any([signal, lifecycle]) : lifecycle;
+    combined.throwIfAborted();
+    return combined;
+  }
+
   async generateJson(
     options: GenerateJsonOptions,
   ): Promise<Record<string, unknown>> {
+    options = {
+      ...options,
+      abortSignal: this.requestSignal(options.abortSignal),
+    };
     const {
       schema,
       modelConfigKey,
@@ -178,6 +190,7 @@ export class BaseLlmClient {
     );
 
     // If we are here, the content is valid (not empty and parsable).
+    abortSignal.throwIfAborted();
     const parsed: unknown = JSON.parse(
       this.cleanJsonResponse(getResponseText(result)!.trim(), model),
     );
@@ -189,17 +202,23 @@ export class BaseLlmClient {
     throw new Error('Invalid JSON response format from LLM');
   }
 
-  async generateEmbedding(texts: string[]): Promise<number[][]> {
+  async generateEmbedding(
+    texts: string[],
+    abortSignal?: AbortSignal,
+  ): Promise<number[][]> {
     if (!texts || texts.length === 0) {
       return [];
     }
+    const signal = this.requestSignal(abortSignal);
     const embedModelParams: EmbedContentParameters = {
       model: this.config.getEmbeddingModel(),
       contents: texts,
+      config: { abortSignal: signal },
     };
 
-    const embedContentResponse =
-      await this.contentGenerator.embedContent(embedModelParams);
+    const embedContentResponse = await withAbortSignal(signal, () =>
+      this.contentGenerator.embedContent(embedModelParams),
+    );
     if (
       !embedContentResponse.embeddings ||
       embedContentResponse.embeddings.length === 0
@@ -240,23 +259,28 @@ export class BaseLlmClient {
   async countTokens(
     options: CountTokenOptions,
   ): Promise<{ totalTokens: number }> {
+    const signal = this.requestSignal(options.abortSignal);
     const model = options.modelConfigKey
       ? this.config.modelConfigService.getResolvedConfig(options.modelConfigKey)
           .model
       : this.config.getActiveModel();
-    const result = await this.contentGenerator.countTokens({
-      model,
-      contents: options.contents,
-      config: options.abortSignal
-        ? { abortSignal: options.abortSignal }
-        : undefined,
-    });
+    const result = await withAbortSignal(signal, () =>
+      this.contentGenerator.countTokens({
+        model,
+        contents: options.contents,
+        config: { abortSignal: signal },
+      }),
+    );
     return { totalTokens: result.totalTokens || 0 };
   }
 
   async generateContent(
     options: GenerateContentOptions,
   ): Promise<GenerateContentResponse> {
+    options = {
+      ...options,
+      abortSignal: this.requestSignal(options.abortSignal),
+    };
     const {
       modelConfigKey,
       contents,
@@ -323,6 +347,7 @@ export class BaseLlmClient {
 
     try {
       const apiCall = () => {
+        abortSignal.throwIfAborted();
         const firstAttempt = isFirstAttempt;
         isFirstAttempt = false;
         // Ensure we use the current active model
@@ -362,15 +387,16 @@ export class BaseLlmClient {
           config: finalConfig,
           contents,
         };
-        return this.contentGenerator.generateContent(
-          requestParams,
-          promptId,
-          role,
+        return withAbortSignal(abortSignal, () =>
+          this.contentGenerator.generateContent(requestParams, promptId, role),
         );
       };
 
-      return await retryWithBackoff(apiCall, {
-        shouldRetryOnContent,
+      const result = await retryWithBackoff(apiCall, {
+        shouldRetryOnContent: (response) => {
+          abortSignal.throwIfAborted();
+          return shouldRetryOnContent(response);
+        },
         maxAttempts:
           availabilityMaxAttempts ?? maxAttempts ?? DEFAULT_MAX_ATTEMPTS,
         getAvailabilityContext,
@@ -412,6 +438,8 @@ export class BaseLlmClient {
           );
         },
       });
+      abortSignal.throwIfAborted();
+      return result;
     } catch (error) {
       if (abortSignal?.aborted) {
         throw error;

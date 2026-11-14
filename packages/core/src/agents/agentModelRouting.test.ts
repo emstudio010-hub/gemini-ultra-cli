@@ -189,7 +189,9 @@ it('counts tokens for parallel native member models through the utility client w
             : 999,
     };
   });
+  const lifecycle = new AbortController();
   const client = new BaseLlmClient(generator, {
+    getLifecycleSignal: () => lifecycle.signal,
     getActiveModel: () => 'main-model',
     modelConfigService: {
       getResolvedConfig: () => ({ model: 'parent-calibrator' }),
@@ -221,8 +223,13 @@ it('counts tokens for parallel native member models through the utility client w
       .mocked(fallback.countTokens)
       .mock.calls.map(([request]) => request.model),
   ).toEqual(['gemini-reader', 'gemini-reviewer']);
-  for (const [request] of vi.mocked(fallback.countTokens).mock.calls)
-    expect(request.config?.abortSignal).toBe(controller.signal);
+  const reason = new DOMException('Count caller cancelled', 'AbortError');
+  controller.abort(reason);
+  for (const [request] of vi.mocked(fallback.countTokens).mock.calls) {
+    expect(request.config?.abortSignal).toBeInstanceOf(AbortSignal);
+    expect(request.config?.abortSignal?.reason).toBe(reason);
+  }
+  expect(lifecycle.signal.aborted).toBe(false);
   expect(JSON.stringify(contents)).toBe(original);
   expect(fs.readFileSync(providersFile)).toEqual(before);
   expect(fetch).not.toHaveBeenCalled();

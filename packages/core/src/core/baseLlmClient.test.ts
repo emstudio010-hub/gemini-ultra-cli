@@ -107,6 +107,7 @@ describe('BaseLlmClient', () => {
     );
 
     mockConfig = {
+      getLifecycleSignal: vi.fn().mockReturnValue(new AbortController().signal),
       getRequestTimeoutMs: vi.fn().mockReturnValue(undefined),
       getSessionId: vi.fn().mockReturnValue('test-session-id'),
       getContentGeneratorConfig: vi
@@ -161,7 +162,7 @@ describe('BaseLlmClient', () => {
         expect.any(Function),
         expect.objectContaining({
           shouldRetryOnContent: expect.any(Function),
-          signal: defaultOptions.abortSignal,
+          signal: expect.any(AbortSignal),
         }),
       );
 
@@ -172,7 +173,7 @@ describe('BaseLlmClient', () => {
           model: 'test-model',
           contents: defaultOptions.contents,
           config: {
-            abortSignal: defaultOptions.abortSignal,
+            abortSignal: expect.any(AbortSignal),
             responseJsonSchema: defaultOptions.schema,
             responseMimeType: 'application/json',
             temperature: 0,
@@ -466,6 +467,7 @@ describe('BaseLlmClient', () => {
       expect(mockEmbedContent).toHaveBeenCalledWith({
         model: testEmbeddingModel,
         contents: texts,
+        config: { abortSignal: expect.any(AbortSignal) },
       });
       expect(result).toEqual(mockEmbeddings);
     });
@@ -556,7 +558,7 @@ describe('BaseLlmClient', () => {
         expect.any(Function),
         expect.objectContaining({
           shouldRetryOnContent: expect.any(Function),
-          signal: options.abortSignal,
+          signal: expect.any(AbortSignal),
         }),
       );
 
@@ -567,7 +569,7 @@ describe('BaseLlmClient', () => {
           model: 'test-model',
           contents: options.contents,
           config: {
-            abortSignal: options.abortSignal,
+            abortSignal: expect.any(AbortSignal),
             temperature: 0,
             topP: 1,
           },
