@@ -4026,6 +4026,42 @@ describe('LocalAgentExecutor', () => {
     });
   });
   describe('Chat Compression', () => {
+    it('compresses inherited history with the resolved model used for generation', async () => {
+      const definition = createTestDefinition();
+      definition.modelConfig.model = 'inherit';
+      mockConfig.modelConfigService.registerRuntimeModelConfig(
+        getModelConfigAlias(definition),
+        {
+          modelConfig: {
+            ...definition.modelConfig,
+            model: 'second:temporary-model',
+          },
+        },
+      );
+      const executor = await LocalAgentExecutor.create(
+        definition,
+        mockConfig,
+        onActivity,
+      );
+      mockModelResponse([
+        {
+          name: COMPLETE_TASK_TOOL_NAME,
+          args: { finalResult: 'Done' },
+          id: 'complete-route',
+        },
+      ]);
+      await executor.run(
+        { goal: 'Keep compression on the selected route' },
+        signal,
+      );
+      expect(mockCompress).toHaveBeenCalledOnce();
+      expect(mockCompress.mock.calls[0][3]).toBe('second:temporary-model');
+      const key = getMockMessageParams(0).modelConfigKey;
+      expect(mockConfig.modelConfigService.getResolvedConfig(key).model).toBe(
+        'second:temporary-model',
+      );
+    });
+
     const mockWorkResponse = (id: string) => {
       mockModelResponse([{ name: LS_TOOL_NAME, args: { path: '.' }, id }]);
       mockScheduleAgentTools.mockResolvedValueOnce([

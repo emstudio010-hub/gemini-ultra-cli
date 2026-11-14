@@ -97,6 +97,23 @@ export class AgentRegistry {
   }
 
   private onModelChanged = () => {
+    if (this.disposed) return;
+    // A dispatch may follow setModel before the queued refresh can run. Update
+    // inherited aliases now; full definition/tool refresh remains serialized.
+    try {
+      if (this.config.isAgentsEnabled()) {
+        for (const agent of this.agents.values()) {
+          if (agent.kind === 'local' && agent.modelConfig.model === 'inherit') {
+            this.registerModelConfigs(agent);
+          }
+        }
+      }
+    } catch (error) {
+      debugLogger.error(
+        '[AgentRegistry] Failed to update inherited model aliases:',
+        error,
+      );
+    }
     this.refreshAgents('local').catch((e) => {
       debugLogger.error(
         '[AgentRegistry] Failed to refresh agents on model change:',

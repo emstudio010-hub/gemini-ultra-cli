@@ -38,6 +38,7 @@ import {
 } from '../config/models.js';
 import { PreCompressTrigger } from '../hooks/types.js';
 import { extractCompressionSnapshot } from './compressionSnapshot.js';
+import { ProviderManager } from '../providers/providerManager.js';
 
 /**
  * Default threshold for compression token count as a fraction of the model's
@@ -711,8 +712,17 @@ export class ChatCompressionService {
       ? 'A previous <state_snapshot> exists in the history. You MUST integrate all still-relevant information from that snapshot into the new one, updating it with the more recent events. Do not lose established constraints or critical knowledge.'
       : 'Generate a new <state_snapshot> based on the provided history.';
 
+    // External routes must not become a native alias that falls back to a
+    // different saved provider. Keep missing qualified routes strict too.
+    const modelConfigKey = {
+      model:
+        (model.indexOf(':') > 0 && !model.startsWith('native:')) ||
+        ProviderManager.getInstance().resolveProviderForModel(model)
+          ? model
+          : modelStringToModelConfigAlias(model),
+    };
     const summaryResponse = await config.getBaseLlmClient().generateContent({
-      modelConfigKey: { model: modelStringToModelConfigAlias(model) },
+      modelConfigKey,
       contents: [
         ...historyForSummarizer,
         {
@@ -738,7 +748,7 @@ export class ChatCompressionService {
       options.verify === false
         ? undefined
         : await config.getBaseLlmClient().generateContent({
-            modelConfigKey: { model: modelStringToModelConfigAlias(model) },
+            modelConfigKey,
             contents: [
               ...historyForSummarizer,
               {

@@ -1438,6 +1438,51 @@ describe('AgentRegistry', () => {
   });
 
   describe('inheritance and refresh', () => {
+    it('updates inherited routes synchronously before queued refresh without changing explicit agent settings', async () => {
+      const config = makeMockedConfig({
+        model: 'first:saved-model',
+        enableAgents: true,
+      });
+      const localRegistry = new TestableAgentRegistry(config);
+      await localRegistry.initialize();
+      try {
+        const inherited: LocalAgentDefinition = {
+          ...MOCK_AGENT_V1,
+          name: 'ImmediateInherited',
+          modelConfig: { ...MOCK_AGENT_V1.modelConfig, model: 'inherit' },
+        };
+        const explicit: LocalAgentDefinition = {
+          ...MOCK_AGENT_V1,
+          name: 'ExplicitRoute',
+          modelConfig: {
+            ...MOCK_AGENT_V1.modelConfig,
+            model: 'third:fixed-model',
+          },
+        };
+        await localRegistry.testRegisterAgent(inherited);
+        await localRegistry.testRegisterAgent(explicit);
+        const resolve = (definition: AgentDefinition) =>
+          config.modelConfigService.getResolvedConfig({
+            model: getModelConfigAlias(definition),
+            overrideScope: definition.name,
+          });
+        const inheritedBefore = resolve(inherited);
+        const explicitBefore = resolve(explicit);
+        vi.spyOn(config, 'getModel').mockReturnValue('second:temporary-model');
+        coreEvents.emitModelChanged('second:temporary-model');
+        // No await: the next request must not depend on the registry queue.
+        expect(resolve(inherited)).toEqual({
+          ...inheritedBefore,
+          model: 'second:temporary-model',
+        });
+        expect(resolve(explicit)).toEqual(explicitBefore);
+      } finally {
+        // Drain the already queued refresh before disposing this test registry.
+        await localRegistry.initialize();
+        localRegistry.dispose();
+      }
+    });
+
     it('should skip remote agents when refreshing on model change', async () => {
       const remoteAgent: AgentDefinition = {
         kind: 'remote',

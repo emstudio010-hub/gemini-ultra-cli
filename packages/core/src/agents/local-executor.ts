@@ -987,9 +987,12 @@ export class LocalAgentExecutor<TOutput extends z.ZodTypeAny> {
     prompt_id: string,
     abortSignal?: AbortSignal,
   ): Promise<void> {
-    const model = agentExecutionModel(
-      this.definition.modelConfig.model ?? DEFAULT_GEMINI_MODEL,
-    );
+    const resolvedConfig =
+      this.context.config.modelConfigService.getResolvedConfig({
+        model: getModelConfigAlias(this.definition),
+        overrideScope: this.definition.name,
+      });
+    const model = agentExecutionModel(resolvedConfig.model);
     const threshold =
       (await this.context.config.getCompressionThreshold()) ??
       DEFAULT_COMPRESSION_TOKEN_THRESHOLD;

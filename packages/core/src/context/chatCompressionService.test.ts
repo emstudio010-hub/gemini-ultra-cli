@@ -36,6 +36,7 @@ import { tokenLimit } from '../core/tokenLimits.js';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
+import { ProviderManager } from '../providers/providerManager.js';
 
 vi.mock('../telemetry/loggers.js');
 vi.mock('../utils/environmentContext.js');
@@ -204,6 +205,9 @@ describe('ChatCompressionService', () => {
       path.join(os.tmpdir(), 'chat-compression-test-'),
     );
     service = new ChatCompressionService();
+    vi.spyOn(ProviderManager, 'getInstance').mockReturnValue({
+      resolveProviderForModel: () => null,
+    } as unknown as ProviderManager);
     mockChat = {
       getHistory: vi.fn(),
       getLastPromptTokenCount: vi.fn().mockReturnValue(500),
@@ -266,6 +270,44 @@ describe('ChatCompressionService', () => {
       fs.rmSync(testTempDir, { recursive: true, force: true });
     }
   });
+
+  it.each([
+    'second:temporary-model',
+    'bare-external-model',
+    'missing:old-model',
+  ])(
+    'preserves %s for both summary passes instead of selecting the saved default',
+    async (model) => {
+      vi.mocked(ProviderManager.getInstance).mockReturnValue({
+        resolveProviderForModel: () =>
+          model === 'bare-external-model' ? { modelId: model } : null,
+      } as unknown as ProviderManager);
+      vi.mocked(mockChat.getHistory).mockReturnValue([
+        {
+          role: 'user',
+          parts: [
+            { text: 'The selected route and pending task must be preserved.' },
+          ],
+        },
+        { role: 'model', parts: [{ text: 'Existing analysis.' }] },
+      ]);
+      await service.compress(
+        mockChat,
+        mockPromptId,
+        true,
+        model,
+        mockConfig,
+        false,
+      );
+      const calls = vi.mocked(mockConfig.getBaseLlmClient().generateContent)
+        .mock.calls;
+      expect(calls).toHaveLength(2);
+      expect(calls.map(([options]) => options.modelConfigKey.model)).toEqual([
+        model,
+        model,
+      ]);
+    },
+  );
 
   it('uses the external route capacity for automatic compression', async () => {
     const actual = await vi.importActual<
@@ -500,11 +542,9 @@ describe('ChatCompressionService', () => {
       const original = structuredClone(history);
       vi.mocked(mockChat.getHistory).mockReturnValue(history);
       const generate = vi.mocked(mockConfig.getBaseLlmClient().generateContent);
-      generate
-        .mockReset()
-        .mockResolvedValue({
-          candidates: [{ content: { parts: [{ text: response }] } }],
-        } as GenerateContentResponse);
+      generate.mockReset().mockResolvedValue({
+        candidates: [{ content: { parts: [{ text: response }] } }],
+      } as GenerateContentResponse);
       const result = await service.compress(
         mockChat,
         mockPromptId,
