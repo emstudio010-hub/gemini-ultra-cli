@@ -1889,3 +1889,8 @@ WI-239/E-533至534/F-197：CLI /swarm message原缺Plan门禁，已有engine空�
 ## 2026-11-15 排队原生协作成员的Plan启动复核
 
 WI-240/E-535至536/F-198：Manage/Run入口只初查Plan，已接纳成员等待writer或session slot后，AgentTool原仅复查取消/红队grant而继续启动；现assertAgentAuthorization可接当前ApprovalMode，AgentTool本地确认/execute入口/获得名额后三处传最新模式，仅PLAN原生swarmRoleSchema四角色在onStart/child前拒绝，不自动改模式或重排。Plan代码调查/CLI帮助和自定义策略路径保留；未取消已活动成员。新6 baseline3真实行为失败/3正常过，修后6+红队5+AgentTool9=20相关通过，core编译/三TS零warninglint/纯格式后三文件check/diff0，无CLI重编全量冒烟。Windows实际Config/registry/AgentTool/队列、legacy-session child受控收件marker：排队后切Plan两语言拒绝无child/start/写入、预算字节保持，显式DEFAULT重试分别正常到两child证明slot释放；四角色确认执行拒绝、两Plan帮助仍可用、取消保持原对象。14条件true/7651ms/首次退出0/4受控child/0fetch模型HTTP外部付费旧任务重跑；非LocalAgentExecutor/LLM质量或完整模式切换保证。个人文件/四真实失败精确SHA与false/临时凭据删除/全局83均保全true，三份同SHA交接、goal active，不打包重装升版三平台CI子代理。详见docs/ultra-agent-plan-admission-handoff.md。
+
+
+## 2026-11-15 Anthropic工具块归属与异常整批阻断
+
+WI-241/E-537至538/F-199：先核对E-503诊断已由WI225实现而不重复改；发现Anthropic原重复index覆盖/重复ID/未知参数delta静默丢弃/忽略block_stop，异常仍可发布工具。现响应内记录所有已见start编号/工具ID，复用含文本→工具拒绝；工具closed位拒绝显式stop后片段，参数必须指向已有未关闭工具。固定错误不回显上游值，整批成功后才发布；合法交错/Unicode初始input保持，不新增每块stop强制要求或JSON修补重试。baseline新6中5真实异常失败/正常1过，修后6+参数诊断7=13相关通过，core编译/双TS零warninglint/纯格式后check/diff0，无CLI重编全量冒烟。Windows真实Anthropic HTTP/SSE及Config/gateway/ManageSwarmTool/coder/AgentTool/LocalExecutor/GeminiChat/Swarm/export：五异常零调用；合法write_file后未知参数使整批零写入，1请求1轮1失败blocked/paused，诊断导出保持无私有marker；独立合法complete_task成员正常，任务仍active。18条件true/9324ms/首次退出0/7loopback/0外部付费旧任务重跑；不证明E-503实际根因、实际供应商质量或完整Anthropic状态机。个人文件/四真实失败精确SHA与false/临时凭据删除/全局83均保全true，三份同SHA交接、goal active，不打包重装升版三平台CI子代理。详见docs/ultra-anthropic-tool-blocks-handoff.md。

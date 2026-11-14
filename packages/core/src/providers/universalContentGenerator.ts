@@ -1326,8 +1326,11 @@ export class UniversalContentGenerator implements ContentGenerator {
         name: string;
         json: string;
         initialInput?: Record<string, unknown>;
+        closed: boolean;
       }
     >();
+    const blockIndices = new Set<number>();
+    const toolIds = new Set<string>();
     let completed = false;
     let usageData: Record<string, unknown> = {};
     for await (const { data } of this.readSse(res, abortController)) {
@@ -1338,22 +1341,32 @@ export class UniversalContentGenerator implements ContentGenerator {
         ev.type === 'message_delta' ? ev.usage : undefined;
       if (isRecord(startUsage)) usageData = { ...usageData, ...startUsage };
       if (isRecord(deltaUsage)) usageData = { ...usageData, ...deltaUsage };
-      if (
-        ev.type === 'content_block_start' &&
-        ev.content_block?.type === 'tool_use'
-      ) {
-        if (
-          ev.index === undefined ||
-          !ev.content_block.id ||
-          !ev.content_block.name
-        )
-          throw new Error('Anthropic: incomplete tool block identifiers.');
-        toolBlocks.set(ev.index, {
-          id: ev.content_block.id,
-          name: ev.content_block.name,
-          json: '',
-          initialInput: ev.content_block.input,
-        });
+      if (ev.type === 'content_block_start') {
+        if (ev.index !== undefined) {
+          if (blockIndices.has(ev.index))
+            throw new Error('Anthropic: content block index was reused.');
+          blockIndices.add(ev.index);
+        }
+        if (ev.content_block?.type === 'tool_use') {
+          if (
+            ev.index === undefined ||
+            !ev.content_block.id ||
+            !ev.content_block.name
+          )
+            throw new Error('Anthropic: incomplete tool block identifiers.');
+          if (toolIds.has(ev.content_block.id))
+            throw new Error(
+              'Anthropic: tool ID was reused at multiple indices.',
+            );
+          toolIds.add(ev.content_block.id);
+          toolBlocks.set(ev.index, {
+            id: ev.content_block.id,
+            name: ev.content_block.name,
+            json: '',
+            initialInput: ev.content_block.input,
+            closed: false,
+          });
+        }
       } else if (ev.type === 'content_block_delta') {
         const d = ev.delta;
         if (d?.type === 'thinking_delta' && d.thinking) {
@@ -1367,8 +1380,15 @@ export class UniversalContentGenerator implements ContentGenerator {
         } else if (d?.type === 'input_json_delta') {
           const b =
             ev.index !== undefined ? toolBlocks.get(ev.index) : undefined;
-          if (b) b.json += d.partial_json ?? '';
+          if (!b || b.closed)
+            throw new Error(
+              'Anthropic: tool argument delta targets an unknown or closed block.',
+            );
+          b.json += d.partial_json ?? '';
         }
+      } else if (ev.type === 'content_block_stop') {
+        const b = ev.index !== undefined ? toolBlocks.get(ev.index) : undefined;
+        if (b) b.closed = true;
       } else if (ev.type === 'error') {
         throw new Error(`Anthropic stream error: ${JSON.stringify(ev.error)}`);
       } else if (
