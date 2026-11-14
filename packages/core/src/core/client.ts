@@ -846,6 +846,7 @@ export class GeminiClient {
     }
 
     // availability logic
+    signal.throwIfAborted();
     const modelConfigKey: ModelConfigKey = {
       model: modelToUse,
       isChatModel: true,
@@ -864,6 +865,7 @@ export class GeminiClient {
 
     // Update tools with the final modelId to ensure model-dependent descriptions are used.
     await this.setTools(modelToUse);
+    signal.throwIfAborted();
 
     const resultStream = turn.run(modelConfigKey, request, signal, {
       displayContent,
@@ -875,6 +877,7 @@ export class GeminiClient {
     let loopDetectedAbort = false;
     let loopRecoverResult: { detail?: string } | undefined;
     for await (const event of resultStream) {
+      signal.throwIfAborted();
       const loopResult = this.loopDetector.addAndCheck(event);
       if (loopResult.count > 1) {
         yield { type: GeminiEventType.LoopDetected };
@@ -980,53 +983,56 @@ export class GeminiClient {
     displayContent?: PartListUnion,
     stopHookActive: boolean = false,
   ): AsyncGenerator<ServerGeminiStreamEvent, Turn> {
-    this.config.resetTurn();
-
-    const hooksEnabled = this.config.getEnableHooks();
-    const messageBus = this.context.messageBus;
-
-    if (this.lastPromptId !== prompt_id) {
-      this.loopDetector.reset(prompt_id, partListUnionToString(request));
-      this.hookStateMap.delete(this.lastPromptId);
-      this.lastPromptId = prompt_id;
-      this.currentSequenceModel = null;
-    }
-
-    if (hooksEnabled && messageBus) {
-      const hookResult = await this.fireBeforeAgentHookSafe(request, prompt_id);
-      if (hookResult) {
-        if (
-          'type' in hookResult &&
-          hookResult.type === GeminiEventType.AgentExecutionStopped
-        ) {
-          // Add user message to history before returning so it's kept in the transcript
-          this.getChat().addHistory(createUserContent(request));
-          yield hookResult;
-          return new Turn(this.getChat(), prompt_id);
-        } else if (
-          'type' in hookResult &&
-          hookResult.type === GeminiEventType.AgentExecutionBlocked
-        ) {
-          yield hookResult;
-          return new Turn(this.getChat(), prompt_id);
-        } else if ('additionalContext' in hookResult) {
-          const additionalContext = hookResult.additionalContext;
-          if (additionalContext) {
-            const requestArray = Array.isArray(request) ? request : [request];
-            request = [
-              ...requestArray,
-              { text: `<hook_context>${additionalContext}</hook_context>` },
-            ];
-          }
-        }
-      }
-    }
-
+    signal = AbortSignal.any([signal, this.lifecycleController.signal]);
     const boundedTurns = Math.min(turns, MAX_TURNS);
     let turn = new Turn(this.getChat(), prompt_id);
     let continuationHandled = false;
-
     try {
+      signal.throwIfAborted();
+      this.config.resetTurn();
+
+      const hooksEnabled = this.config.getEnableHooks();
+      const messageBus = this.context.messageBus;
+
+      if (this.lastPromptId !== prompt_id) {
+        this.loopDetector.reset(prompt_id, partListUnionToString(request));
+        this.hookStateMap.delete(this.lastPromptId);
+        this.lastPromptId = prompt_id;
+        this.currentSequenceModel = null;
+      }
+
+      if (hooksEnabled && messageBus) {
+        const hookResult = await withAbortSignal(signal, () =>
+          this.fireBeforeAgentHookSafe(request, prompt_id),
+        );
+        if (hookResult) {
+          if (
+            'type' in hookResult &&
+            hookResult.type === GeminiEventType.AgentExecutionStopped
+          ) {
+            // Add user message to history before returning so it's kept in the transcript
+            this.getChat().addHistory(createUserContent(request));
+            yield hookResult;
+            return new Turn(this.getChat(), prompt_id);
+          } else if (
+            'type' in hookResult &&
+            hookResult.type === GeminiEventType.AgentExecutionBlocked
+          ) {
+            yield hookResult;
+            return new Turn(this.getChat(), prompt_id);
+          } else if ('additionalContext' in hookResult) {
+            const additionalContext = hookResult.additionalContext;
+            if (additionalContext) {
+              const requestArray = Array.isArray(request) ? request : [request];
+              request = [
+                ...requestArray,
+                { text: `<hook_context>${additionalContext}</hook_context>` },
+              ];
+            }
+          }
+        }
+      }
+
       turn = yield* this.processTurn(
         request,
         signal,
@@ -1034,14 +1040,12 @@ export class GeminiClient {
         boundedTurns,
         displayContent,
       );
+      signal.throwIfAborted();
 
       // Fire AfterAgent hook if we have a turn and no pending tools
       if (hooksEnabled && messageBus) {
-        const hookOutput = await this.fireAfterAgentHookSafe(
-          request,
-          prompt_id,
-          turn,
-          stopHookActive,
+        const hookOutput = await withAbortSignal(signal, () =>
+          this.fireAfterAgentHookSafe(request, prompt_id, turn, stopHookActive),
         );
 
         // Cast to AfterAgentHookOutput for access to shouldClearContext()
@@ -1137,6 +1141,11 @@ export class GeminiClient {
     abortSignal: AbortSignal,
     role: LlmRole,
   ): Promise<GenerateContentResponse> {
+    abortSignal = AbortSignal.any([
+      abortSignal,
+      this.lifecycleController.signal,
+    ]);
+    abortSignal.throwIfAborted();
     const desiredModelConfig =
       this.config.modelConfigService.getResolvedConfig(modelConfigKey);
     let {
@@ -1168,6 +1177,7 @@ export class GeminiClient {
       let isFirstAttempt = true;
 
       const apiCall = () => {
+        abortSignal.throwIfAborted();
         const firstAttempt = isFirstAttempt;
         isFirstAttempt = false;
         // AvailabilityService
@@ -1203,14 +1213,16 @@ export class GeminiClient {
           systemInstruction,
         };
 
-        return this.getContentGeneratorOrFail().generateContent(
-          {
-            model: currentAttemptModel,
-            config: requestConfig,
-            contents,
-          },
-          this.lastPromptId,
-          role,
+        return withAbortSignal(abortSignal, () =>
+          this.getContentGeneratorOrFail().generateContent(
+            {
+              model: currentAttemptModel,
+              config: requestConfig,
+              contents,
+            },
+            this.lastPromptId,
+            role,
+          ),
         );
       };
       const onPersistent429Callback = async (
@@ -1261,6 +1273,7 @@ export class GeminiClient {
         },
       });
 
+      abortSignal.throwIfAborted();
       return result;
     } catch (error: unknown) {
       if (abortSignal.aborted) {

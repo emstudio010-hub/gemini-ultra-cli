@@ -14,7 +14,11 @@ import {
   type Mock,
 } from 'vitest';
 
-import type { Content, GenerateContentResponse, Part } from '@google/genai';
+import {
+  GenerateContentResponse,
+  type Content,
+  type Part,
+} from '@google/genai';
 import { GeminiClient } from './client.js';
 import {
   AuthType,
@@ -1057,6 +1061,188 @@ describe('Gemini Client (client.ts)', () => {
         }),
       );
     });
+
+    it('cancels an active chat stream when its client is disposed without cancelling the caller signal', async () => {
+      let entered!: () => void;
+      const started = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      let received: AbortSignal | undefined;
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      mockTurnRunFn.mockImplementation(async function* (
+        _key: unknown,
+        _request: unknown,
+        signal: AbortSignal,
+      ) {
+        received = signal;
+        entered();
+        await held;
+        yield { type: GeminiEventType.Content, value: 'LATE_CLIENT_CONTENT' };
+      });
+      const caller = new AbortController();
+      const pending = fromAsync(
+        client.sendMessageStream(
+          [{ text: 'Hi' }],
+          caller.signal,
+          'shutdown-stream',
+        ),
+      );
+      await started;
+      client.dispose();
+      const abortedBeforeRelease = received?.aborted;
+      release();
+      const events = await pending;
+      expect(abortedBeforeRelease).toBe(true);
+      expect(caller.signal.aborted).toBe(false);
+      expect(events).toContainEqual({ type: GeminiEventType.UserCancelled });
+      expect(events).not.toContainEqual({
+        type: GeminiEventType.Content,
+        value: 'LATE_CLIENT_CONTENT',
+      });
+      expect(client.getCurrentSequenceModel()).toBeNull();
+    });
+
+    it('does not route or call a model for a chat submitted after client disposal', async () => {
+      client.dispose();
+      const events = await fromAsync(
+        client.sendMessageStream(
+          [{ text: 'Late request' }],
+          new AbortController().signal,
+          'closed-stream',
+        ),
+      );
+      expect(events).toEqual([{ type: GeminiEventType.UserCancelled }]);
+      expect(mockRouterService.route).not.toHaveBeenCalled();
+      expect(mockTurnRunFn).not.toHaveBeenCalled();
+    });
+
+    it('cancels a pending direct generation on disposal and discards a non-cooperative late result', async () => {
+      let release!: (value: GenerateContentResponse) => void;
+      mockGenerateContentFn.mockImplementationOnce(
+        () =>
+          new Promise<GenerateContentResponse>((resolve) => {
+            release = resolve;
+          }),
+      );
+      const caller = new AbortController();
+      let error: unknown;
+      const pending = client
+        .generateContent(
+          { model: 'gemini-1.5-pro' },
+          [{ role: 'user', parts: [{ text: 'Utility' }] }],
+          caller.signal,
+          LlmRole.UTILITY_TOOL,
+        )
+        .catch((failure) => {
+          error = failure;
+        });
+      try {
+        await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+        const request = mockGenerateContentFn.mock.calls.at(-1)![0];
+        client.dispose();
+        await vi.waitFor(
+          () =>
+            expect(error).toMatchObject({
+              name: 'AbortError',
+              message: 'Gemini client disposed.',
+            }),
+          { timeout: 200 },
+        );
+        expect(request.config.abortSignal.aborted).toBe(true);
+        expect(caller.signal.aborted).toBe(false);
+      } finally {
+        release?.(
+          Object.assign(new GenerateContentResponse(), {
+            candidates: [
+              {
+                content: {
+                  role: 'model',
+                  parts: [{ text: 'LATE_DIRECT_RESULT' }],
+                },
+              },
+            ],
+          }),
+        );
+        await pending;
+      }
+      expect(mockGenerateContentFn).toHaveBeenCalledOnce();
+      expect(error).toBeDefined();
+    });
+
+    it('rejects direct generation after client disposal before dispatch', async () => {
+      client.dispose();
+      await expect(
+        client.generateContent(
+          { model: 'gemini-1.5-pro' },
+          [{ role: 'user', parts: [{ text: 'Closed' }] }],
+          new AbortController().signal,
+          LlmRole.UTILITY_TOOL,
+        ),
+      ).rejects.toMatchObject({
+        name: 'AbortError',
+        message: 'Gemini client disposed.',
+      });
+      expect(mockGenerateContentFn).not.toHaveBeenCalled();
+    });
+
+    it.each(['before', 'after'] as const)(
+      'stops waiting for a pending %s hook on disposal and does not resume from its late result',
+      async (stage) => {
+        mockConfig.getEnableHooks = vi.fn().mockReturnValue(true);
+        let release!: () => void;
+        let entered!: () => void;
+        const started = new Promise<void>((resolve) => {
+          entered = resolve;
+        });
+        const held = new Promise<undefined>((resolve) => {
+          release = () => resolve(undefined);
+        });
+        const hook =
+          stage === 'before'
+            ? mockHookSystem.fireBeforeAgentEvent
+            : mockHookSystem.fireAfterAgentEvent;
+        hook.mockImplementationOnce(() => {
+          entered();
+          return held;
+        });
+        mockTurnRunFn.mockImplementation(async function* () {
+          yield {
+            type: GeminiEventType.Content,
+            value: 'BEFORE_CLOSE_CONTENT',
+          };
+        });
+        let ended = false;
+        const pending = fromAsync(
+          client.sendMessageStream(
+            [{ text: 'Hooks' }],
+            new AbortController().signal,
+            'shutdown-hook',
+          ),
+        ).then((events) => {
+          ended = true;
+          return events;
+        });
+        try {
+          await started;
+          client.dispose();
+          await vi.waitFor(() => expect(ended).toBe(true), { timeout: 200 });
+        } finally {
+          release();
+        }
+        const events = await pending;
+        expect(
+          events.filter(
+            (event) => event.type === GeminiEventType.UserCancelled,
+          ),
+        ).toHaveLength(1);
+        expect(mockTurnRunFn).toHaveBeenCalledTimes(stage === 'before' ? 0 : 1);
+        expect(client['hookStateMap'].size).toBe(0);
+        expect(client.getCurrentSequenceModel()).toBeNull();
+      },
+    );
 
     it('yields UserCancelled and clears sequence/turn state when processTurn throws AbortError', async () => {
       const abortError = new Error('Aborted');
@@ -3408,7 +3594,7 @@ ${JSON.stringify(
         {
           model: 'test-model',
           config: {
-            abortSignal,
+            abortSignal: expect.any(AbortSignal),
             systemInstruction: getCoreSystemPrompt({} as unknown as Config, ''),
             temperature: 0,
             topP: 1,
