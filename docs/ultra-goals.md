@@ -9,7 +9,7 @@
 
 持续 goal 保持 active，沿用现有成果，不重开项目。
 
-1. **启动与加载稳定**：继续收敛无限等待、取消、关闭后的迟到结果；主聊天、委派、直接执行器、BaseLlmClient、直接生成器及媒体/截图/策略辅助函数已有 Windows 定向证据，多 Config 策略上下文及缓存已隔离；Git worktree 元数据探测有共享 2 秒期限，扩展发现有 5 秒启动期限。下一项用本地扩展 fixture 做 Windows 首屏验证，再回其他冷加载路径和用户功能收敛；最终包的启动收益仍待收敛后测量。
+1. **启动与加载稳定**：继续收敛无限等待、取消、关闭后的迟到结果；主聊天、委派、直接执行器、BaseLlmClient、直接生成器及媒体/截图/策略辅助函数已有 Windows 定向证据，多 Config 策略上下文及缓存已隔离；Git worktree 元数据探测有共享 2 秒期限，扩展发现有 5 秒启动期限且已在编译 Config 链验证。下一项回到认证/设置加载等待和其他冷加载路径，再做用户功能收敛；最终包的启动收益仍待收敛后测量。
 2. **双语与日常配置**：保持 `/language` 中文/英文、六档推理唯一选项及即时切换；完善模型选择与保存，按新增缺陷修复，不重复已通过场景。
 3. **真实多 Agent 协作**：继续维护 Teamwork、Boost、Grill me 和 Swarm 的预算、排队、成果保全、错误恢复及独立审核。四份真实失败保留；本地受控链通过不等同于真实复杂任务质量通过，不自动付费重跑。
 4. **演练台交互**：保持 `/演练台`、Morphicons 图标、六档动效和减少动态效果支持，继续修复任务提交、配置与会话状态衔接。
@@ -1972,3 +1972,8 @@ WI-253/E-561至562/F-211：loadCliConfig前的show-toplevel、getProjectRootForW
 ## 2026-11-15 扩展发现启动期限
 
 WI-254/E-563至564/F-212：完整loadCliConfig原等待ExtensionManager.loadExtensions无界；现5s loadExtensionsForStartup，正常列表不变，超时切SimpleExtensionLoader并观察迟到promise，普通错误仍抛；管理命令仍原loadExtensions。新3项旧行为边界通过、CLI编译/两文件lint0，未全量冒烟。未重复长ConPTY认证启动；下一次用本地扩展fixture做Windows首屏验证。个人文件/四旧失败SHA与false/ULQ凭据删除/全局83保全，三份同SHA，goal active。详见docs/ultra-extension-startup-timeout-handoff.md。
+
+
+## 2026-11-15 扩展发现首屏 Windows 链
+
+WI-255/E-565至566/F-213：编译dist的真实loadCliConfig在隔离profile/workspace中接入不合作ExtensionManager.loadExtensions fixture，约5600ms后返回Config并使用SimpleExtensionLoader，迟到promise被观察；四条件全true、0模型/外部请求。源码3项扩展边界、CLI编译/lint/格式通过；整机ConPTY认证冷启动仍单列，不冒称完成。个人配置/四旧失败/ULQ凭据/全局83保全，三份同SHA，goal active。下一查认证/设置等待。详见docs/ultra-extension-startup-windows-handoff.md。
