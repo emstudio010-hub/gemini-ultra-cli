@@ -1285,6 +1285,124 @@ describe('AgentRegistry', () => {
   });
 
   describe('reload', () => {
+    it('serializes overlapping reloads so older directory results cannot repopulate the newer registry', async () => {
+      const config = makeMockedConfig({ enableAgents: true });
+      vi.spyOn(config, 'getA2AClientManager').mockReturnValue(undefined);
+      vi.spyOn(config.storage, 'isWorkspaceHomeDir').mockReturnValue(true);
+      const registry = new TestableAgentRegistry(config);
+      let release!: (value: { agents: AgentDefinition[]; errors: [] }) => void;
+      vi.mocked(tomlLoader.loadAgentsFromDirectory)
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              release = resolve;
+            }),
+        )
+        .mockResolvedValueOnce({
+          agents: [{ ...MOCK_AGENT_V1, name: 'new-agent' }],
+          errors: [],
+        });
+      const first = registry.reload();
+      await vi.waitFor(() =>
+        expect(tomlLoader.loadAgentsFromDirectory).toHaveBeenCalledTimes(1),
+      );
+      const second = registry.reload();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(tomlLoader.loadAgentsFromDirectory).toHaveBeenCalledTimes(1);
+      release({
+        agents: [{ ...MOCK_AGENT_V1, name: 'old-agent' }],
+        errors: [],
+      });
+      const [oldSummary, newSummary] = await Promise.all([first, second]);
+      expect(oldSummary.newAgents).toContain('old-agent');
+      expect(newSummary.newAgents).toContain('new-agent');
+      expect(newSummary.deletedAgents).toContain('old-agent');
+      expect(registry.getDefinition('new-agent')).toBeDefined();
+      expect(registry.getDefinition('old-agent')).toBeUndefined();
+      registry.dispose();
+    });
+
+    it('lets a later reload proceed after an earlier settings refresh rejects', async () => {
+      const config = makeMockedConfig({ enableAgents: true });
+      vi.spyOn(config, 'getA2AClientManager').mockReturnValue(undefined);
+      const registry = new TestableAgentRegistry(config);
+      vi.spyOn(config, 'reloadAgents')
+        .mockRejectedValueOnce(new Error('Settings unavailable'))
+        .mockResolvedValue(undefined);
+      const first = registry.reload().catch((error) => error);
+      const second = registry.reload();
+      expect(await first).toMatchObject({ message: 'Settings unavailable' });
+      expect((await second).errors).toEqual([]);
+      registry.dispose();
+    });
+
+    it('rejects pending and queued reloads after disposal without publishing late definitions', async () => {
+      const config = makeMockedConfig({ enableAgents: true });
+      vi.spyOn(config, 'getA2AClientManager').mockReturnValue(undefined);
+      vi.spyOn(config.storage, 'isWorkspaceHomeDir').mockReturnValue(true);
+      const registry = new TestableAgentRegistry(config);
+      let release!: (value: { agents: AgentDefinition[]; errors: [] }) => void;
+      vi.mocked(tomlLoader.loadAgentsFromDirectory).mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            release = resolve;
+          }),
+      );
+      const first = registry.reload().catch((error) => error);
+      await vi.waitFor(() =>
+        expect(tomlLoader.loadAgentsFromDirectory).toHaveBeenCalledTimes(1),
+      );
+      const second = registry.reload().catch((error) => error);
+      const refreshed = vi.spyOn(coreEvents, 'emitAgentsRefreshed');
+      registry.dispose();
+      release({
+        agents: [{ ...MOCK_AGENT_V1, name: 'late-agent' }],
+        errors: [],
+      });
+      expect(await first).toMatchObject({
+        message: expect.stringContaining('disposed'),
+      });
+      expect(await second).toMatchObject({
+        message: expect.stringContaining('disposed'),
+      });
+      expect(tomlLoader.loadAgentsFromDirectory).toHaveBeenCalledTimes(1);
+      expect(registry.getDefinition('late-agent')).toBeUndefined();
+      expect(refreshed).not.toHaveBeenCalled();
+    });
+
+    it('does not publish a remote card or its policy when the registry is disposed during loading', async () => {
+      const config = makeMockedConfig({ enableAgents: true });
+      const registry = new TestableAgentRegistry(config);
+      let release!: (value: { name: string; description: string }) => void;
+      const loadAgent = vi.fn(
+        () =>
+          new Promise((resolve) => {
+            release = resolve;
+          }),
+      );
+      vi.spyOn(config, 'getA2AClientManager').mockReturnValue({
+        loadAgent,
+      } as unknown as A2AClientManager);
+      const addRule = vi.spyOn(config.getPolicyEngine(), 'addRule');
+      const pending = registry
+        .testRegisterAgent({
+          kind: 'remote',
+          name: 'late-remote',
+          description: 'Fixture',
+          agentCardUrl: 'https://fixture.invalid/card',
+          inputConfig: { inputSchema: { type: 'object' } },
+        })
+        .catch((error) => error);
+      await vi.waitFor(() => expect(loadAgent).toHaveBeenCalledTimes(1));
+      registry.dispose();
+      release({ name: 'late-remote', description: 'Late card' });
+      expect(await pending).toMatchObject({
+        message: expect.stringContaining('disposed'),
+      });
+      expect(registry.getDefinition('late-remote')).toBeUndefined();
+      expect(addRule).not.toHaveBeenCalled();
+    });
+
     it('should clear existing agents and reload from directories', async () => {
       const config = makeMockedConfig({ enableAgents: true });
       const registry = new TestableAgentRegistry(config);

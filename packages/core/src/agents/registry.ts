@@ -55,13 +55,36 @@ export class AgentRegistry {
   private readonly allDefinitions = new Map<string, AgentDefinition<any>>();
 
   private initialized = false;
+  private disposed = false;
+  private mutationQueue: Promise<void> = Promise.resolve();
 
   constructor(private readonly config: Config) {}
+
+  private assertActive(): void {
+    if (this.disposed) throw new Error('Agent registry has been disposed.');
+  }
+
+  /** Keep directory scans, acknowledgements and model refreshes in request order. */
+  private serialize<T>(operation: () => Promise<T>): Promise<T> {
+    const running = this.mutationQueue.then(() => {
+      this.assertActive();
+      return operation();
+    });
+    this.mutationQueue = running.then(
+      () => undefined,
+      () => undefined,
+    );
+    return running;
+  }
 
   /**
    * Discovers and loads agents.
    */
   async initialize(): Promise<void> {
+    return this.serialize(() => this.initializeNow());
+  }
+
+  private async initializeNow(): Promise<void> {
     if (this.initialized) {
       await this.loadAgents();
       return;
@@ -86,12 +109,18 @@ export class AgentRegistry {
    * Clears the current registry and re-scans for agents.
    */
   async reload(): Promise<AgentReloadSummary> {
+    return this.serialize(() => this.reloadNow());
+  }
+
+  private async reloadNow(): Promise<AgentReloadSummary> {
     const previousAgents = new Map(this.agents);
     const reloadErrors: string[] = [];
 
     this.config.getA2AClientManager()?.clearCache();
     await this.config.reloadAgents();
+    this.assertActive();
     await this.loadAgents(reloadErrors);
+    this.assertActive();
 
     const currentAgents = Array.from(this.agents.values());
     const newAgents: string[] = [];
@@ -138,6 +167,10 @@ export class AgentRegistry {
    * Acknowledges and registers a previously unacknowledged agent.
    */
   async acknowledgeAgent(agent: AgentDefinition): Promise<void> {
+    return this.serialize(() => this.acknowledgeNow(agent));
+  }
+
+  private async acknowledgeNow(agent: AgentDefinition): Promise<void> {
     const ackService = this.config.getAcknowledgedAgentsService();
     const projectRoot = this.config.getProjectRoot();
     if (agent.metadata?.hash) {
@@ -146,7 +179,9 @@ export class AgentRegistry {
         agent.name,
         agent.metadata.hash,
       );
+      this.assertActive();
       await this.registerAgent(agent);
+      this.assertActive();
       coreEvents.emitAgentsRefreshed();
     }
   }
@@ -155,10 +190,12 @@ export class AgentRegistry {
    * Disposes of resources and removes event listeners.
    */
   dispose(): void {
+    this.disposed = true;
     coreEvents.off(CoreEvent.ModelChanged, this.onModelChanged);
   }
 
   private async loadAgents(errors?: string[]): Promise<void> {
+    this.assertActive();
     this.agents.clear();
     this.allDefinitions.clear();
 
@@ -180,6 +217,7 @@ export class AgentRegistry {
       if (!folderTrustEnabled || isTrustedFolder) {
         const projectAgentsDir = this.config.storage.getProjectAgentsDir();
         const projectAgents = await loadAgentsFromDirectory(projectAgentsDir);
+        this.assertActive();
         for (const error of projectAgents.errors) {
           const msg = `Agent loading error: ${error.message}`;
           errors?.push(msg);
@@ -204,6 +242,7 @@ export class AgentRegistry {
             agent.name,
             agent.metadata.hash,
           );
+          this.assertActive();
 
           if (isAcknowledged) {
             agentsToRegister.push(agent);
@@ -221,6 +260,7 @@ export class AgentRegistry {
             try {
               await this.registerAgent(agent, errors);
             } catch (e) {
+              this.assertActive();
               const msg = `Error registering project agent "${agent.name}": ${e instanceof Error ? e.message : String(e)}`;
               debugLogger.warn(`[AgentRegistry] ${msg}`, e);
               errors?.push(msg);
@@ -237,8 +277,10 @@ export class AgentRegistry {
     }
 
     // Load user-level agents: ~/.gemini/agents/
+    this.assertActive();
     const userAgentsDir = Storage.getUserAgentsDir();
     const userAgents = await loadAgentsFromDirectory(userAgentsDir);
+    this.assertActive();
     for (const error of userAgents.errors) {
       debugLogger.warn(
         `[AgentRegistry] Error loading user agent: ${error.message}`,
@@ -253,6 +295,7 @@ export class AgentRegistry {
           this.ensureRemoteAgentHash(agent);
           await this.registerAgent(agent, errors);
         } catch (e) {
+          this.assertActive();
           const msg = `Error registering user agent "${agent.name}": ${e instanceof Error ? e.message : String(e)}`;
           debugLogger.warn(`[AgentRegistry] ${msg}`, e);
           errors?.push(msg);
@@ -263,12 +306,14 @@ export class AgentRegistry {
 
     // Load agents from extensions
     for (const extension of this.config.getExtensions()) {
+      this.assertActive();
       if (extension.isActive && extension.agents) {
         await Promise.allSettled(
           extension.agents.map(async (agent) => {
             try {
               await this.registerAgent(agent, errors);
             } catch (e) {
+              this.assertActive();
               const msg = `Error registering extension agent "${agent.name}": ${e instanceof Error ? e.message : String(e)}`;
               debugLogger.warn(`[AgentRegistry] ${msg}`, e);
               errors?.push(msg);
@@ -279,6 +324,7 @@ export class AgentRegistry {
       }
     }
 
+    this.assertActive();
     if (this.config.getDebugMode()) {
       debugLogger.log(
         `[AgentRegistry] Loaded with ${this.agents.size} agents.`,
@@ -325,6 +371,12 @@ export class AgentRegistry {
   private async refreshAgents(
     scope: AgentDefinition['kind'] | 'all' = 'all',
   ): Promise<void> {
+    return this.serialize(() => this.refreshAgentsNow(scope));
+  }
+
+  private async refreshAgentsNow(
+    scope: AgentDefinition['kind'] | 'all',
+  ): Promise<void> {
     if (!this.config.isAgentsEnabled()) {
       return;
     }
@@ -336,6 +388,7 @@ export class AgentRegistry {
         }
       }),
     );
+    this.assertActive();
   }
 
   /**
@@ -347,6 +400,7 @@ export class AgentRegistry {
     definition: AgentDefinition<TOutput>,
     errors?: string[],
   ): Promise<void> {
+    this.assertActive();
     const existing = this.agents.get(definition.name);
     if (existing && existing !== definition) {
       coreEvents.emitFeedback(
@@ -371,6 +425,7 @@ export class AgentRegistry {
   protected registerLocalAgent<TOutput extends z.ZodTypeAny>(
     definition: AgentDefinition<TOutput>,
   ): void {
+    this.assertActive();
     if (definition.kind !== 'local') {
       return;
     }
@@ -461,6 +516,7 @@ export class AgentRegistry {
     definition: AgentDefinition<TOutput>,
     errors?: string[],
   ): Promise<void> {
+    this.assertActive();
     if (definition.kind !== 'remote') {
       return;
     }
@@ -517,6 +573,7 @@ export class AgentRegistry {
           targetUrl,
           agentCardUrl: remoteDef.agentCardUrl,
         });
+        this.assertActive();
         if (!provider) {
           throw new Error(
             `Failed to create auth provider for agent '${definition.name}'`,
@@ -530,6 +587,7 @@ export class AgentRegistry {
         getAgentCardLoadOptions(remoteDef),
         authHandler,
       );
+      this.assertActive();
 
       // Validate auth configuration against the agent card's security schemes.
       if (agentCard.securitySchemes) {
@@ -587,6 +645,7 @@ export class AgentRegistry {
       this.agents.set(definition.name, definition);
       this.addAgentPolicy(definition);
     } catch (e) {
+      this.assertActive();
       // Surface structured, user-friendly error messages for known failure modes.
       let msg: string;
       if (e instanceof A2AAgentError) {
