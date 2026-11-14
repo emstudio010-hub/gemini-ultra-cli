@@ -288,7 +288,11 @@ class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
       }
 
       // Discover JIT subdirectory context for the listed directory
-      const jitContext = await discoverJitContext(this.config, resolvedDirPath);
+      const jitContext = await discoverJitContext(
+        this.config,
+        resolvedDirPath,
+        _signal,
+      );
       if (jitContext) {
         resultMessage = appendJitContext(resultMessage, jitContext);
       }

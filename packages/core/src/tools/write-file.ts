@@ -559,6 +559,7 @@ class WriteFileToolInvocation extends BaseToolInvocation<
       const jitContext = await discoverJitContext(
         this.config,
         this.resolvedPath,
+        abortSignal,
       );
       let llmContent = llmSuccessMessageParts.join(' ');
       if (jitContext) {

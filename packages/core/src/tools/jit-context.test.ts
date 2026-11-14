@@ -47,6 +47,7 @@ describe('jit-context', () => {
       expect(mockMemoryContextManager.discoverContext).toHaveBeenCalledWith(
         '/app/src/file.ts',
         ['/app'],
+        undefined,
       );
       expect(result).toBe('Subdirectory context content');
     });
@@ -62,6 +63,7 @@ describe('jit-context', () => {
       expect(mockMemoryContextManager.discoverContext).toHaveBeenCalledWith(
         '/app/src/file.ts',
         ['/app', '/lib'],
+        undefined,
       );
     });
 
@@ -81,6 +83,25 @@ describe('jit-context', () => {
       const result = await discoverJitContext(mockConfig, '/app/src/file.ts');
 
       expect(result).toBe('');
+    });
+
+    it('passes tool cancellation to the manager and keeps supplementary failure isolated', async () => {
+      const controller = new AbortController();
+      vi.mocked(mockMemoryContextManager.discoverContext).mockRejectedValue(
+        new DOMException('Cancelled', 'AbortError'),
+      );
+      expect(
+        await discoverJitContext(
+          mockConfig,
+          '/app/src/file.ts',
+          controller.signal,
+        ),
+      ).toBe('');
+      expect(mockMemoryContextManager.discoverContext).toHaveBeenCalledWith(
+        '/app/src/file.ts',
+        ['/app'],
+        controller.signal,
+      );
     });
   });
 

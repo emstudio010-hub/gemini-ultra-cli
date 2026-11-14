@@ -326,6 +326,214 @@ describe('MemoryContextManager', () => {
   });
 
   describe('discoverContext', () => {
+    const file = '/app/src/GEMINI.md';
+    const loaded = {
+      files: [{ path: file, content: 'Scoped rule' }],
+      fileIdentities: ['dev:1'],
+    };
+    function deferred<T>() {
+      let resolve!: (value: T) => void;
+      const promise = new Promise<T>((done) => {
+        resolve = done;
+      });
+      return { promise, resolve };
+    }
+
+    it.each(['en', 'zh'] as const)(
+      'bounds %s JIT waits and ignores late reads without poisoning retry',
+      async (locale) => {
+        const { I18nManager } = await import('../i18n/i18nManager.js');
+        const i18n = I18nManager.getInstance();
+        const previousLocale = i18n.getLocale();
+        i18n.setLocale(locale);
+        vi.useFakeTimers();
+        const pending = deferred<memoryDiscovery.MemoryLoadResult>();
+        vi.mocked(memoryDiscovery.loadJitSubdirectoryMemory)
+          .mockReturnValueOnce(pending.promise)
+          .mockResolvedValue(loaded);
+        try {
+          const outcome = memoryContextManager
+            .discoverContext('/app/src/a.ts', ['/app'])
+            .catch((error) => error);
+          await vi.advanceTimersByTimeAsync(10_000);
+          const error = await outcome;
+          expect(error).toMatchObject({ name: 'MemoryContextTimeoutError' });
+          expect(error.message).toContain(
+            locale === 'zh' ? '子目录记忆' : 'Subdirectory memory',
+          );
+          pending.resolve(loaded);
+          await Promise.resolve();
+          expect(memoryContextManager.getLoadedPaths().size).toBe(0);
+          expect(
+            await memoryContextManager.discoverContext('/app/src/a.ts', [
+              '/app',
+            ]),
+          ).toContain('Scoped rule');
+        } finally {
+          i18n.setLocale(previousLocale);
+        }
+      },
+    );
+
+    it('serializes JIT discovery using the last committed identity snapshot', async () => {
+      const pending = deferred<memoryDiscovery.MemoryLoadResult>();
+      const entered = deferred<void>();
+      let secondSnapshot: { path: boolean; identity: boolean } | undefined;
+      vi.mocked(memoryDiscovery.loadJitSubdirectoryMemory)
+        .mockImplementationOnce(() => {
+          entered.resolve();
+          return pending.promise;
+        })
+        .mockImplementationOnce(async (_path, _roots, paths, identities) => {
+          secondSnapshot = {
+            path: paths.has(file),
+            identity: identities?.has('dev:1') ?? false,
+          };
+          return { files: [] };
+        });
+      const first = memoryContextManager.discoverContext('/app/src/a.ts', [
+        '/app',
+      ]);
+      await entered.promise;
+      const second = memoryContextManager.discoverContext('/app/src/b.ts', [
+        '/app',
+      ]);
+      expect(memoryDiscovery.loadJitSubdirectoryMemory).toHaveBeenCalledTimes(
+        1,
+      );
+      pending.resolve(loaded);
+      expect(await first).toContain('Scoped rule');
+      expect(await second).toBe('');
+      expect(secondSnapshot).toEqual({ path: true, identity: true });
+    });
+
+    it('cancels queued JIT work before reading and leaves later work runnable', async () => {
+      const pending = deferred<memoryDiscovery.MemoryLoadResult>();
+      const entered = deferred<void>();
+      vi.mocked(memoryDiscovery.loadJitSubdirectoryMemory)
+        .mockImplementationOnce(() => {
+          entered.resolve();
+          return pending.promise;
+        })
+        .mockResolvedValue({ files: [] });
+      const first = memoryContextManager.discoverContext('/app/src/a.ts', [
+        '/app',
+      ]);
+      await entered.promise;
+      const controller = new AbortController();
+      const second = memoryContextManager
+        .discoverContext('/app/src/b.ts', ['/app'], controller.signal)
+        .catch((error) => error);
+      controller.abort();
+      expect(await second).toMatchObject({ name: 'AbortError' });
+      expect(memoryDiscovery.loadJitSubdirectoryMemory).toHaveBeenCalledTimes(
+        1,
+      );
+      const third = memoryContextManager.discoverContext('/app/src/c.ts', [
+        '/app',
+      ]);
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(memoryDiscovery.loadJitSubdirectoryMemory).toHaveBeenCalledTimes(
+        1,
+      );
+      pending.resolve(loaded);
+      await first;
+      await third;
+      expect(memoryDiscovery.loadJitSubdirectoryMemory).toHaveBeenCalledTimes(
+        2,
+      );
+    });
+
+    it('invalidates old JIT on refresh and waits for the new refresh snapshot', async () => {
+      const pending = deferred<memoryDiscovery.MemoryLoadResult>();
+      const entered = deferred<void>();
+      vi.mocked(memoryDiscovery.loadJitSubdirectoryMemory)
+        .mockImplementationOnce(() => {
+          entered.resolve();
+          return pending.promise;
+        })
+        .mockResolvedValue({ files: [] });
+      const old = memoryContextManager
+        .discoverContext('/app/src/a.ts', ['/app'])
+        .catch((error) => error);
+      await entered.promise;
+      const discovered = deferred<string[]>();
+      vi.mocked(memoryDiscovery.getGlobalMemoryPaths).mockReturnValueOnce(
+        discovered.promise,
+      );
+      vi.mocked(memoryDiscovery.getEnvironmentMemoryPaths).mockResolvedValue(
+        [],
+      );
+      vi.mocked(memoryDiscovery.readGeminiMdFiles).mockResolvedValue([]);
+      const refresh = memoryContextManager.refresh();
+      expect(await old).toMatchObject({ name: 'AbortError' });
+      const fresh = memoryContextManager.discoverContext('/app/src/b.ts', [
+        '/app',
+      ]);
+      await Promise.resolve();
+      expect(memoryDiscovery.loadJitSubdirectoryMemory).toHaveBeenCalledTimes(
+        1,
+      );
+      discovered.resolve([]);
+      await refresh;
+      await fresh;
+      pending.resolve(loaded);
+      await Promise.resolve();
+      expect(memoryContextManager.getLoadedPaths().size).toBe(0);
+    });
+
+    it('dispose cancels active JIT and refresh and rejects future operations', async () => {
+      const pending = deferred<memoryDiscovery.MemoryLoadResult>();
+      const entered = deferred<void>();
+      vi.mocked(
+        memoryDiscovery.loadJitSubdirectoryMemory,
+      ).mockImplementationOnce(() => {
+        entered.resolve();
+        return pending.promise;
+      });
+      const old = memoryContextManager
+        .discoverContext('/app/src/a.ts', ['/app'])
+        .catch((error) => error);
+      await entered.promise;
+      memoryContextManager.dispose();
+      expect(await old).toMatchObject({ name: 'AbortError' });
+      pending.resolve(loaded);
+      await expect(memoryContextManager.refresh()).rejects.toMatchObject({
+        name: 'AbortError',
+      });
+      await expect(
+        memoryContextManager.discoverContext('/app/src/a.ts', ['/app']),
+      ).rejects.toMatchObject({ name: 'AbortError' });
+      expect(memoryContextManager.getLoadedPaths().size).toBe(0);
+
+      const another = new MemoryContextManager(mockConfig);
+      vi.mocked(memoryDiscovery.getGlobalMemoryPaths).mockReturnValue(
+        new Promise(() => {}),
+      );
+      const refresh = another.refresh().catch((error) => error);
+      another.dispose();
+      expect(await refresh).toMatchObject({ name: 'AbortError' });
+    });
+
+    it('does not publish or mark rules loaded after trust is revoked', async () => {
+      const pending = deferred<memoryDiscovery.MemoryLoadResult>();
+      const entered = deferred<void>();
+      vi.mocked(
+        memoryDiscovery.loadJitSubdirectoryMemory,
+      ).mockImplementationOnce(() => {
+        entered.resolve();
+        return pending.promise;
+      });
+      const operation = memoryContextManager.discoverContext('/app/src/a.ts', [
+        '/app',
+      ]);
+      await entered.promise;
+      vi.mocked(mockConfig.isTrustedFolder).mockReturnValue(false);
+      pending.resolve(loaded);
+      expect(await operation).toBe('');
+      expect(memoryContextManager.getLoadedPaths().size).toBe(0);
+    });
+
     it('should discover and load new context', async () => {
       const mockResult: memoryDiscovery.MemoryLoadResult = {
         files: [{ path: '/app/src/GEMINI.md', content: 'Src Content' }],

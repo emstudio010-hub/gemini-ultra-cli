@@ -15,11 +15,13 @@ import type { Config } from '../config/config.js';
  *
  * @param config - The runtime configuration.
  * @param accessedPath - The absolute path being accessed by the tool.
+ * @param signal - Cancellation of the tool's supplementary memory wait.
  * @returns The discovered context string, or empty string if none found.
  */
 export async function discoverJitContext(
   config: Config,
   accessedPath: string,
+  signal?: AbortSignal,
 ): Promise<string> {
   const memoryContextManager = config.getMemoryContextManager();
   if (!memoryContextManager) {
@@ -32,6 +34,7 @@ export async function discoverJitContext(
     return await memoryContextManager.discoverContext(
       accessedPath,
       trustedRoots,
+      signal,
     );
   } catch {
     // JIT context is supplementary — never fail the tool's primary operation.

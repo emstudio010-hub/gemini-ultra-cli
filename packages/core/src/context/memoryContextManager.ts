@@ -33,6 +33,18 @@ export class MemoryRefreshTimeoutError extends Error {
   }
 }
 
+export class MemoryContextTimeoutError extends Error {
+  override name = 'MemoryContextTimeoutError';
+  constructor() {
+    super(
+      I18nManager.getInstance().t(
+        '子目录记忆加载超过 10 秒，未发布迟到内容。请检查 GEMINI.md 后重试文件操作。',
+        'Subdirectory memory loading exceeded 10 seconds; late content was not published. Check GEMINI.md and retry the file operation.',
+      ),
+    );
+  }
+}
+
 export class MemoryContextManager {
   private readonly loadedPaths: Set<string> = new Set();
   private readonly loadedFileIdentities: Set<string> = new Set();
@@ -42,6 +54,10 @@ export class MemoryContextManager {
   private projectMemory: string = '';
   private userProjectMemoryContent: string = '';
   private refreshController?: AbortController;
+  private contextController = new AbortController();
+  private contextQueue: Promise<void> = Promise.resolve();
+  private refreshSettled: Promise<void> = Promise.resolve();
+  private disposed = false;
 
   constructor(config: Config) {
     this.config = config;
@@ -52,11 +68,23 @@ export class MemoryContextManager {
    */
   async refresh(signal?: AbortSignal): Promise<void> {
     signal?.throwIfAborted();
+    this.throwIfDisposed();
+    this.contextController.abort(
+      new DOMException(
+        'Memory refresh invalidated pending context.',
+        'AbortError',
+      ),
+    );
+    this.contextController = new AbortController();
     this.refreshController?.abort(
       new DOMException('Memory refresh superseded.', 'AbortError'),
     );
     const controller = new AbortController();
     this.refreshController = controller;
+    let settle!: () => void;
+    this.refreshSettled = new Promise<void>((resolve) => {
+      settle = resolve;
+    });
     const refreshSignal = signal
       ? AbortSignal.any([signal, controller.signal])
       : controller.signal;
@@ -85,6 +113,7 @@ export class MemoryContextManager {
       this.emitMemoryChanged();
     } finally {
       clearTimeout(timer);
+      settle();
       if (this.refreshController === controller)
         this.refreshController = undefined;
     }
@@ -187,34 +216,73 @@ export class MemoryContextManager {
   async discoverContext(
     accessedPath: string,
     trustedRoots: string[],
+    signal?: AbortSignal,
   ): Promise<string> {
+    signal?.throwIfAborted();
+    this.throwIfDisposed();
     if (!this.config.isTrustedFolder()) {
       return '';
     }
-    const result = await loadJitSubdirectoryMemory(
-      accessedPath,
-      trustedRoots,
-      this.loadedPaths,
-      this.loadedFileIdentities,
-      this.config.getMemoryBoundaryMarkers(),
+    const controller = new AbortController();
+    const contextSignal = AbortSignal.any([
+      controller.signal,
+      this.contextController.signal,
+      ...(signal ? [signal] : []),
+    ]);
+    const timer = setTimeout(
+      () => controller.abort(new MemoryContextTimeoutError()),
+      10_000,
     );
+    const previous = this.contextQueue;
+    const operation = (async () => {
+      await withAbortSignal(contextSignal, () => previous);
+      await withAbortSignal(contextSignal, () => this.refreshSettled);
+      if (!this.config.isTrustedFolder()) return '';
+      const result = await withAbortSignal(contextSignal, () =>
+        loadJitSubdirectoryMemory(
+          accessedPath,
+          trustedRoots,
+          new Set(this.loadedPaths),
+          new Set(this.loadedFileIdentities),
+          this.config.getMemoryBoundaryMarkers(),
+        ),
+      );
 
-    if (result.files.length === 0) {
-      return '';
-    }
-
-    const newFilePaths = result.files.map((f) => f.path);
-    this.markAsLoaded(newFilePaths);
-
-    // Cache identities for newly loaded files
-    if (result.fileIdentities) {
-      for (const identity of result.fileIdentities) {
+      if (!this.config.isTrustedFolder() || result.files.length === 0)
+        return '';
+      const content = concatenateInstructions(
+        result.files.map((f) => ({ filePath: f.path, content: f.content })),
+      );
+      contextSignal.throwIfAborted();
+      this.markAsLoaded(result.files.map((f) => f.path));
+      for (const identity of result.fileIdentities ?? []) {
         this.loadedFileIdentities.add(identity);
       }
-    }
-    return concatenateInstructions(
-      result.files.map((f) => ({ filePath: f.path, content: f.content })),
+      return content;
+    })();
+    // A cancelled queued caller can finish early, but later callers must still
+    // wait for the active predecessor before taking a cache snapshot.
+    this.contextQueue = Promise.allSettled([previous, operation]).then(
+      () => undefined,
     );
+    try {
+      return await operation;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  dispose(): void {
+    this.disposed = true;
+    const reason = new DOMException('Memory manager disposed.', 'AbortError');
+    this.refreshController?.abort(reason);
+    this.contextController.abort(reason);
+  }
+
+  private throwIfDisposed(): void {
+    if (this.disposed) {
+      throw new DOMException('Memory manager disposed.', 'AbortError');
+    }
   }
 
   private emitMemoryChanged(): void {

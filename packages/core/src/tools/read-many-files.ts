@@ -429,7 +429,7 @@ ${finalExclusionPatternsForDescription
     );
     const jitParts: string[] = [];
     for (const dir of uniqueDirs) {
-      const ctx = await discoverJitContext(this.config, dir);
+      const ctx = await discoverJitContext(this.config, dir, signal);
       if (ctx) {
         jitParts.push(ctx);
       }

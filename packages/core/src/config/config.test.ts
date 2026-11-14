@@ -262,6 +262,7 @@ vi.mock('../utils/fetch.js', () => ({
 vi.mock('../context/memoryContextManager.js', () => ({
   MemoryContextManager: vi.fn().mockImplementation(() => ({
     refresh: vi.fn(),
+    dispose: vi.fn(),
     getGlobalMemory: vi.fn().mockReturnValue(''),
     getExtensionMemory: vi.fn().mockReturnValue(''),
     getEnvironmentMemory: vi.fn().mockReturnValue(''),

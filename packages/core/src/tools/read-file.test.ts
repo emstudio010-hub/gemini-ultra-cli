@@ -517,6 +517,7 @@ describe('ReadFileTool', () => {
       expect(discoverJitContext).toHaveBeenCalledWith(
         expect.anything(),
         target2,
+        abortSignal,
       );
     });
 

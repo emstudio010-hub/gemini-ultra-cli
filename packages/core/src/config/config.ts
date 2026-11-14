@@ -4605,6 +4605,7 @@ export class Config implements McpContext, AgentLoopContext {
    * Disposes of resources and removes event listeners.
    */
   async dispose(): Promise<void> {
+    this.memoryContextManager?.dispose();
     this.logCurrentModeDuration(this.getApprovalMode());
     coreEvents.off(CoreEvent.AgentsRefreshed, this.onAgentsRefreshed);
     this.agentRegistry?.dispose();

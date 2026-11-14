@@ -1104,6 +1104,7 @@ ${snippet}`);
       const jitContext = await discoverJitContext(
         this.config,
         this.resolvedPath,
+        signal,
       );
       let llmContent = llmSuccessMessageParts.join(' ');
       if (jitContext) {

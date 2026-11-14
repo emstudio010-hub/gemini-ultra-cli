@@ -213,7 +213,11 @@ ${result.llmContent}`;
     );
 
     // Discover JIT subdirectory context for the accessed file path
-    const jitContext = await discoverJitContext(this.config, targetPathToRead);
+    const jitContext = await discoverJitContext(
+      this.config,
+      targetPathToRead,
+      _options.abortSignal,
+    );
     if (jitContext) {
       if (typeof llmContent === 'string') {
         llmContent = appendJitContext(llmContent, jitContext);
