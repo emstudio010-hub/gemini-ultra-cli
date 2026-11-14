@@ -247,6 +247,10 @@ Other observers continue receiving events, and the agent keeps its original
 completion or failure result. Asynchronous observer work is not awaited by the
 agent loop.
 
+Stopping the Drill Cockpit also cancels an unfinished startup. A cancelled
+startup reports `AbortError` and does not publish a URL; a later start creates a
+fresh service and credential. Concurrent starts share the current startup.
+
 In the Drill Cockpit, model-catalog discovery stops when its browser request
 disconnects or the cockpit server closes. Cancelling discovery does not save or
 replace your configured models. You can request the catalog again afterward.

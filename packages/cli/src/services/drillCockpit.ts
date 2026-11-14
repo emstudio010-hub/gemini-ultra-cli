@@ -46,7 +46,9 @@ interface DrillSession {
 
 let session: DrillSession | undefined;
 let server: Server | undefined;
-let starting: Promise<string> | undefined;
+let starting:
+  | { server: Server; controller: AbortController; promise?: Promise<string> }
+  | undefined;
 let address = '';
 let token = '';
 let submitting = false;
@@ -530,6 +532,18 @@ async function handleRequest(
 }
 
 export function stopDrillCockpit(): void {
+  const pending = starting;
+  starting = undefined;
+  if (pending) {
+    const error = new Error(
+      I18nManager.getInstance().t(
+        '演练台启动已取消。',
+        'Drill Cockpit startup cancelled.',
+      ),
+    );
+    error.name = 'AbortError';
+    pending.controller.abort(error);
+  }
   server?.close();
   server?.closeAllConnections();
   server = undefined;
@@ -539,47 +553,85 @@ export function stopDrillCockpit(): void {
 }
 
 export async function startDrillCockpit(): Promise<string> {
-  if (starting) return starting;
+  if (starting?.promise) return starting.promise;
   if (server) return `${address}/#${token}`;
   if (!session) throw new Error('当前交互会话尚未就绪。');
-  starting = (async () => {
-    token = randomBytes(32).toString('hex');
-    const nonce = randomBytes(16).toString('hex');
-    const next = createServer((req, res) => {
-      void handleRequest(req, res, nonce).catch((error: unknown) => {
-        if (!res.headersSent)
-          reply(res, error instanceof RequestError ? error.status : 500, {
-            error: error instanceof Error ? error.message : '控制台请求失败。',
-          });
-        else res.end();
-      });
+  const nextToken = randomBytes(32).toString('hex');
+  const nonce = randomBytes(16).toString('hex');
+  const next = createServer((req, res) => {
+    void handleRequest(req, res, nonce).catch((error: unknown) => {
+      if (!res.headersSent)
+        reply(res, error instanceof RequestError ? error.status : 500, {
+          error: error instanceof Error ? error.message : '控制台请求失败。',
+        });
+      else res.end();
     });
-    await new Promise<void>((resolve, reject) => {
-      const onError = (error: NodeJS.ErrnoException) => {
-        if (error.code === 'EADDRINUSE') next.listen(0, '127.0.0.1');
-        else {
+  });
+  const state = {
+    server: next,
+    controller: new AbortController(),
+    promise: undefined as Promise<string> | undefined,
+  };
+  starting = state;
+  const pending = (async () => {
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const { signal } = state.controller;
+        let fallback = false;
+        const cleanup = () => {
+          signal.removeEventListener('abort', onAbort);
           next.removeListener('error', onError);
-          reject(error);
-        }
-      };
-      next.on('error', onError);
-      next.listen(45678, '127.0.0.1', () => {
-        next.removeListener('error', onError);
-        resolve();
+          next.removeListener('listening', onListening);
+          next.removeListener('close', cleanup);
+        };
+        const onAbort = () => reject(signal.reason);
+        const onListening = () => {
+          if (signal.aborted) {
+            next.close();
+            return;
+          }
+          cleanup();
+          resolve();
+        };
+        const onError = (error: NodeJS.ErrnoException) => {
+          if (signal.aborted) return;
+          if (error.code === 'EADDRINUSE' && !fallback) {
+            fallback = true;
+            next.listen({ port: 0, host: '127.0.0.1', signal });
+          } else {
+            cleanup();
+            reject(error);
+          }
+        };
+        next.on('error', onError);
+        next.on('listening', onListening);
+        next.once('close', cleanup);
+        signal.addEventListener('abort', onAbort, { once: true });
+        next.listen({ port: 45678, host: '127.0.0.1', signal });
       });
-    });
-    const bound = next.address();
-    if (!bound || typeof bound === 'string')
-      throw new Error('无法获取控制台端口。');
-    address = `http://127.0.0.1:${bound.port}`;
-    server = next;
-    next.unref();
-    return `${address}/#${token}`;
+      state.controller.signal.throwIfAborted();
+      if (starting !== state)
+        throw new Error('Drill Cockpit startup was superseded.');
+      const bound = next.address();
+      if (!bound || typeof bound === 'string')
+        throw new Error('无法获取控制台端口。');
+      address = `http://127.0.0.1:${bound.port}`;
+      token = nextToken;
+      server = next;
+      next.unref();
+      return `${address}/#${token}`;
+    } catch (error) {
+      state.controller.abort(error);
+      next.closeAllConnections();
+      next.close();
+      throw error;
+    }
   })();
+  state.promise = pending;
   try {
-    return await starting;
+    return await pending;
   } finally {
-    starting = undefined;
+    if (starting === state) starting = undefined;
   }
 }
 
