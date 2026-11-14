@@ -44,6 +44,7 @@ import {
   isGeminiWorktree,
   getSafeGitEnv,
   type WorktreeSettings,
+  type GeminiCLIExtension,
   type HookDefinition,
   type HookEventName,
   type OutputFormat,
@@ -594,6 +595,34 @@ export interface LoadCliConfigOptions {
   loadedSettings?: LoadedSettings;
 }
 
+const EXTENSION_STARTUP_TIMEOUT_MS = 5_000;
+
+/**
+ * Extension discovery is optional startup metadata. A broken filesystem or
+ * extension entry must not hold the first prompt forever.
+ */
+export async function loadExtensionsForStartup(
+  manager: ExtensionManager,
+  timeoutMs = EXTENSION_STARTUP_TIMEOUT_MS,
+): Promise<GeminiCLIExtension[] | undefined> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const loading = manager.loadExtensions();
+  loading.catch((error: unknown) => {
+    debugLogger.debug(
+      'Extension discovery finished after startup fallback:',
+      error,
+    );
+  });
+  try {
+    const timeout = new Promise<undefined>((resolve) => {
+      timer = setTimeout(() => resolve(undefined), timeoutMs);
+    });
+    return await Promise.race([loading, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function loadCliConfig(
   settings: MergedSettings,
   sessionId: string,
@@ -686,7 +715,13 @@ export async function loadCliConfig(
       eventEmitter: coreEvents as EventEmitter<ExtensionEvents>,
       clientVersion: await getVersion(),
     });
-    await extensionManager.loadExtensions();
+    const loadedExtensions = await loadExtensionsForStartup(extensionManager);
+    if (!loadedExtensions) {
+      debugLogger.warn(
+        `Extension discovery exceeded ${EXTENSION_STARTUP_TIMEOUT_MS} ms; continuing startup without extensions. Retry with /extensions reload.`,
+      );
+      extensionManager = undefined;
+    }
   }
 
   const extensionPlanSettings = extensionManager
