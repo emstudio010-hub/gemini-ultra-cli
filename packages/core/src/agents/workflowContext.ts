@@ -25,17 +25,17 @@ function reportFile(
   root: string,
   record: AgentWorkflow,
   index: number,
+  text: string,
 ): string {
-  const report = record.reports[index];
   const directory = path.join(root, 'agent-workflows', `${record.id}.reports`);
-  const hash = digest(report.text);
+  const hash = digest(text);
   const file = path.join(
     directory,
     `${String(index + 1).padStart(3, '0')}-${hash}.md`,
   );
   fs.mkdirSync(directory, { recursive: true });
   try {
-    fs.writeFileSync(file, report.text, { flag: 'wx', mode: 0o600 });
+    fs.writeFileSync(file, text, { flag: 'wx', mode: 0o600 });
   } catch (error) {
     if (
       typeof error !== 'object' ||
@@ -93,7 +93,7 @@ export function workflowContext(root: string, record: AgentWorkflow): string {
         ? {
             fullReport: report.fullText
               ? workflowReportArchivePath(root, record.id, report.fullText)
-              : reportFile(root, record, reportIndex),
+              : reportFile(root, record, reportIndex, original),
             chars: original.length,
             sha256: digest(original),
           }
