@@ -17,6 +17,11 @@ import {
   cancelSavedSwarm,
   I18nManager,
   getSwarmEngine,
+  createAgentWorkflow,
+  saveAgentWorkflow,
+  activateWorkflowBudget,
+  runAgentWorkflow,
+  cancelAgentWorkflow,
 } from '@google/gemini-cli-core';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { swarmCommand } from './swarmCommand.js';
@@ -461,4 +466,47 @@ it('prepares a task and a future named model before any member or model call sta
     members: [],
     budget: { requests: 0, turns: 0 },
   });
+});
+
+it('refuses a new Swarm while a native workflow is actively running', async () => {
+  const record = createAgentWorkflow(
+    root,
+    'boost',
+    'Already running workflow',
+    'default',
+  );
+  record.approved = true;
+  record.phase = 'ready';
+  saveAgentWorkflow(root, record);
+  activateWorkflowBudget(root, record);
+  let started!: () => void;
+  const startedPromise = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  const pending = runAgentWorkflow(
+    root,
+    record.id,
+    new AbortController().signal,
+    async (_agent, _prompt, signal) => {
+      started();
+      await new Promise<void>((resolve) =>
+        signal.addEventListener('abort', () => resolve(), { once: true }),
+      );
+      return { completed: false, text: 'stopped' };
+    },
+  );
+  await startedPromise;
+  const config = {
+    storage: { getProjectTempDir: () => root },
+    getApprovalMode: () => ApprovalMode.DEFAULT,
+  } as unknown as Config;
+  const context = createMockCommandContext({
+    services: { agentContext: { config } },
+  });
+  await swarmCommand.action!(context, 'Second concurrent swarm');
+  expect(JSON.stringify(vi.mocked(context.ui.addItem).mock.calls)).toContain(
+    'already running',
+  );
+  cancelAgentWorkflow(root, record.id);
+  await pending;
 });

@@ -11,7 +11,7 @@
 
 1. **启动与加载稳定**：继续收敛无限等待、取消、关闭后的迟到结果；主聊天、委派、直接执行器、BaseLlmClient、直接生成器及媒体/截图/策略辅助函数已有 Windows 定向证据，多 Config 策略上下文及缓存已隔离；Git worktree 元数据探测有共享 2 秒期限，扩展发现有 5 秒启动期限且已在编译 Config 链验证。下一项回到认证/设置加载等待和其他冷加载路径，再做用户功能收敛；最终包的启动收益仍待收敛后测量。
 2. **双语与日常配置**：保持 `/language` 中文/英文、六档推理唯一选项及即时切换；完善模型选择与保存，按新增缺陷修复，不重复已通过场景。
-3. **真实多 Agent 协作**：继续维护 Teamwork、Boost、Grill me 和 Swarm 的预算、排队、成果保全、错误恢复及独立审核；Swarm 入口现在会先阻止与运行中工作流并行创建。四份真实失败保留；本地受控链通过不等同于真实复杂任务质量通过，不自动付费重跑。
+3. **真实多 Agent 协作**：继续维护 Teamwork、Boost、Grill me 和 Swarm 的预算、排队、成果保全、错误恢复及独立审核；Swarm 入口现在会先阻止与运行中工作流并行创建，且已有真实运行锁定向测试。四份真实失败保留；本地受控链通过不等同于真实复杂任务质量通过，不自动付费重跑。
 4. **演练台交互**：保持 `/演练台`、Morphicons 图标、六档动效和减少动态效果支持，继续修复任务提交、配置与会话状态衔接。
 5. **原生红队与可移植逆向**：维护授权、只读调查、事实和工件链、工具路径发现；已有静态链证据，复杂格式与动态分析仍待按实际功能补齐。
 6. **交付收敛**：先完成源码及 Windows 必要定向验证；功能收敛后再做 Windows 最终包和 macOS/Linux 最终分发。当前全局 preview.83 保留，暂不打包、重装、升版或运行三平台 CI。
@@ -1987,3 +1987,8 @@ WI-256/E-567/F-214：ProviderManager目录已有8秒/2MiB/AbortSignal，但CLI /
 ## 2026-11-15 Swarm与运行中工作流互斥入口
 
 WI-257/E-568/F-215：/swarm新任务入口先检查isAgentWorkflowRunning，运行中立即中英文提示并阻止第二协作路径；CLI编译、Swarm选择性prepare/status测试、eslint通过，未付费/外部请求/全量冒烟。三份交接SHA、目标池/case同步，goal active。详见docs/ultra-swarm-workflow-mutual-exclusion-handoff.md。
+
+
+## 2026-11-15 Swarm互斥真实运行锁验证
+
+WI-257/E-568至569/F-215：新增测试用真实ready Boost工作流与reader执行锁，第二Swarm立即拒绝且不建任务；取消原工作流后reader正常收尾。CLI编译、Swarm单项测试、lint/格式/diff0；无全量/付费。三份交接SHA、目标池/case同步，goal active。详见docs/ultra-swarm-mutual-exclusion-test-handoff.md。
