@@ -211,6 +211,14 @@ by itself distinguish a malformed upstream response from incorrect stream
 fragment assembly. A failed Swarm member retains this diagnostic in its report
 and still follows the task's cumulative failure and retry limits.
 
+For OpenAI Responses streams, argument events must refer to an already declared
+function-call item. Reusing a call ID for another item, changing an item's
+identity, or changing arguments after their final event rejects the whole tool
+batch. Repeated identical declarations preserve collected fragments; repeated
+identical final arguments remain valid. A declared call may still complete from
+argument deltas when an endpoint omits the separate final-arguments event. These
+checks do not repair malformed JSON.
+
 ## Existing GitHub issues similar to yours or creating new issues
 
 If you encounter an issue that was not covered here in this _Troubleshooting

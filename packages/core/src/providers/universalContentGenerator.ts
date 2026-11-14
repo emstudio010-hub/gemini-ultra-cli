@@ -1065,8 +1065,9 @@ export class UniversalContentGenerator implements ContentGenerator {
 
     const calls = new Map<
       string,
-      { callId: string; name: string; args: string }
+      { callId: string; name: string; args: string; finalized: boolean }
     >();
+    const callItems = new Map<string, string>();
     let completed = false;
     let usage: GenerateContentResponseUsageMetadata | undefined;
     for await (const { data } of this.readSse(res, abortController)) {
@@ -1101,21 +1102,60 @@ export class UniversalContentGenerator implements ContentGenerator {
               throw new Error(
                 'OpenAI Responses: incomplete function call identifiers.',
               );
+            const current = calls.get(ev.item.id);
+            if (current) {
+              if (
+                current.callId !== ev.item.call_id ||
+                current.name !== ev.item.name
+              )
+                throw new Error(
+                  'OpenAI Responses: function call item changed its identity.',
+                );
+              // Repeated declarations must not discard accumulated fragments.
+              break;
+            }
+            if (callItems.has(ev.item.call_id))
+              throw new Error(
+                'OpenAI Responses: function call ID was reused by another item.',
+              );
+            callItems.set(ev.item.call_id, ev.item.id);
             calls.set(ev.item.id, {
               callId: ev.item.call_id,
               name: ev.item.name,
               args: '',
+              finalized: false,
             });
           }
           break;
         case 'response.function_call_arguments.delta': {
           const c = ev.item_id ? calls.get(ev.item_id) : undefined;
-          if (c) c.args += ev.delta ?? '';
+          if (!c)
+            throw new Error(
+              'OpenAI Responses: argument delta has no declared function call item.',
+            );
+          if (c.finalized && ev.delta)
+            throw new Error(
+              'OpenAI Responses: argument delta arrived after final arguments.',
+            );
+          c.args += ev.delta ?? '';
           break;
         }
         case 'response.function_call_arguments.done': {
           const c = ev.item_id ? calls.get(ev.item_id) : undefined;
-          if (c) c.args = ev.arguments ?? c.args;
+          if (!c)
+            throw new Error(
+              'OpenAI Responses: final arguments have no declared function call item.',
+            );
+          if (
+            c.finalized &&
+            ev.arguments !== undefined &&
+            ev.arguments !== c.args
+          )
+            throw new Error(
+              'OpenAI Responses: repeated final arguments changed their content.',
+            );
+          c.args = ev.arguments ?? c.args;
+          c.finalized = true;
           break;
         }
         case 'response.failed':
