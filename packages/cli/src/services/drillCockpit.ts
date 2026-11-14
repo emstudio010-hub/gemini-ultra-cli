@@ -52,7 +52,7 @@ let starting:
   | undefined;
 let address = '';
 let token = '';
-let submitting = false;
+const submissions = new WeakMap<Config, object>();
 let preflight: ReturnType<typeof runDrillPreflight> | undefined;
 
 function providerRevision(provider: ExternalProviderProfile): string {
@@ -200,7 +200,7 @@ async function handleRequest(
   if (req.method === 'GET' && pathname === '/api/status') {
     const store = DrillStore.getInstance();
     reply(res, 200, {
-      ready: current.isReady() && !submitting,
+      ready: current.isReady() && !submissions.has(config),
       sessionId: config.getSessionId(),
       locale: I18nManager.getInstance().getLocale(),
       effortOptions: getEffortOptions(I18nManager.getInstance().getLocale()),
@@ -289,7 +289,7 @@ async function handleRequest(
         'CLI session closed or changed. Reopen the cockpit in the current session before submitting.',
       ),
     );
-  if (!latest.isReady() || submitting)
+  if (!latest.isReady() || submissions.has(config))
     throw new RequestError(
       409,
       '会话忙碌或正在等待确认，请回到终端完成当前操作。',
@@ -346,9 +346,10 @@ async function handleRequest(
   if (pathname === '/api/prompt') {
     const prompt = z.string().trim().min(1).safeParse(body['prompt']);
     if (!prompt.success) throw new RequestError(400, '请先输入任务。');
-    submitting = true;
-    void latest
-      .submit(prompt.data)
+    const submission = {};
+    submissions.set(config, submission);
+    void Promise.resolve()
+      .then(() => latest.submit(prompt.data))
       .catch((error: unknown) => {
         coreEvents.emitFeedback(
           'error',
@@ -356,7 +357,7 @@ async function handleRequest(
         );
       })
       .finally(() => {
-        submitting = false;
+        if (submissions.get(config) === submission) submissions.delete(config);
       });
     reply(res, 202, {
       message: I18nManager.getInstance().t(

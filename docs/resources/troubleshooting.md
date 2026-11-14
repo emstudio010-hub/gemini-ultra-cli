@@ -247,6 +247,13 @@ Other observers continue receiving events, and the agent keeps its original
 completion or failure result. Asynchronous observer work is not awaited by the
 agent loop.
 
+Drill Cockpit tracks accepted submissions per CLI configuration. A pending task
+in another session does not block the current one, and its completion cannot
+unlock the current task. Reconnecting a view or restarting the cockpit keeps a
+pending task's lock within the same session. Synchronous and asynchronous submit
+failures are reported in the terminal and release the lock; HTTP `202` confirms
+acceptance, not task completion.
+
 Drill Cockpit checks the current CLI session again after receiving a complete
 POST body. A disconnected or replaced session rejects the request; a busy
 session does not accept a task or settings change based on an earlier idle
