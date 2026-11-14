@@ -126,7 +126,10 @@ it.each(['native-generate', 'native-stream', 'unresolved-main'] as const)(
     const providerBefore = fs.readFileSync(providersFile);
     const routed = new UniversalContentGenerator(
       new ExternalFallbackGenerator(),
-      { storage: { getProjectTempDir: () => root } } as unknown as Config,
+      {
+        getLifecycleSignal: () => new AbortController().signal,
+        storage: { getProjectTempDir: () => root },
+      } as unknown as Config,
     );
     const execute = async (): Promise<unknown> =>
       operation === 'native-stream'
@@ -268,6 +271,7 @@ it.each(['generate', 'stream', 'tokens', 'capacity'] as const)(
     const before = fs.readFileSync(file);
     const providerBefore = fs.readFileSync(providersFile);
     const routed = new UniversalContentGenerator(fallback, {
+      getLifecycleSignal: () => new AbortController().signal,
       storage: { getProjectTempDir: () => root },
     } as unknown as Config);
     const request = {
@@ -401,6 +405,7 @@ it.each(['generate', 'stream', 'tokens', 'capacity'] as const)(
     );
     const budgetBefore = fs.readFileSync(budgetFile);
     const routed = new UniversalContentGenerator(fallback, {
+      getLifecycleSignal: () => new AbortController().signal,
       storage: { getProjectTempDir: () => root },
     } as unknown as Config);
     const used: string[][] = [];

@@ -84,6 +84,74 @@ export class UniversalContentGenerator implements ContentGenerator {
     private readonly gcConfig?: Config,
   ) {}
 
+  private withLifecycle<
+    T extends
+      | GenerateContentParameters
+      | CountTokensParameters
+      | EmbedContentParameters,
+  >(request: T): T {
+    const caller = request.config?.abortSignal;
+    const lifecycle = this.gcConfig?.getLifecycleSignal();
+    const signal =
+      caller && lifecycle
+        ? AbortSignal.any([caller, lifecycle])
+        : (caller ?? lifecycle);
+    signal?.throwIfAborted();
+    return signal
+      ? { ...request, config: { ...request.config, abortSignal: signal } }
+      : request;
+  }
+
+  private async openStream(
+    signal: AbortSignal | undefined,
+    open: () => Promise<AsyncGenerator<GenerateContentResponse>>,
+  ): Promise<AsyncGenerator<GenerateContentResponse>> {
+    return withAbortSignal(signal, async () => {
+      const source = await open();
+      if (signal?.aborted) {
+        // A non-cooperative factory may return a stream after cancellation.
+        void Promise.resolve()
+          .then(() => source.return(undefined))
+          .catch(() => {});
+        signal.throwIfAborted();
+      }
+      if (!signal) return source;
+      let closing: Promise<IteratorResult<GenerateContentResponse>> | undefined;
+      const detach = () => signal.removeEventListener('abort', onAbort);
+      const close = (value?: unknown) => {
+        detach();
+        return (closing ??= Promise.resolve().then(() => source.return(value)));
+      };
+      const onAbort = () => {
+        void close().catch(() => {});
+      };
+      const step = async (
+        operation: () => Promise<IteratorResult<GenerateContentResponse>>,
+      ) => {
+        try {
+          const result = await withAbortSignal(signal, operation);
+          if (result.done) detach();
+          return result;
+        } catch (error) {
+          // Do not make an aborted next() wait for a non-cooperative return().
+          void close().catch(() => {});
+          throw error;
+        }
+      };
+      signal.addEventListener('abort', onAbort, { once: true });
+      if (signal.aborted) onAbort();
+      const guarded: AsyncGenerator<GenerateContentResponse> = {
+        next: (...args: [] | [unknown]) => step(() => source.next(...args)),
+        return: (value: unknown) => withAbortSignal(signal, () => close(value)),
+        throw: (error: unknown) => step(() => source.throw(error)),
+        [Symbol.asyncIterator]() {
+          return this;
+        },
+      };
+      return guarded;
+    });
+  }
+
   private externalGenerator(
     provider: ExternalProviderProfile,
   ): ContentGenerator {
@@ -205,19 +273,24 @@ export class UniversalContentGenerator implements ContentGenerator {
   async countTokens(
     request: CountTokensParameters,
   ): Promise<CountTokensResponse> {
+    request = this.withLifecycle(request);
+    const signal = request.config?.abortSignal;
     if (this.resolve(request.model)) {
       return { totalTokens: this.estimateTokens(request) };
     }
     const selected = currentAgentModel();
     try {
-      return await this.fallbackGenerator.countTokens({
-        ...request,
-        model: selected?.startsWith('native:')
-          ? selected.slice(7)
-          : request.model,
-        contents: stripProviderReasoning(providerContents(request.contents)),
-      });
+      return await withAbortSignal(signal, () =>
+        this.fallbackGenerator.countTokens({
+          ...request,
+          model: selected?.startsWith('native:')
+            ? selected.slice(7)
+            : request.model,
+          contents: stripProviderReasoning(providerContents(request.contents)),
+        }),
+      );
     } catch {
+      signal?.throwIfAborted();
       return { totalTokens: this.estimateTokens(request) };
     }
   }
@@ -225,7 +298,10 @@ export class UniversalContentGenerator implements ContentGenerator {
   async embedContent(
     request: EmbedContentParameters,
   ): Promise<EmbedContentResponse> {
-    return this.fallbackGenerator.embedContent(request);
+    request = this.withLifecycle(request);
+    return withAbortSignal(request.config?.abortSignal, () =>
+      this.fallbackGenerator.embedContent(request),
+    );
   }
 
   async generateContent(
@@ -233,7 +309,7 @@ export class UniversalContentGenerator implements ContentGenerator {
     userPromptId: string,
     role: LlmRole,
   ): Promise<GenerateContentResponse> {
-    request.config?.abortSignal?.throwIfAborted();
+    request = this.withLifecycle(request);
     const selected = currentAgentModel();
     if (selected)
       request = {
@@ -248,13 +324,17 @@ export class UniversalContentGenerator implements ContentGenerator {
 
     if (!resolution) {
       observeAgentModel(`native:${request.model}`);
-      return this.fallbackGenerator.generateContent(
-        {
-          ...request,
-          contents: stripProviderReasoning(providerContents(request.contents)),
-        },
-        userPromptId,
-        role,
+      return withAbortSignal(request.config?.abortSignal, () =>
+        this.fallbackGenerator.generateContent(
+          {
+            ...request,
+            contents: stripProviderReasoning(
+              providerContents(request.contents),
+            ),
+          },
+          userPromptId,
+          role,
+        ),
       );
     }
 
@@ -266,10 +346,12 @@ export class UniversalContentGenerator implements ContentGenerator {
       modelId,
     );
 
-    return this.externalGenerator(provider).generateContent(
-      modifiedRequest,
-      userPromptId,
-      role,
+    return withAbortSignal(request.config?.abortSignal, () =>
+      this.externalGenerator(provider).generateContent(
+        modifiedRequest,
+        userPromptId,
+        role,
+      ),
     );
   }
 
@@ -278,7 +360,7 @@ export class UniversalContentGenerator implements ContentGenerator {
     userPromptId: string,
     role: LlmRole,
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
-    request.config?.abortSignal?.throwIfAborted();
+    request = this.withLifecycle(request);
     const selected = currentAgentModel();
     if (selected)
       request = {
@@ -293,13 +375,17 @@ export class UniversalContentGenerator implements ContentGenerator {
 
     if (!resolution) {
       observeAgentModel(`native:${request.model}`);
-      return this.fallbackGenerator.generateContentStream(
-        {
-          ...request,
-          contents: stripProviderReasoning(providerContents(request.contents)),
-        },
-        userPromptId,
-        role,
+      return this.openStream(request.config?.abortSignal, () =>
+        this.fallbackGenerator.generateContentStream(
+          {
+            ...request,
+            contents: stripProviderReasoning(
+              providerContents(request.contents),
+            ),
+          },
+          userPromptId,
+          role,
+        ),
       );
     }
 
@@ -311,10 +397,12 @@ export class UniversalContentGenerator implements ContentGenerator {
       modelId,
     );
 
-    return this.externalGenerator(provider).generateContentStream(
-      modifiedRequest,
-      userPromptId,
-      role,
+    return this.openStream(request.config?.abortSignal, () =>
+      this.externalGenerator(provider).generateContentStream(
+        modifiedRequest,
+        userPromptId,
+        role,
+      ),
     );
   }
 

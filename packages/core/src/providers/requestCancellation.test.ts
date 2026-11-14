@@ -73,6 +73,7 @@ it.each(
     };
     vi.stubGlobal('fetch', vi.fn());
     const generator = new UniversalContentGenerator(fallback, {
+      getLifecycleSignal: () => new AbortController().signal,
       storage: { getProjectTempDir: () => root },
     } as unknown as Config);
     const reason = new DOMException('Cancelled before dispatch', 'AbortError');

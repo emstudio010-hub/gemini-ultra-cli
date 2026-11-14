@@ -119,6 +119,7 @@ it('shares the main streaming and nonstreaming fallback budget and permits norma
   });
   const underlying = fallback();
   const config = {
+    getLifecycleSignal: () => new AbortController().signal,
     storage: { getProjectTempDir: () => root },
   } as unknown as Config;
   const generator = new UniversalContentGenerator(underlying, config);
