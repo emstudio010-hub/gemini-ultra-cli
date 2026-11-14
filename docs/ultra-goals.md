@@ -9,7 +9,7 @@
 
 持续 goal 保持 active，沿用现有成果，不重开项目。
 
-1. **启动与加载稳定**：继续收敛无限等待、取消、关闭后的迟到结果；主聊天、委派、直接执行器、BaseLlmClient、直接生成器及媒体/截图/策略辅助函数已有 Windows 定向证据，多 Config 策略上下文及缓存已隔离。下一项回到启动冷加载路径和剩余用户功能收敛；最终包的启动收益仍待收敛后测量。
+1. **启动与加载稳定**：继续收敛无限等待、取消、关闭后的迟到结果；主聊天、委派、直接执行器、BaseLlmClient、直接生成器及媒体/截图/策略辅助函数已有 Windows 定向证据，多 Config 策略上下文及缓存已隔离；Git worktree 元数据探测现在有共享 2 秒期限并回收自有进程。下一项回到其他冷加载路径和剩余用户功能收敛；最终包的启动收益仍待收敛后测量。
 2. **双语与日常配置**：保持 `/language` 中文/英文、六档推理唯一选项及即时切换；完善模型选择与保存，按新增缺陷修复，不重复已通过场景。
 3. **真实多 Agent 协作**：继续维护 Teamwork、Boost、Grill me 和 Swarm 的预算、排队、成果保全、错误恢复及独立审核。四份真实失败保留；本地受控链通过不等同于真实复杂任务质量通过，不自动付费重跑。
 4. **演练台交互**：保持 `/演练台`、Morphicons 图标、六档动效和减少动态效果支持，继续修复任务提交、配置与会话状态衔接。
@@ -1962,3 +1962,8 @@ WI-251/E-557至558/F-209：媒体计数/策略/截图catch原吞取消，capture
 ## 2026-11-15 多Config策略上下文与并发缓存隔离
 
 WI-252/E-559至560/F-210：原Config替换全局Conseca上下文/static registry持同实例，cache仅prompt；改context路径WeakMap按Config拥有实例、registry传所属context，standalone兼容但生产不再写。cache按Config/prompt/trustedContent，换context清cache且旧pending不写新context；check持本次局部context/policy执行与遥测，防并发cache换值。初baseline6中5失败/1过，其中engine因未初始化聊天无行为证明，其余4实际cache/交错失败；唯一marker强化后交错单项baseline仍失败保留。首修30中28过/2 engine同夹具缺口，补空历史仅重验两项过/4未选，合计30不同。core首最终编译0；新test五one-var机械fix，final lint曾提前读旧内容失败保留，结束后clean五TS零warning/格式diff0，无全量冒烟CLI重编。Windows同时ready Config A/B及实际PolicyEngine/CheckerRunner/Registry/Conseca/Universal，期间不reset singleton：相同prompt各生各用各cache，B hold时A正常，B关闭27ms断HTTP并沿原checker runner DENY而A独立继续、closed B零HTTP/迟到不改A、第三disabled无请求，执行marker均所属正确。12条件true/11105ms/首次退出0/7loopback/0外部真实模型付费重试旧任务重跑/provider保持；工具未执行，不证明实际策略质量或全部全局服务隔离。个人文件/四真实失败SHA与false/ULQ凭据删除/全局83保全true，三份同SHA、goal active，不打包重装升版CI子代理。下一回到启动冷加载及剩余用户功能。详见docs/ultra-conseca-context-handoff.md。
+
+
+## 2026-11-15 Git worktree启动探测共享期限
+
+WI-253/E-561至562/F-211：loadCliConfig前的show-toplevel、getProjectRootForWorktree(git-common-dir)与HEAD原无界等待；现resolveWorktreeSettings共享2s AbortController，三次execa传cancelSignal/100ms forceKill，入口/每步后复核，超时undefined继续。core helper接受可选signal，默认行为保持。新CLI五项旧代码失败，修后五项通过；core旧getProjectRoot三项通过，CLI/core tsc、lint、格式diff0。Windows真实git init/worktree与编译dist只替换选定git child为自有idle worker，三阶段2008-2015ms结束/SIGTERM，managed/ordinary/nonrepo正确，helperChecks 11全true/首次退出0；真实CLI ConPTY单独观察因fixture provider/auth被禁止https而22s后未到prompt，单列不纳入passed，不冒称整机冷启动。总81229ms/0授权外部请求/provider保持。个人文件/四旧失败SHA与false/ULQ凭据删除/全局83保全true，三份同SHA，goal active，不打包重装升版CI子代理。下一查扩展/认证/设置加载等待，再回双语/模型/演练台/协作收敛。详见docs/ultra-startup-worktree-handoff.md。

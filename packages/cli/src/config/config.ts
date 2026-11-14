@@ -1163,17 +1163,46 @@ function mergeExcludeTools(
   return Array.from(allExcludeTools);
 }
 
-async function resolveWorktreeSettings(
+export async function resolveWorktreeSettings(
   cwd: string,
+): Promise<WorktreeSettings | undefined> {
+  // This optional metadata must not hold up the first usable prompt. Share one
+  // deadline across all git probes, including the core common-dir lookup.
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<undefined>((resolve) => {
+    timer = setTimeout(() => {
+      controller.abort(new Error('Startup worktree discovery timed out'));
+      resolve(undefined);
+    }, 2000);
+  });
+  try {
+    return await Promise.race([
+      readWorktreeSettings(cwd, controller.signal),
+      deadline,
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function readWorktreeSettings(
+  cwd: string,
+  signal: AbortSignal,
 ): Promise<WorktreeSettings | undefined> {
   let worktreePath: string | undefined;
   try {
+    signal.throwIfAborted();
     const { stdout } = await execa('git', ['rev-parse', '--show-toplevel'], {
       cwd,
       env: getSafeGitEnv(),
+      cancelSignal: signal,
+      forceKillAfterDelay: 100,
     });
+    signal.throwIfAborted();
     const toplevel = stdout.trim();
-    const projectRoot = await getProjectRootForWorktree(toplevel);
+    const projectRoot = await getProjectRootForWorktree(toplevel, signal);
+    signal.throwIfAborted();
 
     if (isGeminiWorktree(toplevel, projectRoot)) {
       worktreePath = toplevel;
@@ -1188,10 +1217,14 @@ async function resolveWorktreeSettings(
 
   let worktreeBaseSha: string | undefined;
   try {
+    signal.throwIfAborted();
     const { stdout } = await execa('git', ['rev-parse', 'HEAD'], {
       cwd: worktreePath,
       env: getSafeGitEnv(),
+      cancelSignal: signal,
+      forceKillAfterDelay: 100,
     });
+    signal.throwIfAborted();
     worktreeBaseSha = stdout.trim();
   } catch (e: unknown) {
     debugLogger.debug(

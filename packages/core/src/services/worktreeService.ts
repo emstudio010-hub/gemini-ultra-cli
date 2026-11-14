@@ -93,12 +93,18 @@ export async function createWorktreeService(
 
 // Low-level worktree utilities
 
-export async function getProjectRootForWorktree(cwd: string): Promise<string> {
+export async function getProjectRootForWorktree(
+  cwd: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  signal?.throwIfAborted();
   try {
     const { stdout } = await execa('git', ['rev-parse', '--git-common-dir'], {
       cwd,
       env: getSafeGitEnv(),
+      ...(signal ? { cancelSignal: signal, forceKillAfterDelay: 100 } : {}),
     });
+    signal?.throwIfAborted();
     const gitCommonDir = stdout.trim();
     const absoluteGitDir = path.isAbsolute(gitCommonDir)
       ? gitCommonDir
@@ -107,6 +113,7 @@ export async function getProjectRootForWorktree(cwd: string): Promise<string> {
     // The project root is the parent of the .git directory/file
     return path.dirname(absoluteGitDir);
   } catch (e: unknown) {
+    signal?.throwIfAborted();
     debugLogger.debug(
       `Failed to get project root for worktree at ${cwd}: ${e instanceof Error ? e.message : String(e)}`,
     );
