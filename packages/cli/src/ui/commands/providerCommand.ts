@@ -239,14 +239,32 @@ export const providerCommand: SlashCommand = {
         }
       },
       completion: async (_context, partial) =>
-        ProviderManager.getInstance()
-          .listProviders()
-          .filter(
-            (provider) =>
-              provider.id.toLowerCase().startsWith(partial.toLowerCase()) ||
-              provider.name.toLowerCase().startsWith(partial.toLowerCase()),
-          )
-          .map((provider) => provider.id),
+        (() => {
+          const mgr = ProviderManager.getInstance();
+          const trimmed = partial.trim();
+          const values = trimmed ? trimmed.split(/\s+/) : [];
+          const selectingProvider =
+            values.length === 0 ||
+            (values.length === 1 && !/\s$/.test(partial));
+          if (selectingProvider) {
+            const prefix = values[0]?.toLowerCase() ?? '';
+            return mgr
+              .listProviders()
+              .filter(
+                (provider) =>
+                  provider.id.toLowerCase().startsWith(prefix) ||
+                  provider.name.toLowerCase().startsWith(prefix),
+              )
+              .map((provider) => provider.id);
+          }
+          if (values.length > 2) return [];
+          const provider = mgr.getProvider(values[0]);
+          if (!provider) return [];
+          const prefix = values[1]?.toLowerCase() ?? '';
+          return provider.models
+            .filter((model) => model.toLowerCase().startsWith(prefix))
+            .map((model) => `${provider.id} ${model}`);
+        })(),
     },
   ],
   action: async (

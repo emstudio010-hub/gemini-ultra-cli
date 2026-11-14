@@ -2002,3 +2002,8 @@ WI-258/E-570至571/F-216：/provider use <名称或ID> [模型] 支持直接选�
 ## 2026-11-15 启动认证复用
 
 WI-259/E-572至573/F-217：initializeApp 复用同一 Config 已完成且同类型的启动认证，避免首屏重复 refreshAuth；认证错误和类型变化仍按原流程。认证/初始化 23 passed，CLI tsc、定向 ESLint、Prettier、diff check 通过；未调用真实供应商。goal active；下一继续认证/设置冷加载与演练台状态收敛。详见 docs/ultra-auth-reuse-handoff.md。
+
+
+## 2026-11-15 模型参数补全
+
+WI-260/E-574至575/F-218：/provider use 在供应商后补全已保存模型，支持空格后全量和前缀筛选；13 passed，CLI tsc、定向 ESLint、Prettier、diff check 通过；未调用真实供应商。goal active；下一继续演练台任务状态与可移植红队链路。详见 docs/ultra-provider-model-completion-handoff.md。

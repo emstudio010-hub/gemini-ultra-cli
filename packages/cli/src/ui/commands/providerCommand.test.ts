@@ -184,6 +184,24 @@ it('switches directly to a saved model when selecting a provider', async () => {
   expect(sessionModel()).toBe('second:deep-model');
 });
 
+it('completes a provider model after the provider argument', async () => {
+  const { mgr, context } = setup();
+  mgr.upsertProvider({
+    ...mgr.getProvider('Second')!,
+    models: ['shared-model', 'deep-model', 'other-model'],
+    setActive: false,
+  });
+  const completion = providerCommand.subCommands!.find(
+    (command) => command.name === 'use',
+  )!.completion!;
+  expect(await completion(context, 'Second ')).toEqual([
+    'second shared-model',
+    'second deep-model',
+    'second other-model',
+  ]);
+  expect(await completion(context, 'Second d')).toEqual(['second deep-model']);
+});
+
 it('adds a manually named model without catalog discovery and synchronizes its live route', async () => {
   const { mgr, context, sessionModel } = setup();
   const catalog = vi
