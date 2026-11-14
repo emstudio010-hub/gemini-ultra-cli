@@ -126,6 +126,262 @@ describe('mcp-client', () => {
   });
 
   describe('McpClient', () => {
+    describe('connection cancellation', () => {
+      function deferred<T>() {
+        let release!: (value: T) => void;
+        let enter!: () => void;
+        const pending = new Promise<T>((resolve) => {
+          release = resolve;
+        });
+        const entered = new Promise<void>((resolve) => {
+          enter = resolve;
+        });
+        return { release, enter, pending, entered };
+      }
+      function fixture() {
+        const sdk = {
+          connect: vi.fn(),
+          close: vi.fn(),
+          registerCapabilities: vi.fn(),
+          setRequestHandler: vi.fn(),
+          setNotificationHandler: vi.fn(),
+          getServerCapabilities: vi
+            .fn()
+            .mockReturnValue({ tools: {}, prompts: {}, resources: {} }),
+          listPrompts: vi.fn().mockResolvedValue({ prompts: [] }),
+          listTools: vi.fn().mockResolvedValue({
+            tools: [
+              {
+                name: 'initial',
+                inputSchema: { type: 'object', properties: {} },
+              },
+            ],
+          }),
+          request: vi.fn().mockResolvedValue({
+            resources: [{ uri: 'fixture://initial', name: 'initial' }],
+          }),
+        };
+        vi.mocked(ClientLib.Client).mockReturnValue(
+          sdk as unknown as ClientLib.Client,
+        );
+        vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue({
+          close: vi.fn(),
+        } as any);
+        const registries = {
+          toolRegistry: {
+            getMessageBus: () => undefined,
+            registerTool: vi.fn(),
+            sortTools: vi.fn(),
+            removeMcpToolsByServer: vi.fn(),
+            getToolsByServer: () => [],
+          },
+          promptRegistry: {
+            getPromptsByServer: () => [],
+            registerPrompt: vi.fn(),
+            removePromptsByServer: vi.fn(),
+          },
+          resourceRegistry: {
+            getResourcesByServer: () => [],
+            setResourcesForServer: vi.fn(),
+            removeResourcesByServer: vi.fn(),
+          },
+        };
+        const updated = vi.fn();
+        const client = new McpClient(
+          'fixture',
+          { command: 'fixture-command' },
+          workspaceContext,
+          MOCK_CONTEXT,
+          false,
+          '1',
+          updated,
+        );
+        return { client, sdk, registries, updated };
+      }
+
+      it('disconnects a pending handshake before its result returns', async () => {
+        const { client, sdk } = fixture();
+        const gate = deferred<void>();
+        sdk.connect.mockImplementationOnce(async () => {
+          gate.enter();
+          await gate.pending;
+        });
+        let settled = false;
+        const outcome = client
+          .connect()
+          .catch((error) => error)
+          .then((value) => {
+            settled = true;
+            return value;
+          });
+        await gate.entered;
+        await client.disconnect();
+        await new Promise((resolve) => setImmediate(resolve));
+        const cancelledBeforeRelease = settled;
+        gate.release();
+        const result = await outcome;
+        expect(cancelledBeforeRelease).toBe(true);
+        expect(result).toMatchObject({ name: 'AbortError' });
+        expect(client.getStatus()).toBe('disconnected');
+        expect(sdk.close).toHaveBeenCalled();
+      });
+
+      it.each(['prompts', 'tools', 'resources'] as const)(
+        'cancels pending %s discovery without publishing late results',
+        async (stage) => {
+          const { client, sdk, registries } = fixture();
+          await client.connect();
+          const gate = deferred<any>();
+          const read =
+            stage === 'prompts'
+              ? sdk.listPrompts
+              : stage === 'tools'
+                ? sdk.listTools
+                : sdk.request;
+          read.mockImplementationOnce(async () => {
+            gate.enter();
+            return gate.pending;
+          });
+          let settled = false;
+          const outcome = client
+            .discoverInto(MOCK_CONTEXT, registries as any)
+            .catch((error) => error)
+            .then((value) => {
+              settled = true;
+              return value;
+            });
+          await gate.entered;
+          await client.disconnect();
+          await new Promise((resolve) => setImmediate(resolve));
+          const cancelledBeforeRelease = settled;
+          gate.release(
+            stage === 'prompts'
+              ? { prompts: [] }
+              : stage === 'tools'
+                ? {
+                    tools: [
+                      {
+                        name: 'late',
+                        inputSchema: { type: 'object', properties: {} },
+                      },
+                    ],
+                  }
+                : { resources: [{ uri: 'fixture://late', name: 'late' }] },
+          );
+          expect(await outcome).toMatchObject({ name: 'AbortError' });
+          expect(cancelledBeforeRelease).toBe(true);
+          expect(registries.toolRegistry.registerTool).not.toHaveBeenCalled();
+          expect(
+            registries.promptRegistry.registerPrompt,
+          ).not.toHaveBeenCalled();
+          expect(
+            registries.resourceRegistry.setResourcesForServer,
+          ).not.toHaveBeenCalled();
+        },
+      );
+
+      it('does not diagnose an aborted list request as a server failure', async () => {
+        const { client, sdk, registries } = fixture();
+        await client.connect();
+        const gate = deferred<void>();
+        sdk.listTools.mockImplementationOnce(
+          (_params: any, options: any) =>
+            new Promise((_resolve, reject) => {
+              options.signal.addEventListener(
+                'abort',
+                () => reject(options.signal.reason),
+                { once: true },
+              );
+              gate.enter();
+            }),
+        );
+        const outcome = client
+          .discoverInto(MOCK_CONTEXT, registries as any)
+          .catch((error) => error);
+        await gate.entered;
+        await client.disconnect();
+        expect(await outcome).toMatchObject({ name: 'AbortError' });
+        await new Promise((resolve) => setImmediate(resolve));
+        expect(MOCK_CONTEXT.emitMcpDiagnostic).not.toHaveBeenCalled();
+      });
+
+      it('keeps a reconnected client active when an old handshake finishes late', async () => {
+        const { client, sdk } = fixture();
+        const gate = deferred<void>();
+        sdk.connect.mockImplementationOnce(async () => {
+          gate.enter();
+          await gate.pending;
+        });
+        const old = client.connect().catch((error) => error);
+        await gate.entered;
+        await client.disconnect();
+        await client.connect();
+        gate.release();
+        expect(await old).toMatchObject({ name: 'AbortError' });
+        await new Promise((resolve) => setImmediate(resolve));
+        expect(client.getStatus()).toBe('connected');
+        await client.disconnect();
+      });
+
+      it.each(['tools', 'prompts', 'resources'] as const)(
+        'does not republish %s notifications received before disconnection',
+        async (stage) => {
+          const { client, sdk, registries, updated } = fixture();
+          await client.connect();
+          await client.discoverInto(MOCK_CONTEXT, registries as any);
+          registries.toolRegistry.registerTool.mockClear();
+          registries.promptRegistry.registerPrompt.mockClear();
+          registries.resourceRegistry.setResourcesForServer.mockClear();
+          const gate = deferred<any>();
+          const read =
+            stage === 'tools'
+              ? sdk.listTools
+              : stage === 'prompts'
+                ? sdk.listPrompts
+                : sdk.request;
+          read.mockImplementationOnce(async () => {
+            gate.enter();
+            return gate.pending;
+          });
+          const handler = sdk.setNotificationHandler.mock.calls.find(
+            ([schema]) =>
+              schema ===
+              (stage === 'tools'
+                ? ToolListChangedNotificationSchema
+                : stage === 'prompts'
+                  ? PromptListChangedNotificationSchema
+                  : ResourceListChangedNotificationSchema),
+          )![1];
+          const refresh = handler();
+          await gate.entered;
+          await client.disconnect();
+          gate.release(
+            stage === 'prompts'
+              ? { prompts: [{ name: 'late' }] }
+              : stage === 'resources'
+                ? { resources: [{ uri: 'fixture://late', name: 'late' }] }
+                : {
+                    tools: [
+                      {
+                        name: 'late',
+                        inputSchema: { type: 'object', properties: {} },
+                      },
+                    ],
+                  },
+          );
+          await refresh;
+          expect(registries.toolRegistry.registerTool).not.toHaveBeenCalled();
+          expect(
+            registries.promptRegistry.registerPrompt,
+          ).not.toHaveBeenCalled();
+          expect(
+            registries.resourceRegistry.setResourcesForServer,
+          ).not.toHaveBeenCalled();
+          expect(updated).not.toHaveBeenCalled();
+        },
+      );
+    });
+
     it('should discover tools', async () => {
       const mockedClient = {
         connect: vi.fn(),

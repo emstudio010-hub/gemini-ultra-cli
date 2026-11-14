@@ -79,6 +79,7 @@ import type { ToolRegistry } from './tool-registry.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import { type MessageBus } from '../confirmation-bus/message-bus.js';
 import { coreEvents } from '../utils/events.js';
+import { withAbortSignal } from '../utils/withAbortSignal.js';
 import {
   type ResourceRegistry,
   type MCPResource,
@@ -155,7 +156,8 @@ export interface RegistrySet {
  */
 export class McpClient implements McpProgressReporter {
   private client: Client | undefined;
-  private transport: Transport | undefined;
+  private connectionController = new AbortController();
+  private disconnectPromise?: Promise<void>;
   private status: MCPServerStatus = MCPServerStatus.DISCONNECTED;
   private isRefreshingTools: boolean = false;
   private pendingToolRefresh: boolean = false;
@@ -195,22 +197,36 @@ export class McpClient implements McpProgressReporter {
         `Can only connect when the client is disconnected, current state is ${this.status}`,
       );
     }
+    const controller = new AbortController();
+    this.connectionController = controller;
+    this.disconnectPromise = undefined;
+    this.isRefreshingTools = false;
+    this.isRefreshingResources = false;
+    this.isRefreshingPrompts = false;
     this.updateStatus(MCPServerStatus.CONNECTING);
     try {
-      this.client = await connectToMcpServer(
+      const client = await connectToMcpServer(
         this.clientVersion,
         this.serverName,
         this.serverConfig,
         this.debugMode,
         this.workspaceContext,
         this.cliConfig,
+        controller.signal,
       );
+      if (controller.signal.aborted) await client.close();
+      controller.signal.throwIfAborted();
+      this.client = client;
 
       this.registerNotificationHandlers();
 
       const originalOnError = this.client.onerror;
       this.client.onerror = (error) => {
-        if (this.status !== MCPServerStatus.CONNECTED) {
+        if (
+          controller.signal.aborted ||
+          this.connectionController !== controller ||
+          this.status !== MCPServerStatus.CONNECTED
+        ) {
           return;
         }
         if (originalOnError) originalOnError(error);
@@ -221,10 +237,15 @@ export class McpClient implements McpProgressReporter {
           this.serverName,
         );
         this.updateStatus(MCPServerStatus.DISCONNECTED);
+        controller.abort(error);
       };
       this.updateStatus(MCPServerStatus.CONNECTED);
     } catch (error) {
-      this.updateStatus(MCPServerStatus.DISCONNECTED);
+      if (
+        this.connectionController === controller &&
+        this.status !== MCPServerStatus.DISCONNECTED
+      )
+        this.updateStatus(MCPServerStatus.DISCONNECTED);
       throw error;
     }
   }
@@ -237,20 +258,30 @@ export class McpClient implements McpProgressReporter {
     registries: RegistrySet,
   ): Promise<void> {
     this.assertConnected();
+    const signal = this.connectionController.signal;
     this.registeredRegistries.add(registries);
 
-    const prompts = await this.fetchPrompts();
-    const tools = await this.discoverTools(
-      cliConfig,
-      registries.toolRegistry.getMessageBus(),
+    const prompts = await withAbortSignal(signal, () =>
+      this.fetchPrompts({ signal }),
     );
-    const resources = await this.discoverResources();
-    this.updateResourceRegistry(resources, registries.resourceRegistry);
+    const tools = await withAbortSignal(signal, () =>
+      this.discoverTools(cliConfig, registries.toolRegistry.getMessageBus(), {
+        timeout: this.serverConfig.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC,
+        signal,
+      }),
+    );
+    const resources = await withAbortSignal(signal, () =>
+      this.discoverResources({ signal }),
+    );
+    signal.throwIfAborted();
+    this.assertConnected();
 
     if (prompts.length === 0 && tools.length === 0 && resources.length === 0) {
       throw new Error('No prompts, tools, or resources found on the server.');
     }
 
+    if (!this.registeredRegistries.has(registries)) return;
+    this.updateResourceRegistry(resources, registries.resourceRegistry);
     for (const prompt of prompts) {
       registries.promptRegistry.registerPrompt(prompt);
     }
@@ -289,24 +320,33 @@ export class McpClient implements McpProgressReporter {
    * Disconnects from the MCP server.
    */
   async disconnect(): Promise<void> {
-    if (this.status !== MCPServerStatus.CONNECTED) {
-      return;
-    }
+    if (this.disconnectPromise) return this.disconnectPromise;
+    const controller = this.connectionController;
+    controller.abort(
+      new DOMException('MCP connection disconnected.', 'AbortError'),
+    );
+    this.pendingToolRefresh = false;
+    this.pendingResourceRefresh = false;
+    this.pendingPromptRefresh = false;
     for (const registries of this.registeredRegistries) {
       registries.toolRegistry.removeMcpToolsByServer(this.serverName);
       registries.promptRegistry.removePromptsByServer(this.serverName);
       registries.resourceRegistry.removeResourcesByServer(this.serverName);
     }
+    this.registeredRegistries.clear();
+    if (this.status === MCPServerStatus.DISCONNECTED && !this.client) return;
     this.updateStatus(MCPServerStatus.DISCONNECTING);
     const client = this.client;
     this.client = undefined;
-    if (this.transport) {
-      await this.transport.close();
-    }
-    if (client) {
-      await client.close();
-    }
-    this.updateStatus(MCPServerStatus.DISCONNECTED);
+    this.disconnectPromise = (async () => {
+      try {
+        await client?.close();
+      } finally {
+        if (this.connectionController === controller)
+          this.updateStatus(MCPServerStatus.DISCONNECTED);
+      }
+    })();
+    return this.disconnectPromise;
   }
 
   /**
@@ -362,9 +402,16 @@ export class McpClient implements McpProgressReporter {
     );
   }
 
-  private async discoverResources(): Promise<Resource[]> {
+  private async discoverResources(options?: {
+    signal?: AbortSignal;
+  }): Promise<Resource[]> {
     this.assertConnected();
-    return discoverResources(this.serverName, this.client!, this.cliConfig);
+    return discoverResources(
+      this.serverName,
+      this.client!,
+      this.cliConfig,
+      options,
+    );
   }
 
   private updateResourceRegistry(
@@ -499,6 +546,8 @@ export class McpClient implements McpProgressReporter {
    * creating race conditions in the ResourceRegistry.
    */
   private async refreshResources(): Promise<void> {
+    const connectionSignal = this.connectionController.signal;
+    if (connectionSignal.aborted) return;
     if (this.isRefreshingResources) {
       debugLogger.log(
         `Resource refresh for '${this.serverName}' is already in progress. Pending update.`,
@@ -518,10 +567,16 @@ export class McpClient implements McpProgressReporter {
         const timeoutMs = this.serverConfig.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC;
         const abortController = new AbortController();
         const timeoutId = setTimeout(() => abortController.abort(), timeoutMs);
+        const refreshSignal = AbortSignal.any([
+          connectionSignal,
+          abortController.signal,
+        ]);
 
         let newResources;
         try {
-          newResources = await this.discoverResources();
+          newResources = await withAbortSignal(refreshSignal, () =>
+            this.discoverResources({ signal: refreshSignal }),
+          );
 
           for (const registries of this.registeredRegistries) {
             // Verification Retry: If no resources are found or resources didn't change,
@@ -541,28 +596,40 @@ export class McpClient implements McpProgressReporter {
                 `No resource changes detected for '${this.serverName}'. Retrying once in 500ms...`,
               );
               const retryDelay = 500;
-              await new Promise((resolve) => setTimeout(resolve, retryDelay));
-              newResources = await this.discoverResources();
+              await withAbortSignal(
+                refreshSignal,
+                () => new Promise((resolve) => setTimeout(resolve, retryDelay)),
+              );
+              newResources = await withAbortSignal(refreshSignal, () =>
+                this.discoverResources({ signal: refreshSignal }),
+              );
             }
 
+            refreshSignal.throwIfAborted();
+            if (!this.registeredRegistries.has(registries)) continue;
             this.updateResourceRegistry(
               newResources,
               registries.resourceRegistry,
             );
           }
         } catch (err) {
-          debugLogger.error(
-            `Resource discovery failed during refresh: ${getErrorMessage(err)}`,
-          );
+          if (!connectionSignal.aborted)
+            debugLogger.error(
+              `Resource discovery failed during refresh: ${getErrorMessage(err)}`,
+            );
           clearTimeout(timeoutId);
           break;
         }
 
-        if (this.onContextUpdated) {
-          await this.onContextUpdated(abortController.signal);
+        try {
+          if (this.onContextUpdated)
+            await withAbortSignal(refreshSignal, () =>
+              this.onContextUpdated!(refreshSignal),
+            );
+        } finally {
+          clearTimeout(timeoutId);
         }
-
-        clearTimeout(timeoutId);
+        refreshSignal.throwIfAborted();
 
         this.cliConfig.emitMcpDiagnostic(
           'info',
@@ -572,11 +639,13 @@ export class McpClient implements McpProgressReporter {
         );
       } while (this.pendingResourceRefresh);
     } catch (error) {
-      debugLogger.error(
-        `Critical error in resource refresh loop for ${this.serverName}: ${getErrorMessage(error)}`,
-      );
+      if (!connectionSignal.aborted)
+        debugLogger.error(
+          `Critical error in resource refresh loop for ${this.serverName}: ${getErrorMessage(error)}`,
+        );
     } finally {
-      this.isRefreshingResources = false;
+      if (this.connectionController.signal === connectionSignal)
+        this.isRefreshingResources = false;
     }
   }
 
@@ -598,6 +667,8 @@ export class McpClient implements McpProgressReporter {
    * Refreshes prompts for this server by re-querying the MCP `prompts/list` endpoint.
    */
   private async refreshPrompts(): Promise<void> {
+    const connectionSignal = this.connectionController.signal;
+    if (connectionSignal.aborted) return;
     if (this.isRefreshingPrompts) {
       debugLogger.log(
         `Prompt refresh for '${this.serverName}' is already in progress. Pending update.`,
@@ -617,11 +688,15 @@ export class McpClient implements McpProgressReporter {
         const timeoutMs = this.serverConfig.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC;
         const abortController = new AbortController();
         const timeoutId = setTimeout(() => abortController.abort(), timeoutMs);
+        const refreshSignal = AbortSignal.any([
+          connectionSignal,
+          abortController.signal,
+        ]);
 
         try {
-          let newPrompts = await this.fetchPrompts({
-            signal: abortController.signal,
-          });
+          let newPrompts = await withAbortSignal(refreshSignal, () =>
+            this.fetchPrompts({ signal: refreshSignal }),
+          );
 
           for (const registries of this.registeredRegistries) {
             // Verification Retry: If no prompts are found or prompts didn't change,
@@ -640,30 +715,40 @@ export class McpClient implements McpProgressReporter {
                 `No prompt changes detected for '${this.serverName}'. Retrying once in 500ms...`,
               );
               const retryDelay = 500;
-              await new Promise((resolve) => setTimeout(resolve, retryDelay));
-              newPrompts = await this.fetchPrompts({
-                signal: abortController.signal,
-              });
+              await withAbortSignal(
+                refreshSignal,
+                () => new Promise((resolve) => setTimeout(resolve, retryDelay)),
+              );
+              newPrompts = await withAbortSignal(refreshSignal, () =>
+                this.fetchPrompts({ signal: refreshSignal }),
+              );
             }
 
+            refreshSignal.throwIfAborted();
+            if (!this.registeredRegistries.has(registries)) continue;
             registries.promptRegistry.removePromptsByServer(this.serverName);
             for (const prompt of newPrompts) {
               registries.promptRegistry.registerPrompt(prompt);
             }
           }
         } catch (err) {
-          debugLogger.error(
-            `Prompt discovery failed during refresh: ${getErrorMessage(err)}`,
-          );
+          if (!connectionSignal.aborted)
+            debugLogger.error(
+              `Prompt discovery failed during refresh: ${getErrorMessage(err)}`,
+            );
           clearTimeout(timeoutId);
           break;
         }
 
-        if (this.onContextUpdated) {
-          await this.onContextUpdated(abortController.signal);
+        try {
+          if (this.onContextUpdated)
+            await withAbortSignal(refreshSignal, () =>
+              this.onContextUpdated!(refreshSignal),
+            );
+        } finally {
+          clearTimeout(timeoutId);
         }
-
-        clearTimeout(timeoutId);
+        refreshSignal.throwIfAborted();
 
         this.cliConfig.emitMcpDiagnostic(
           'info',
@@ -673,11 +758,13 @@ export class McpClient implements McpProgressReporter {
         );
       } while (this.pendingPromptRefresh);
     } catch (error) {
-      debugLogger.error(
-        `Critical error in prompt refresh loop for ${this.serverName}: ${getErrorMessage(error)}`,
-      );
+      if (!connectionSignal.aborted)
+        debugLogger.error(
+          `Critical error in prompt refresh loop for ${this.serverName}: ${getErrorMessage(error)}`,
+        );
     } finally {
-      this.isRefreshingPrompts = false;
+      if (this.connectionController.signal === connectionSignal)
+        this.isRefreshingPrompts = false;
     }
   }
 
@@ -697,6 +784,8 @@ export class McpClient implements McpProgressReporter {
    * creating race conditions in the global ToolRegistry.
    */
   private async refreshTools(): Promise<void> {
+    const connectionSignal = this.connectionController.signal;
+    if (connectionSignal.aborted) return;
     if (this.isRefreshingTools) {
       debugLogger.log(
         `Tool refresh for '${this.serverName}' is already in progress. Pending update.`,
@@ -716,15 +805,21 @@ export class McpClient implements McpProgressReporter {
         const timeoutMs = this.serverConfig.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC;
         const abortController = new AbortController();
         const timeoutId = setTimeout(() => abortController.abort(), timeoutMs);
+        const refreshSignal = AbortSignal.any([
+          connectionSignal,
+          abortController.signal,
+        ]);
 
         try {
           for (const registries of this.registeredRegistries) {
-            let newTools = await this.discoverTools(
-              this.cliConfig,
-              registries.toolRegistry.getMessageBus(),
-              {
-                signal: abortController.signal,
-              },
+            let newTools = await withAbortSignal(refreshSignal, () =>
+              this.discoverTools(
+                this.cliConfig,
+                registries.toolRegistry.getMessageBus(),
+                {
+                  signal: refreshSignal,
+                },
+              ),
             );
             debugLogger.log(
               `Refresh for '${this.serverName}' discovered ${newTools.length} tools.`,
@@ -750,19 +845,26 @@ export class McpClient implements McpProgressReporter {
                 `No tool changes detected for '${this.serverName}'. Retrying once in 500ms...`,
               );
               const retryDelay = 500;
-              await new Promise((resolve) => setTimeout(resolve, retryDelay));
-              newTools = await this.discoverTools(
-                this.cliConfig,
-                registries.toolRegistry.getMessageBus(),
-                {
-                  signal: abortController.signal,
-                },
+              await withAbortSignal(
+                refreshSignal,
+                () => new Promise((resolve) => setTimeout(resolve, retryDelay)),
+              );
+              newTools = await withAbortSignal(refreshSignal, () =>
+                this.discoverTools(
+                  this.cliConfig,
+                  registries.toolRegistry.getMessageBus(),
+                  {
+                    signal: refreshSignal,
+                  },
+                ),
               );
               debugLogger.log(
                 `Retry refresh for '${this.serverName}' discovered ${newTools.length} tools.`,
               );
             }
 
+            refreshSignal.throwIfAborted();
+            if (!this.registeredRegistries.has(registries)) continue;
             registries.toolRegistry.removeMcpToolsByServer(this.serverName);
 
             for (const tool of newTools) {
@@ -771,18 +873,23 @@ export class McpClient implements McpProgressReporter {
             registries.toolRegistry.sortTools();
           }
         } catch (err) {
-          debugLogger.error(
-            `Discovery failed during refresh: ${getErrorMessage(err)}`,
-          );
+          if (!connectionSignal.aborted)
+            debugLogger.error(
+              `Discovery failed during refresh: ${getErrorMessage(err)}`,
+            );
           clearTimeout(timeoutId);
           break;
         }
 
-        if (this.onContextUpdated) {
-          await this.onContextUpdated(abortController.signal);
+        try {
+          if (this.onContextUpdated)
+            await withAbortSignal(refreshSignal, () =>
+              this.onContextUpdated!(refreshSignal),
+            );
+        } finally {
+          clearTimeout(timeoutId);
         }
-
-        clearTimeout(timeoutId);
+        refreshSignal.throwIfAborted();
 
         this.cliConfig.emitMcpDiagnostic(
           'info',
@@ -792,11 +899,13 @@ export class McpClient implements McpProgressReporter {
         );
       } while (this.pendingToolRefresh);
     } catch (error) {
-      debugLogger.error(
-        `Critical error in refresh loop for ${this.serverName}: ${getErrorMessage(error)}`,
-      );
+      if (!connectionSignal.aborted)
+        debugLogger.error(
+          `Critical error in refresh loop for ${this.serverName}: ${getErrorMessage(error)}`,
+        );
     } finally {
-      this.isRefreshingTools = false;
+      if (this.connectionController.signal === connectionSignal)
+        this.isRefreshingTools = false;
     }
   }
 }
@@ -1412,6 +1521,7 @@ export async function discoverTools(
     }
     return discoveredTools;
   } catch (error) {
+    options?.signal?.throwIfAborted();
     if (!isMcpMethodNotFoundError(error)) {
       cliConfig.emitMcpDiagnostic(
         'error',
@@ -1537,6 +1647,7 @@ export async function discoverPrompts(
         ),
     }));
   } catch (error) {
+    options?.signal?.throwIfAborted();
     if (isMcpMethodNotFoundError(error)) {
       return [];
     }
@@ -1556,12 +1667,18 @@ export async function discoverResources(
   mcpServerName: string,
   mcpClient: Client,
   cliConfig: McpContext,
+  options?: { signal?: AbortSignal },
 ): Promise<Resource[]> {
   if (mcpClient.getServerCapabilities()?.resources == null) {
     return [];
   }
 
-  const resources = await listResources(mcpServerName, mcpClient, cliConfig);
+  const resources = await listResources(
+    mcpServerName,
+    mcpClient,
+    cliConfig,
+    options,
+  );
   return resources;
 }
 
@@ -1569,6 +1686,7 @@ async function listResources(
   mcpServerName: string,
   mcpClient: Client,
   cliConfig: McpContext,
+  options?: { signal?: AbortSignal },
 ): Promise<Resource[]> {
   const resources: Resource[] = [];
   let cursor: string | undefined;
@@ -1580,11 +1698,13 @@ async function listResources(
           params: cursor ? { cursor } : {},
         },
         ListResourcesResultSchema,
+        options,
       );
       resources.push(...(response.resources ?? []));
       cursor = response.nextCursor ?? undefined;
     } while (cursor);
   } catch (error) {
+    options?.signal?.throwIfAborted();
     if (isMcpMethodNotFoundError(error)) {
       return [];
     }
@@ -1718,11 +1838,10 @@ async function connectWithSSETransport(
   client: Client,
   config: MCPServerConfig,
   accessToken?: string | null,
+  signal?: AbortSignal,
 ): Promise<void> {
   const transport = createSSETransportWithAuth(config, accessToken);
-  await client.connect(transport, {
-    timeout: config.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC,
-  });
+  await connectTransport(client, transport, config, signal);
 }
 
 /**
@@ -1736,10 +1855,10 @@ async function showAuthRequiredMessage(
   serverName: string,
   cliConfig: McpContext,
   oauthConfig?: MCPOAuthConfig,
+  signal?: AbortSignal,
 ): Promise<never> {
-  const hasRejectedToken = !!(await getStoredOAuthToken(
-    serverName,
-    oauthConfig,
+  const hasRejectedToken = !!(await withAbortSignal(signal, () =>
+    getStoredOAuthToken(serverName, oauthConfig),
   ));
 
   const message = hasRejectedToken
@@ -1768,13 +1887,15 @@ async function retryWithOAuth(
   accessToken: string,
   httpReturned404: boolean,
   cliConfig: McpContext,
+  signal?: AbortSignal,
 ): Promise<void> {
+  signal?.throwIfAborted();
   if (httpReturned404) {
     // HTTP returned 404, only try SSE
     debugLogger.log(
       `Retrying SSE connection to '${serverName}' with OAuth token...`,
     );
-    await connectWithSSETransport(client, config, accessToken);
+    await connectWithSSETransport(client, config, accessToken, signal);
     debugLogger.log(
       `Successfully connected to '${serverName}' using SSE with OAuth.`,
     );
@@ -1797,13 +1918,12 @@ async function retryWithOAuth(
   }
 
   try {
-    await client.connect(httpTransport, {
-      timeout: config.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC,
-    });
+    await connectTransport(client, httpTransport, config, signal);
     debugLogger.log(
       `Successfully connected to '${serverName}' using HTTP with OAuth.`,
     );
   } catch (httpError) {
+    signal?.throwIfAborted();
     await httpTransport.close();
 
     // If HTTP+OAuth returns 404 and auto-detection enabled, try SSE+OAuth
@@ -1814,7 +1934,7 @@ async function retryWithOAuth(
       !config.httpUrl
     ) {
       debugLogger.log(`HTTP with OAuth returned 404, trying SSE with OAuth...`);
-      await connectWithSSETransport(client, config, accessToken);
+      await connectWithSSETransport(client, config, accessToken, signal);
       debugLogger.log(
         `Successfully connected to '${serverName}' using SSE with OAuth.`,
       );
@@ -1848,16 +1968,27 @@ export interface McpContext {
   };
 }
 
-/**
- * Creates and connects an MCP client to a server based on the provided configuration.
- * It determines the appropriate transport (Stdio, SSE, or Streamable HTTP) and
- * establishes a connection. It also applies a patch to handle request timeouts.
- *
- * @param mcpServerName The name of the MCP server, used for logging and identification.
- * @param mcpServerConfig The configuration specifying how to connect to the server.
- * @returns A promise that resolves to a connected MCP `Client` instance.
- * @throws An error if the connection fails or the configuration is invalid.
- */
+/** Reject a cancelled transport before it can start a late connection. */
+async function connectTransport(
+  client: Client,
+  transport: Transport,
+  config: MCPServerConfig,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (signal?.aborted) {
+    await transport.close();
+    signal.throwIfAborted();
+  }
+  await withAbortSignal(signal, () =>
+    client.connect(transport, {
+      timeout: config.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC,
+      ...(signal ? { signal } : {}),
+    }),
+  );
+  signal?.throwIfAborted();
+}
+
+/** Connect an MCP client, closing its transport when connection setup is cancelled. */
 export async function connectToMcpServer(
   clientVersion: string,
   mcpServerName: string,
@@ -1865,7 +1996,54 @@ export async function connectToMcpServer(
   debugMode: boolean,
   workspaceContext: WorkspaceContext,
   cliConfig: McpContext,
+  signal?: AbortSignal,
 ): Promise<Client> {
+  signal?.throwIfAborted();
+  let client: Client | undefined;
+  let releaseWorkspace: (() => void) | undefined;
+  const onAbort = () => {
+    releaseWorkspace?.();
+    const closingClient = client;
+    void Promise.resolve()
+      .then(() => closingClient?.close())
+      .catch((error) =>
+        debugLogger.debug('Error closing cancelled MCP connection:', error),
+      );
+  };
+  signal?.addEventListener('abort', onAbort, { once: true });
+  try {
+    return await withAbortSignal(signal, () =>
+      establishMcpConnection(
+        clientVersion,
+        mcpServerName,
+        mcpServerConfig,
+        debugMode,
+        workspaceContext,
+        cliConfig,
+        signal,
+        (created, release) => {
+          client = created;
+          releaseWorkspace = release;
+          if (signal?.aborted) onAbort();
+        },
+      ),
+    );
+  } finally {
+    signal?.removeEventListener('abort', onAbort);
+  }
+}
+
+async function establishMcpConnection(
+  clientVersion: string,
+  mcpServerName: string,
+  mcpServerConfig: MCPServerConfig,
+  debugMode: boolean,
+  workspaceContext: WorkspaceContext,
+  cliConfig: McpContext,
+  signal?: AbortSignal,
+  onClientAvailable?: (client: Client, releaseWorkspace: () => void) => void,
+): Promise<Client> {
+  signal?.throwIfAborted();
   const mcpClient = new Client(
     {
       name: 'gemini-cli-mcp-client',
@@ -1921,6 +2099,10 @@ export async function connectToMcpServer(
     unlistenDirectories?.();
     unlistenDirectories = undefined;
   };
+  onClientAvailable?.(mcpClient, () => {
+    unlistenDirectories?.();
+    unlistenDirectories = undefined;
+  });
 
   let firstAttemptError: Error | null = null;
   let httpReturned404 = false; // Track if HTTP returned 404 to skip it in OAuth retry
@@ -1934,17 +2116,17 @@ export async function connectToMcpServer(
       cliConfig,
     );
     try {
-      await mcpClient.connect(transport, {
-        timeout: mcpServerConfig.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC,
-      });
+      await connectTransport(mcpClient, transport, mcpServerConfig, signal);
       return mcpClient;
     } catch (error) {
+      signal?.throwIfAborted();
       await transport.close();
       // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
       firstAttemptError = error as Error;
       throw error;
     }
   } catch (initialError) {
+    signal?.throwIfAborted();
     let error = initialError;
 
     // Check if this is a 401 error FIRST (before attempting SSE fallback)
@@ -1973,6 +2155,7 @@ export async function connectToMcpServer(
           mcpClient,
           mcpServerConfig,
           await getStoredOAuthToken(mcpServerName, mcpServerConfig.oauth),
+          signal,
         );
 
         debugLogger.log(
@@ -1980,6 +2163,7 @@ export async function connectToMcpServer(
         );
         return mcpClient;
       } catch (sseFallbackError) {
+        signal?.throwIfAborted();
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
         sseError = sseFallbackError as Error;
 
@@ -2014,6 +2198,7 @@ export async function connectToMcpServer(
           mcpServerName,
           cliConfig,
           mcpServerConfig.oauth,
+          signal,
         );
       }
 
@@ -2050,7 +2235,9 @@ export async function connectToMcpServer(
             headers: {
               Accept: acceptHeader,
             },
-            signal: AbortSignal.timeout(5000),
+            signal: signal
+              ? AbortSignal.any([signal, AbortSignal.timeout(5000)])
+              : AbortSignal.timeout(5000),
           });
 
           if (response.status === 401) {
@@ -2062,6 +2249,7 @@ export async function connectToMcpServer(
             }
           }
         } catch (fetchError) {
+          signal?.throwIfAborted();
           debugLogger.debug(
             `Failed to fetch www-authenticate header: ${getErrorMessage(
               fetchError,
@@ -2076,17 +2264,18 @@ export async function connectToMcpServer(
         );
 
         // Try automatic OAuth discovery and authentication
-        const oauthSuccess = await handleAutomaticOAuth(
-          mcpServerName,
-          mcpServerConfig,
-          wwwAuthenticate,
-          cliConfig,
+        const oauthSuccess = await withAbortSignal(signal, () =>
+          handleAutomaticOAuth(
+            mcpServerName,
+            mcpServerConfig,
+            wwwAuthenticate,
+            cliConfig,
+          ),
         );
         if (oauthSuccess) {
           // Retry connection with OAuth token
-          const accessToken = await getStoredOAuthToken(
-            mcpServerName,
-            mcpServerConfig.oauth,
+          const accessToken = await withAbortSignal(signal, () =>
+            getStoredOAuthToken(mcpServerName, mcpServerConfig.oauth),
           );
           if (!accessToken) {
             throw new Error(
@@ -2101,6 +2290,7 @@ export async function connectToMcpServer(
             accessToken,
             httpReturned404,
             cliConfig,
+            signal,
           );
           return mcpClient;
         } else {
@@ -2118,6 +2308,7 @@ export async function connectToMcpServer(
             mcpServerName,
             cliConfig,
             mcpServerConfig.oauth,
+            signal,
           );
         }
 
@@ -2136,9 +2327,8 @@ export async function connectToMcpServer(
           };
 
           // Try to discover OAuth configuration from the base URL
-          const oauthConfig = await OAuthUtils.discoverOAuthConfig(
-            baseUrl,
-            discoveryOptions,
+          const oauthConfig = await withAbortSignal(signal, () =>
+            OAuthUtils.discoverOAuthConfig(baseUrl, discoveryOptions),
           );
           if (oauthConfig) {
             debugLogger.log(
@@ -2169,16 +2359,17 @@ export async function connectToMcpServer(
             const authProvider = new MCPOAuthProvider(
               new MCPOAuthTokenStorage(),
             );
-            await authProvider.authenticate(
-              mcpServerName,
-              oauthAuthConfig,
-              authServerUrl,
+            await withAbortSignal(signal, () =>
+              authProvider.authenticate(
+                mcpServerName,
+                oauthAuthConfig,
+                authServerUrl,
+              ),
             );
 
             // Retry connection with OAuth token
-            const accessToken = await getStoredOAuthToken(
-              mcpServerName,
-              mcpServerConfig.oauth,
+            const accessToken = await withAbortSignal(signal, () =>
+              getStoredOAuthToken(mcpServerName, mcpServerConfig.oauth),
             );
             if (!accessToken) {
               throw new Error(
@@ -2199,9 +2390,12 @@ export async function connectToMcpServer(
               );
             }
 
-            await mcpClient.connect(oauthTransport, {
-              timeout: mcpServerConfig.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC,
-            });
+            await connectTransport(
+              mcpClient,
+              oauthTransport,
+              mcpServerConfig,
+              signal,
+            );
             // Connection successful with OAuth
             return mcpClient;
           } else {
