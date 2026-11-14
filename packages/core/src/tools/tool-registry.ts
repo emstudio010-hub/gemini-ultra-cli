@@ -29,6 +29,9 @@ import { ToolErrorType } from './tool-error.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import { coreEvents } from '../utils/events.js';
+import { withAbortSignal } from '../utils/withAbortSignal.js';
+import { killProcessGroup } from '../utils/process-utils.js';
+import { I18nManager } from '../i18n/i18nManager.js';
 import {
   DISCOVERED_TOOL_PREFIX,
   TOOL_LEGACY_ALIASES,
@@ -41,6 +44,18 @@ import {
 } from './tool-names.js';
 
 type ToolParams = Record<string, unknown>;
+
+export class ToolDiscoveryTimeoutError extends Error {
+  override name = 'ToolDiscoveryTimeoutError';
+  constructor() {
+    super(
+      I18nManager.getInstance().t(
+        '工具发现命令超过 10 秒，原有工具清单已保留。请检查发现命令后重试；启动失败时请重新启动 CLI。',
+        'Tool discovery exceeded 10 seconds; the prior tool catalog was retained. Check the discovery command and retry, or restart the CLI if initialization failed.',
+      ),
+    );
+  }
+}
 
 class DiscoveredToolInvocation extends BaseToolInvocation<
   ToolParams,
@@ -250,6 +265,7 @@ export class ToolRegistry {
   private config: Config;
   readonly messageBus: MessageBus;
   private isMainRegistry: boolean;
+  private discoveryController?: AbortController;
 
   constructor(
     config: Config,
@@ -365,16 +381,40 @@ export class ToolRegistry {
    * Can be called multiple times to update discovered tools.
    * This will discover tools from the command line and from MCP servers.
    */
-  async discoverAllTools(): Promise<void> {
-    // remove any previously discovered tools
-    this.removeDiscoveredTools();
-    await this.discoverAndRegisterToolsFromCommand();
+  async discoverAllTools(signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted();
+    this.discoveryController?.abort(
+      new DOMException('Tool discovery superseded.', 'AbortError'),
+    );
+    const controller = new AbortController();
+    this.discoveryController = controller;
+    const discoverySignal = signal
+      ? AbortSignal.any([signal, controller.signal])
+      : controller.signal;
+    const timer = setTimeout(
+      () => controller.abort(new ToolDiscoveryTimeoutError()),
+      10_000,
+    );
+    try {
+      const discovered = await withAbortSignal(discoverySignal, () =>
+        this.discoverToolsFromCommand(discoverySignal),
+      );
+      discoverySignal.throwIfAborted();
+      this.removeDiscoveredTools();
+      for (const tool of discovered) this.registerTool(tool);
+    } finally {
+      clearTimeout(timer);
+      if (this.discoveryController === controller)
+        this.discoveryController = undefined;
+    }
   }
 
-  private async discoverAndRegisterToolsFromCommand(): Promise<void> {
+  private async discoverToolsFromCommand(
+    signal: AbortSignal,
+  ): Promise<DiscoveredTool[]> {
     const discoveryCmd = this.config.getToolDiscoveryCommand();
     if (!discoveryCmd) {
-      return;
+      return [];
     }
 
     try {
@@ -398,142 +438,194 @@ export class ToolRegistry {
         .filter((p): p is string => typeof p === 'string');
       let finalEnv = process.env;
       let cleanupFunc: (() => void) | undefined;
-
-      const sandboxManager = this.config.sandboxManager;
-      if (sandboxManager) {
-        const prepared = await sandboxManager.prepareCommand({
-          command: finalCommand,
-          args: finalArgs,
-          cwd: process.cwd(),
-          env: process.env,
-        });
-        finalCommand = prepared.program;
-        finalArgs = prepared.args;
-        finalEnv = prepared.env;
-        cleanupFunc = prepared.cleanup;
-      }
+      const cleanup = () => {
+        const run = cleanupFunc;
+        cleanupFunc = undefined;
+        run?.();
+      };
 
       try {
+        const sandboxManager = this.config.sandboxManager;
+        if (sandboxManager) {
+          const preparation = sandboxManager
+            .prepareCommand({
+              command: finalCommand,
+              args: finalArgs,
+              cwd: process.cwd(),
+              env: process.env,
+            })
+            .then((prepared) => {
+              cleanupFunc = prepared.cleanup;
+              if (signal.aborted) {
+                cleanup();
+                signal.throwIfAborted();
+              }
+              return prepared;
+            });
+          const prepared = await withAbortSignal(signal, () => preparation);
+          finalCommand = prepared.program;
+          finalArgs = prepared.args;
+          finalEnv = prepared.env;
+        }
+
+        signal.throwIfAborted();
         const proc = spawn(finalCommand, finalArgs, {
           env: finalEnv,
+          stdio: ['ignore', 'pipe', 'pipe'],
+          windowsHide: true,
+          detached:
+            process.platform !== 'win32' && !('bun' in process.versions),
         });
-        let stdout = '';
-        const stdoutDecoder = new StringDecoder('utf8');
-        let stderr = '';
-        const stderrDecoder = new StringDecoder('utf8');
-        let sizeLimitExceeded = false;
-        const MAX_STDOUT_SIZE = 10 * 1024 * 1024; // 10MB limit
-        const MAX_STDERR_SIZE = 10 * 1024 * 1024; // 10MB limit
-
-        let stdoutByteLength = 0;
-        let stderrByteLength = 0;
-
-        proc.stdout.on('data', (data) => {
-          if (sizeLimitExceeded) return;
-          if (stdoutByteLength + data.length > MAX_STDOUT_SIZE) {
-            sizeLimitExceeded = true;
+        let closed = false;
+        let termination: Promise<void> | undefined;
+        const terminate = () => {
+          if (closed || termination) return;
+          if (proc.pid) {
+            termination = killProcessGroup({
+              pid: proc.pid,
+              isExited: () => closed,
+            });
+          } else {
             proc.kill();
-            return;
           }
-          stdoutByteLength += data.length;
-          stdout += stdoutDecoder.write(data);
-        });
+        };
+        signal.addEventListener('abort', terminate, { once: true });
+        if (signal.aborted) terminate();
+        try {
+          let stdout = '';
+          const stdoutDecoder = new StringDecoder('utf8');
+          let stderr = '';
+          const stderrDecoder = new StringDecoder('utf8');
+          let sizeLimitExceeded = false;
+          const MAX_STDOUT_SIZE = 10 * 1024 * 1024; // 10MB limit
+          const MAX_STDERR_SIZE = 10 * 1024 * 1024; // 10MB limit
 
-        proc.stderr.on('data', (data) => {
-          if (sizeLimitExceeded) return;
-          if (stderrByteLength + data.length > MAX_STDERR_SIZE) {
-            sizeLimitExceeded = true;
-            proc.kill();
-            return;
-          }
-          stderrByteLength += data.length;
-          stderr += stderrDecoder.write(data);
-        });
+          let stdoutByteLength = 0;
+          let stderrByteLength = 0;
 
-        await new Promise<void>((resolve, reject) => {
-          proc.on('error', (err) => {
-            reject(err);
+          proc.stdout.on('data', (data) => {
+            if (sizeLimitExceeded || signal.aborted) return;
+            if (stdoutByteLength + data.length > MAX_STDOUT_SIZE) {
+              sizeLimitExceeded = true;
+              terminate();
+              return;
+            }
+            stdoutByteLength += data.length;
+            stdout += stdoutDecoder.write(data);
           });
-          proc.on('close', (code) => {
-            stdout += stdoutDecoder.end();
-            stderr += stderrDecoder.end();
 
-            if (sizeLimitExceeded) {
-              return reject(
-                new Error(
-                  `Tool discovery command output exceeded size limit of ${MAX_STDOUT_SIZE} bytes.`,
-                ),
-              );
+          proc.stderr.on('data', (data) => {
+            if (sizeLimitExceeded || signal.aborted) return;
+            if (stderrByteLength + data.length > MAX_STDERR_SIZE) {
+              sizeLimitExceeded = true;
+              terminate();
+              return;
             }
-
-            if (code !== 0) {
-              coreEvents.emitFeedback(
-                'error',
-                `Tool discovery command failed with code ${code}.`,
-                stderr,
-              );
-              return reject(
-                new Error(
-                  `Tool discovery command failed with exit code ${code}`,
-                ),
-              );
-            }
-            resolve();
+            stderrByteLength += data.length;
+            stderr += stderrDecoder.write(data);
           });
-        });
 
-        // execute discovery command and extract function declarations (w/ or w/o "tool" wrappers)
-        const functions: FunctionDeclaration[] = [];
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        const discoveredItems = JSON.parse(stdout.trim());
+          await withAbortSignal(
+            signal,
+            () =>
+              new Promise<void>((resolve, reject) => {
+                proc.on('error', (err) => {
+                  reject(err);
+                });
+                proc.on('close', (code) => {
+                  closed = true;
+                  if (signal.aborted) return reject(signal.reason);
+                  stdout += stdoutDecoder.end();
+                  stderr += stderrDecoder.end();
 
-        if (!discoveredItems || !Array.isArray(discoveredItems)) {
-          throw new Error(
-            'Tool discovery command did not return a JSON array of tools.',
+                  if (sizeLimitExceeded) {
+                    return reject(
+                      new Error(
+                        `Tool discovery command output exceeded size limit of ${MAX_STDOUT_SIZE} bytes.`,
+                      ),
+                    );
+                  }
+
+                  if (code !== 0) {
+                    coreEvents.emitFeedback(
+                      'error',
+                      `Tool discovery command failed with code ${code}.`,
+                      stderr,
+                    );
+                    return reject(
+                      new Error(
+                        `Tool discovery command failed with exit code ${code}`,
+                      ),
+                    );
+                  }
+                  resolve();
+                });
+              }),
           );
-        }
+          signal.throwIfAborted();
 
-        for (const tool of discoveredItems) {
-          if (tool && typeof tool === 'object') {
-            if (Array.isArray(tool['function_declarations'])) {
-              functions.push(...tool['function_declarations']);
-            } else if (Array.isArray(tool['functionDeclarations'])) {
-              functions.push(...tool['functionDeclarations']);
-            } else if (tool['name']) {
-              // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
-              functions.push(tool as FunctionDeclaration);
+          // execute discovery command and extract function declarations (w/ or w/o "tool" wrappers)
+          const functions: FunctionDeclaration[] = [];
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          const discoveredItems = JSON.parse(stdout.trim());
+
+          if (!discoveredItems || !Array.isArray(discoveredItems)) {
+            throw new Error(
+              'Tool discovery command did not return a JSON array of tools.',
+            );
+          }
+
+          for (const tool of discoveredItems) {
+            if (tool && typeof tool === 'object') {
+              if (Array.isArray(tool['function_declarations'])) {
+                functions.push(...tool['function_declarations']);
+              } else if (Array.isArray(tool['functionDeclarations'])) {
+                functions.push(...tool['functionDeclarations']);
+              } else if (tool['name']) {
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+                functions.push(tool as FunctionDeclaration);
+              }
             }
           }
-        }
-        // register each function as a tool
-        for (const func of functions) {
-          if (!func.name) {
-            debugLogger.warn('Discovered a tool with no name. Skipping.');
-            continue;
+          const discovered: DiscoveredTool[] = [];
+          for (const func of functions) {
+            signal.throwIfAborted();
+            if (!func.name) {
+              debugLogger.warn('Discovered a tool with no name. Skipping.');
+              continue;
+            }
+            const parameters =
+              func.parametersJsonSchema &&
+              typeof func.parametersJsonSchema === 'object' &&
+              !Array.isArray(func.parametersJsonSchema)
+                ? func.parametersJsonSchema
+                : {};
+            discovered.push(
+              new DiscoveredTool(
+                this.config,
+                func.name,
+                DISCOVERED_TOOL_PREFIX + func.name,
+                func.description ?? '',
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+                parameters as Record<string, unknown>,
+                this.messageBus,
+              ),
+            );
           }
-          const parameters =
-            func.parametersJsonSchema &&
-            typeof func.parametersJsonSchema === 'object' &&
-            !Array.isArray(func.parametersJsonSchema)
-              ? func.parametersJsonSchema
-              : {};
-          this.registerTool(
-            new DiscoveredTool(
-              this.config,
-              func.name,
-              DISCOVERED_TOOL_PREFIX + func.name,
-              func.description ?? '',
-              // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
-              parameters as Record<string, unknown>,
-              this.messageBus,
-            ),
-          );
+          return discovered;
+        } finally {
+          signal.removeEventListener('abort', terminate);
+          await termination;
         }
       } finally {
-        cleanupFunc?.();
+        cleanup();
       }
     } catch (e) {
-      debugLogger.error(`Tool discovery command "${discoveryCmd}" failed:`, e);
+      if (!signal.aborted)
+        debugLogger.error(
+          `Tool discovery command "${discoveryCmd}" failed:`,
+          e,
+        );
       throw e;
     }
   }
@@ -617,8 +709,6 @@ export class ToolRegistry {
         return false;
       }
     }
-
-
 
     const isPlanMode = this.config.getApprovalMode() === ApprovalMode.PLAN;
     if (

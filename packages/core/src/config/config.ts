@@ -4516,7 +4516,7 @@ export class Config implements McpContext, AgentLoopContext {
       registry.registerTool(new ApplyPatchTool(this, this.messageBus)),
     );
 
-    await registry.discoverAllTools();
+    await registry.discoverAllTools(signal);
     signal.throwIfAborted();
     registry.sortTools();
     return registry;

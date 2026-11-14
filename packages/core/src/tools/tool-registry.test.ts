@@ -32,6 +32,8 @@ import {
   type CallableTool,
 } from '@google/genai';
 import { spawn } from 'node:child_process';
+import { EventEmitter } from 'node:events';
+import { killProcessGroup } from '../utils/process-utils.js';
 
 import fs from 'node:fs';
 import { MockTool } from '../test-utils/mock-tool.js';
@@ -39,6 +41,9 @@ import { ToolErrorType } from './tool-error.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 
 vi.mock('node:fs');
+vi.mock('../utils/process-utils.js', () => ({
+  killProcessGroup: vi.fn().mockResolvedValue(undefined),
+}));
 
 // Mock node:child_process
 vi.mock('node:child_process', async () => {
@@ -527,6 +532,185 @@ describe('ToolRegistry', () => {
   });
 
   describe('discoverTools', () => {
+    describe('discovery cancellation and transaction', () => {
+      function processFixture() {
+        return Object.assign(new EventEmitter(), {
+          pid: 24680,
+          stdout: new EventEmitter(),
+          stderr: new EventEmitter(),
+          kill: vi.fn(),
+        });
+      }
+      beforeEach(() => {
+        vi.mocked(spawn).mockReset();
+        vi.mocked(killProcessGroup).mockClear();
+        mockConfigGetToolDiscoveryCommand.mockReturnValue('fixture-discovery');
+      });
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      it('rejects pre-cancelled discovery without spawning', async () => {
+        vi.mocked(spawn).mockReturnValue(
+          createDiscoveryProcess([{ name: 'late' }]) as any,
+        );
+        const controller = new AbortController();
+        controller.abort();
+        const outcome = await toolRegistry
+          .discoverAllTools(controller.signal)
+          .catch((error) => error);
+        expect(outcome).toMatchObject({ name: 'AbortError' });
+        expect(spawn).not.toHaveBeenCalled();
+      });
+
+      it('cancels sandbox preparation immediately and cleans late preparation without spawning', async () => {
+        let release!: (value: any) => void;
+        const cleanup = vi.fn();
+        const prepared = new Promise<any>((resolve) => {
+          release = resolve;
+        });
+        const prepare = vi
+          .spyOn(config.sandboxManager, 'prepareCommand')
+          .mockReturnValueOnce(prepared);
+        vi.mocked(spawn).mockReturnValue(
+          createDiscoveryProcess([{ name: 'late' }]) as any,
+        );
+        const controller = new AbortController();
+        let settled = false;
+        const outcome = toolRegistry
+          .discoverAllTools(controller.signal)
+          .catch((error) => error)
+          .then((value) => {
+            settled = true;
+            return value;
+          });
+        try {
+          controller.abort();
+          await new Promise((resolve) => setImmediate(resolve));
+          const settledBeforeRelease = settled;
+          release({ program: 'fixture', args: [], env: process.env, cleanup });
+          const result = await outcome;
+          await new Promise((resolve) => setImmediate(resolve));
+          expect(settledBeforeRelease).toBe(true);
+          expect(result).toMatchObject({ name: 'AbortError' });
+          expect(cleanup).toHaveBeenCalledTimes(1);
+          expect(spawn).not.toHaveBeenCalled();
+        } finally {
+          release({ program: 'fixture', args: [], env: process.env, cleanup });
+          prepare.mockRestore();
+        }
+      });
+
+      it('cleans preparation resolved immediately before cancellation', async () => {
+        let release!: (value: any) => void;
+        const cleanup = vi.fn();
+        const prepare = vi
+          .spyOn(config.sandboxManager, 'prepareCommand')
+          .mockReturnValueOnce(
+            new Promise((resolve) => {
+              release = resolve;
+            }),
+          );
+        const controller = new AbortController();
+        const outcome = toolRegistry
+          .discoverAllTools(controller.signal)
+          .catch((error) => error);
+        release({ program: 'fixture', args: [], env: process.env, cleanup });
+        queueMicrotask(() => controller.abort());
+        try {
+          expect(await outcome).toMatchObject({ name: 'AbortError' });
+          await new Promise((resolve) => setImmediate(resolve));
+          expect(cleanup).toHaveBeenCalledTimes(1);
+          expect(spawn).not.toHaveBeenCalled();
+        } finally {
+          prepare.mockRestore();
+        }
+      });
+
+      it('kills cancelled discovery and ignores late tool declarations', async () => {
+        const child = processFixture();
+        vi.mocked(spawn).mockReturnValue(child as any);
+        const controller = new AbortController();
+        const outcome = toolRegistry
+          .discoverAllTools(controller.signal)
+          .catch((error) => error);
+        await new Promise((resolve) => setImmediate(resolve));
+        controller.abort();
+        child.stdout.emit('data', Buffer.from('[{"name":"late"}]'));
+        child.emit('close', 0);
+        expect(await outcome).toMatchObject({ name: 'AbortError' });
+        expect(killProcessGroup).toHaveBeenCalledWith(
+          expect.objectContaining({ pid: 24680 }),
+        );
+        expect(
+          toolRegistry.getTool(DISCOVERED_TOOL_PREFIX + 'late'),
+        ).toBeUndefined();
+      });
+
+      it('supersedes old discovery without overwriting the newer tool catalog', async () => {
+        const child = processFixture();
+        vi.mocked(spawn)
+          .mockReturnValueOnce(child as any)
+          .mockReturnValueOnce(
+            createDiscoveryProcess([{ name: 'current' }]) as any,
+          );
+        const old = toolRegistry.discoverAllTools().catch((error) => error);
+        await new Promise((resolve) => setImmediate(resolve));
+        await toolRegistry.discoverAllTools();
+        child.stdout.emit('data', Buffer.from('[{"name":"stale"}]'));
+        child.emit('close', 0);
+        expect(await old).toMatchObject({ name: 'AbortError' });
+        expect(
+          toolRegistry.getTool(DISCOVERED_TOOL_PREFIX + 'current'),
+        ).toBeDefined();
+        expect(
+          toolRegistry.getTool(DISCOVERED_TOOL_PREFIX + 'stale'),
+        ).toBeUndefined();
+      });
+
+      it('retains a valid prior catalog when replacement discovery fails', async () => {
+        vi.mocked(spawn).mockReturnValueOnce(
+          createDiscoveryProcess([{ name: 'retained' }]) as any,
+        );
+        await toolRegistry.discoverAllTools();
+        const child = processFixture();
+        vi.mocked(spawn).mockReturnValueOnce(child as any);
+        const failure = toolRegistry.discoverAllTools().catch((error) => error);
+        await new Promise((resolve) => setImmediate(resolve));
+        child.stdout.emit('data', Buffer.from('{invalid'));
+        child.emit('close', 0);
+        expect(await failure).toBeInstanceOf(Error);
+        expect(
+          toolRegistry.getTool(DISCOVERED_TOOL_PREFIX + 'retained'),
+        ).toBeDefined();
+      });
+
+      it('bounds a stalled discovery command and terminates its process tree', async () => {
+        vi.useFakeTimers();
+        const child = processFixture();
+        vi.mocked(spawn).mockReturnValue(child as any);
+        let settled = false;
+        const outcome = toolRegistry
+          .discoverAllTools()
+          .catch((error) => error)
+          .then((value) => {
+            settled = true;
+            return value;
+          });
+        await vi.advanceTimersByTimeAsync(10_000);
+        const settledBeforeClose = settled;
+        child.stdout.emit('data', Buffer.from('[]'));
+        child.emit('close', 0);
+        expect(settledBeforeClose).toBe(true);
+        expect(await outcome).toMatchObject({
+          name: 'ToolDiscoveryTimeoutError',
+        });
+        expect(killProcessGroup).toHaveBeenCalledWith(
+          expect.objectContaining({ pid: 24680 }),
+        );
+      });
+    });
+
     it('should will preserve tool parametersJsonSchema during discovery from command', async () => {
       const discoveryCommand = 'my-discovery-command';
       mockConfigGetToolDiscoveryCommand.mockReturnValue(discoveryCommand);
