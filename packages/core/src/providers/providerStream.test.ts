@@ -456,6 +456,57 @@ describe('Provider stream completion and recovery', () => {
     },
   );
 
+  it.each(['ping', 'heartbeat', 'keepalive'])(
+    'does not count data-only %s frames as model progress',
+    async (type) => {
+      vi.stubEnv('GEMINI_ULTRA_STREAM_IDLE_MS', '1000');
+      let heartbeat: ReturnType<typeof setInterval>;
+      let close: ReturnType<typeof setTimeout>;
+      const cancel = vi.fn(() => {
+        clearInterval(heartbeat);
+        clearTimeout(close);
+      });
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          heartbeat = setInterval(
+            () => controller.enqueue(frame({ timestamp: 1, type })),
+            100,
+          );
+          close = setTimeout(() => {
+            clearInterval(heartbeat);
+            controller.close();
+          }, 5000);
+        },
+        cancel,
+      });
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(body)));
+      let ended = false;
+      let error: unknown;
+      const consume = (async () => {
+        try {
+          for await (const chunk of await generator.generateContentStream(
+            request,
+            'data-heartbeat',
+            LlmRole.UTILITY_TOOL,
+          ))
+            void chunk;
+        } catch (failure) {
+          error = failure;
+        } finally {
+          ended = true;
+        }
+      })();
+      await vi.advanceTimersByTimeAsync(1100);
+      const endedWithinDeadline = ended;
+      await vi.advanceTimersByTimeAsync(5000);
+      await consume;
+      expect(endedWithinDeadline).toBe(true);
+      expect(String(error)).toContain('idle for 1000 ms');
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(fetch).toHaveBeenCalledOnce();
+    },
+  );
+
   it('refreshes the progress deadline for complete data events during a long stream', async () => {
     vi.stubEnv('GEMINI_ULTRA_STREAM_IDLE_MS', '1000');
     const timers: Array<ReturnType<typeof setTimeout>> = [];

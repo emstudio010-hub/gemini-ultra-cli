@@ -62,6 +62,22 @@ const ULTRA_EFFORT_DIRECTIVE = `
 
 [ULTRA reasoning mode] Think as deeply as needed. For non-trivial tasks: decompose the problem, consider multiple approaches, and when independent sub-problems exist and the tool is available call \`spawn_subagents\` to investigate/implement them in parallel, then cross-check the results. Verify changes using the smallest relevant checks, respect the user's requested verification scope, and report the evidence before claiming success. Avoid redundant tests.`;
 
+const SSE_HEARTBEAT_TYPES = new Set(['ping', 'heartbeat', 'keepalive']);
+
+function isSseHeartbeat(event: string | undefined, data: string): boolean {
+  if (SSE_HEARTBEAT_TYPES.has(event?.toLowerCase() ?? '')) return true;
+  try {
+    const value: unknown = JSON.parse(data);
+    const type = isRecord(value) ? value['type'] : undefined;
+    return (
+      typeof type === 'string' && SSE_HEARTBEAT_TYPES.has(type.toLowerCase())
+    );
+  } catch {
+    // Invalid data must still reach the protocol parser and report its error.
+    return false;
+  }
+}
+
 export class UniversalContentGenerator implements ContentGenerator {
   constructor(
     private readonly fallbackGenerator: ContentGenerator,
@@ -925,15 +941,13 @@ export class UniversalContentGenerator implements ContentGenerator {
             data.push(line.slice(5).replace(/^ /, ''));
           } else if (line === '') {
             // Transport keepalives are not model progress. A peer sending only
-            // comments or named ping events must still reach the idle deadline.
-            if (
-              data.length &&
-              !['ping', 'heartbeat', 'keepalive'].includes(
-                event?.toLowerCase() ?? '',
-              )
-            ) {
-              yield { event, data: data.join('\n') };
-              progressDeadline = Date.now() + idleMs;
+            // comments or heartbeat events must still reach the idle deadline.
+            if (data.length) {
+              const payload = data.join('\n');
+              if (!isSseHeartbeat(event, payload)) {
+                yield { event, data: payload };
+                progressDeadline = Date.now() + idleMs;
+              }
             }
             data = [];
             event = undefined;

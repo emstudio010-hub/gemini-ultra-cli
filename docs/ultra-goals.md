@@ -1894,3 +1894,8 @@ WI-240/E-535至536/F-198：Manage/Run入口只初查Plan，已接纳成员等待
 ## 2026-11-15 Anthropic工具块归属与异常整批阻断
 
 WI-241/E-537至538/F-199：先核对E-503诊断已由WI225实现而不重复改；发现Anthropic原重复index覆盖/重复ID/未知参数delta静默丢弃/忽略block_stop，异常仍可发布工具。现响应内记录所有已见start编号/工具ID，复用含文本→工具拒绝；工具closed位拒绝显式stop后片段，参数必须指向已有未关闭工具。固定错误不回显上游值，整批成功后才发布；合法交错/Unicode初始input保持，不新增每块stop强制要求或JSON修补重试。baseline新6中5真实异常失败/正常1过，修后6+参数诊断7=13相关通过，core编译/双TS零warninglint/纯格式后check/diff0，无CLI重编全量冒烟。Windows真实Anthropic HTTP/SSE及Config/gateway/ManageSwarmTool/coder/AgentTool/LocalExecutor/GeminiChat/Swarm/export：五异常零调用；合法write_file后未知参数使整批零写入，1请求1轮1失败blocked/paused，诊断导出保持无私有marker；独立合法complete_task成员正常，任务仍active。18条件true/9324ms/首次退出0/7loopback/0外部付费旧任务重跑；不证明E-503实际根因、实际供应商质量或完整Anthropic状态机。个人文件/四真实失败精确SHA与false/临时凭据删除/全局83均保全true，三份同SHA交接、goal active，不打包重装升版三平台CI子代理。详见docs/ultra-anthropic-tool-blocks-handoff.md。
+
+
+## 2026-11-15 data-only心跳不再无限延后流空闲期限
+
+WI-242/E-539至540/F-200：readSse原仅过滤具名ping，data-only顶层type=ping/heartbeat/keepalive不断刷新deadline而无模型内容也不超时。现固定心跳名同时检查SSE事件与完整JSON顶层type，心跳不yield/不刷新；正常内容顺序/进展/尾用量保持，坏JSON交原解析器报错不吞，保留1秒最小/120秒默认及尾部期限。不新增重试/模型切换。baseline新3实际超时断言失败，修后新3+长流/尾用量2=5通过，语义等价局部变量调整后仅补具名/comment旧2，共7不同。core首最终编译0，首lint属性typeof规则后局部type修、最终双TS零warning，纯格式后check/diff0，无CLI重编全量冒烟。Windows真实四协议HTTP/SSE每80ms三类心跳：配置1000ms时Chat1085/Responses1022/Anthropic1008/Gemini1006ms idle且socket主动关闭、未走5秒fallback、0工具；正常正文1.8秒持续成功且字面type:ping/usage7保留；坏JSON仍无私有marker错误。13条件true/30510ms总/首次退出0/6loopback/0外部模型付费重试旧任务重跑，provider字节保持；总耗时非CLI启动值。仍未覆盖响应头前fetch等待/未知语义空事件/同步解析抢占，下一优先查headers。个人文件/四真实失败精确SHA与false/临时凭据删除/全局83均保全true，三份同SHA交接、goal active，不打包重装升版三平台CI子代理。详见docs/ultra-data-heartbeat-handoff.md。
