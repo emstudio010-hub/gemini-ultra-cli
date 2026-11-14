@@ -1006,6 +1006,7 @@ export class Config implements McpContext, AgentLoopContext {
   private readonly truncateToolOutputThreshold: number;
   private compressionTruncationCounter = 0;
   private initialized = false;
+  private readonly lifecycleController = new AbortController();
   private initPromise: Promise<void> | undefined;
   private mcpInitializationPromise: Promise<void> | null = null;
   readonly storage: Storage;
@@ -1547,17 +1548,22 @@ export class Config implements McpContext, AgentLoopContext {
    * once.
    */
   async initialize(): Promise<void> {
+    this.lifecycleController.signal.throwIfAborted();
     if (this.initPromise) {
       return this.initPromise;
     }
 
-    this.initPromise = this._initialize();
+    this.initPromise = withAbortSignal(this.lifecycleController.signal, () =>
+      this._initialize(),
+    );
 
     return this.initPromise;
   }
 
   private async _initialize(): Promise<void> {
+    const signal = this.lifecycleController.signal;
     await this.storage.initialize();
+    signal.throwIfAborted();
     ragLogger.initialize(this.storage.getProjectTempLogsDir());
 
     // Add pending directories to workspace context
@@ -1587,6 +1593,7 @@ export class Config implements McpContext, AgentLoopContext {
 
       try {
         await fs.promises.access(plansDir);
+        signal.throwIfAborted();
         this.workspaceContext.addDirectory(plansDir);
       } catch {
         // Directory does not exist yet, so we don't add it to the workspace context.
@@ -1594,6 +1601,7 @@ export class Config implements McpContext, AgentLoopContext {
         // directories must be within the project root, they are automatically
         // covered by the project-wide file discovery once created.
       }
+      signal.throwIfAborted();
     }
 
     // Initialize centralized FileDiscoveryService
@@ -1601,17 +1609,21 @@ export class Config implements McpContext, AgentLoopContext {
     this.getFileService();
     if (this.getCheckpointingEnabled()) {
       await this.getGitService();
+      signal.throwIfAborted();
     }
     this.promptRegistry = new PromptRegistry();
     this.resourceRegistry = new ResourceRegistry();
 
     this.agentRegistry = new AgentRegistry(this);
     await this.agentRegistry.initialize();
+    signal.throwIfAborted();
 
     coreEvents.on(CoreEvent.AgentsRefreshed, this.onAgentsRefreshed);
 
-    this.toolRegistry = await this.createToolRegistry();
+    const toolRegistry = await this.createToolRegistry();
     discoverToolsHandle?.end();
+    signal.throwIfAborted();
+    this.toolRegistry = toolRegistry;
     this.mcpClientManager = new McpClientManager(
       this.clientVersion,
       this,
@@ -1628,6 +1640,7 @@ export class Config implements McpContext, AgentLoopContext {
       this.mcpClientManager.startConfiguredMcpServers(),
       this.getExtensionLoader().start(this),
     ]).then((results) => {
+      if (signal.aborted) return;
       for (const result of results) {
         if (result.status === 'rejected') {
           debugLogger.error('Error initializing MCP clients:', result.reason);
@@ -1637,6 +1650,7 @@ export class Config implements McpContext, AgentLoopContext {
 
     if (!this.interactive || this.acpMode) {
       await this.mcpInitializationPromise;
+      signal.throwIfAborted();
     }
 
     if (this.skillsSupport) {
@@ -1647,8 +1661,10 @@ export class Config implements McpContext, AgentLoopContext {
             this.storage,
             this.getExtensions(),
             this.isTrustedFolder(),
+            signal,
           );
         } catch (error) {
+          signal.throwIfAborted();
           if (!(error instanceof SkillDiscoveryTimeoutError)) throw error;
           coreEvents.emitFeedback(
             'warning',
@@ -1658,6 +1674,7 @@ export class Config implements McpContext, AgentLoopContext {
             ),
           );
         }
+        signal.throwIfAborted();
         this.getSkillManager().setDisabledSkills(this.disabledSkills);
 
         // Re-register ActivateSkillTool to update its schema with the discovered enabled skill enums
@@ -1674,12 +1691,15 @@ export class Config implements McpContext, AgentLoopContext {
     if (this.getEnableHooks()) {
       this.hookSystem = new HookSystem(this);
       await this.hookSystem.initialize();
+      signal.throwIfAborted();
     }
 
     this.memoryContextManager = new MemoryContextManager(this);
-    await this.memoryContextManager.refresh();
+    await this.memoryContextManager.refresh(signal);
+    signal.throwIfAborted();
 
-    await this.geminiClient.initialize();
+    await this.geminiClient.initialize(signal);
+    signal.throwIfAborted();
     this.initialized = true;
   }
 
@@ -4268,6 +4288,8 @@ export class Config implements McpContext, AgentLoopContext {
   }
 
   async createToolRegistry(): Promise<ToolRegistry> {
+    const signal = this.lifecycleController.signal;
+    signal.throwIfAborted();
     const registry = new ToolRegistry(
       this,
       this.messageBus,
@@ -4279,6 +4301,7 @@ export class Config implements McpContext, AgentLoopContext {
       toolClass: { name: string; Name?: string },
       registerFn: () => void,
     ) => {
+      signal.throwIfAborted();
       const className = toolClass.name;
       const toolName = toolClass.Name || className;
       const coreTools = this.getCoreTools();
@@ -4320,6 +4343,7 @@ export class Config implements McpContext, AgentLoopContext {
       } catch (error: unknown) {
         errorString = String(error);
       }
+      signal.throwIfAborted();
       if (useRipgrep) {
         maybeRegister(RipGrepTool, () =>
           registry.registerTool(new RipGrepTool(this, this.messageBus)),
@@ -4493,6 +4517,7 @@ export class Config implements McpContext, AgentLoopContext {
     );
 
     await registry.discoverAllTools();
+    signal.throwIfAborted();
     registry.sortTools();
     return registry;
   }
@@ -4605,6 +4630,10 @@ export class Config implements McpContext, AgentLoopContext {
    * Disposes of resources and removes event listeners.
    */
   async dispose(): Promise<void> {
+    this.lifecycleController.abort(
+      new DOMException('Configuration disposed.', 'AbortError'),
+    );
+    this.initialized = false;
     this.memoryContextManager?.dispose();
     this.logCurrentModeDuration(this.getApprovalMode());
     coreEvents.off(CoreEvent.AgentsRefreshed, this.onAgentsRefreshed);

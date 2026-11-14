@@ -144,6 +144,7 @@ vi.mock('../tools/mcp-client-manager.js', () => ({
     startConfiguredMcpServers: vi.fn(),
     getMcpInstructions: vi.fn().mockReturnValue('MCP Instructions'),
     setMainRegistries: vi.fn(),
+    stop: vi.fn().mockResolvedValue(undefined),
   })),
 }));
 
@@ -176,6 +177,7 @@ vi.mock('../core/contentGenerator.js');
 vi.mock('../core/client.js', () => ({
   GeminiClient: vi.fn().mockImplementation(() => ({
     initialize: vi.fn().mockResolvedValue(undefined),
+    dispose: vi.fn(),
     stripThoughtsFromHistory: vi.fn(),
     isInitialized: vi.fn().mockReturnValue(false),
     setTools: vi.fn().mockResolvedValue(undefined),
@@ -225,6 +227,7 @@ vi.mock('../ide/ide-client.js', () => ({
 vi.mock('../agents/registry.js', () => {
   const AgentRegistryMock = vi.fn();
   AgentRegistryMock.prototype.initialize = vi.fn();
+  AgentRegistryMock.prototype.dispose = vi.fn();
   AgentRegistryMock.prototype.getAllDefinitions = vi.fn(() => []);
   AgentRegistryMock.prototype.getAllDiscoveredAgentNames = vi.fn(() => []);
   AgentRegistryMock.prototype.getDefinition = vi.fn();
@@ -241,6 +244,7 @@ const mockCoreEvents = vi.hoisted(() => ({
   emitConsoleLog: vi.fn(),
   emitQuotaChanged: vi.fn(),
   on: vi.fn(),
+  off: vi.fn(),
   emit: vi.fn(),
 }));
 
@@ -426,6 +430,106 @@ describe('Server Config (config.ts)', () => {
   });
 
   describe('initialize', () => {
+    describe('shutdown during initialization', () => {
+      it.each(['storage', 'tools', 'client'] as const)(
+        'rejects shutdown while waiting for %s and never publishes late readiness',
+        async (stage) => {
+          const config = new Config({
+            ...baseParams,
+            checkpointing: false,
+            skillsSupport: false,
+          });
+          let release!: () => void;
+          let enter!: () => void;
+          const entered = new Promise<void>((resolve) => {
+            enter = resolve;
+          });
+          const pending = new Promise<void>((resolve) => {
+            release = resolve;
+          });
+          const spies = [];
+          if (stage === 'storage') {
+            spies.push(
+              vi
+                .spyOn(config.storage, 'initialize')
+                .mockImplementation(async () => {
+                  enter();
+                  await pending;
+                }),
+            );
+          } else if (stage === 'tools') {
+            const original = config.createToolRegistry.bind(config);
+            spies.push(
+              vi
+                .spyOn(config, 'createToolRegistry')
+                .mockImplementation(async () => {
+                  const registry = await original();
+                  enter();
+                  await pending;
+                  return registry;
+                }),
+            );
+          } else {
+            spies.push(
+              vi
+                .spyOn(config.getGeminiClient(), 'initialize')
+                .mockImplementation(async () => {
+                  enter();
+                  await pending;
+                }),
+            );
+          }
+          const memoryBefore =
+            vi.mocked(MemoryContextManager).mock.calls.length;
+          try {
+            let settled = false;
+            const result = config
+              .initialize()
+              .catch((error) => error)
+              .then((value) => {
+                settled = true;
+                return value;
+              });
+            await entered;
+            await config.dispose();
+            await new Promise((resolve) => setImmediate(resolve));
+            const settledBeforeRelease = settled;
+            release();
+            const outcome = await result;
+            await new Promise((resolve) => setImmediate(resolve));
+            expect(settledBeforeRelease).toBe(true);
+            expect(outcome).toMatchObject({ name: 'AbortError' });
+            expect(config.isInitialized()).toBe(false);
+            if (stage !== 'client')
+              expect(vi.mocked(MemoryContextManager).mock.calls.length).toBe(
+                memoryBefore,
+              );
+            await expect(config.initialize()).rejects.toMatchObject({
+              name: 'AbortError',
+            });
+          } finally {
+            release();
+            for (const spy of spies) spy.mockRestore();
+          }
+        },
+      );
+
+      it('marks a previously ready config closed and rejects initialization after disposal', async () => {
+        const config = new Config({
+          ...baseParams,
+          checkpointing: false,
+          skillsSupport: false,
+        });
+        await config.initialize();
+        expect(config.isInitialized()).toBe(true);
+        await config.dispose();
+        expect(config.isInitialized()).toBe(false);
+        await expect(config.initialize()).rejects.toMatchObject({
+          name: 'AbortError',
+        });
+      });
+    });
+
     it('should throw an error if checkpointing is enabled and GitService fails', async () => {
       const gitError = new Error('Git is not installed');
       vi.mocked(GitService.prototype.initialize).mockRejectedValue(gitError);

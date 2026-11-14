@@ -455,6 +455,52 @@ describe('Gemini Client (client.ts)', () => {
   });
 
   describe('startChat', () => {
+    it('does not publish chat or telemetry when disposed during chat initialization', async () => {
+      const pendingClient = new GeminiClient(
+        mockConfig as unknown as AgentLoopContext,
+      );
+      let release!: () => void;
+      let enter!: () => void;
+      const entered = new Promise<void>((resolve) => {
+        enter = resolve;
+      });
+      const pending = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const initialize = vi
+        .spyOn(GeminiChat.prototype, 'initialize')
+        .mockImplementationOnce(async () => {
+          enter();
+          await pending;
+        });
+      try {
+        const result = pendingClient.initialize().catch((error) => error);
+        await entered;
+        pendingClient.dispose();
+        release();
+        expect(await result).toMatchObject({ name: 'AbortError' });
+        await new Promise((resolve) => setImmediate(resolve));
+        expect(pendingClient.isInitialized()).toBe(false);
+        expect(
+          uiTelemetryService.setLastPromptTokenCount,
+        ).not.toHaveBeenCalled();
+      } finally {
+        release();
+        initialize.mockRestore();
+        pendingClient.dispose();
+      }
+    });
+
+    it('rejects starting a chat after disposal', async () => {
+      const closed = new GeminiClient(
+        mockConfig as unknown as AgentLoopContext,
+      );
+      closed.dispose();
+      await expect(closed.startChat()).rejects.toMatchObject({
+        name: 'AbortError',
+      });
+    });
+
     it('should include environment context when resuming a session', async () => {
       const extraHistory: Content[] = [
         { role: 'user', parts: [{ text: 'Old message' }] },

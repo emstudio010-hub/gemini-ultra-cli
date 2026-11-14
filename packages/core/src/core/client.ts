@@ -27,6 +27,7 @@ import {
 import type { Config } from '../config/config.js';
 import { type AgentLoopContext } from '../config/agent-loop-context.js';
 import { getCoreSystemPrompt } from './prompts.js';
+import { withAbortSignal } from '../utils/withAbortSignal.js';
 import { checkNextSpeaker } from '../utils/nextSpeakerChecker.js';
 import { reportError } from '../utils/errorReporting.js';
 import { GeminiChat } from './geminiChat.js';
@@ -106,6 +107,7 @@ export class GeminiClient {
   private readonly agentHistoryProvider: AgentHistoryProvider;
   private readonly toolOutputMaskingService: ToolOutputMaskingService;
   private contextManager?: ContextManager;
+  private readonly lifecycleController = new AbortController();
   private lastPromptId: string;
   private currentSequenceModel: string | null = null;
   private lastSentIdeContext: IdeContext | undefined;
@@ -267,8 +269,11 @@ export class GeminiClient {
     }
   }
 
-  async initialize() {
-    this.chat = await this.startChat();
+  async initialize(signal?: AbortSignal) {
+    const chat = await this.startChat(undefined, undefined, signal);
+    this.lifecycleController.signal.throwIfAborted();
+    signal?.throwIfAborted();
+    this.chat = chat;
     this.updateTelemetryTokenCount();
   }
 
@@ -352,6 +357,9 @@ export class GeminiClient {
   }
 
   dispose() {
+    this.lifecycleController.abort(
+      new DOMException('Gemini client disposed.', 'AbortError'),
+    );
     coreEvents.off(CoreEvent.ModelChanged, this.handleModelChanged);
     coreEvents.off(CoreEvent.MemoryChanged, this.handleMemoryChanged);
     coreEvents.off(
@@ -418,7 +426,12 @@ export class GeminiClient {
   async startChat(
     extraHistory?: ReadonlyArray<Content | HistoryTurn>,
     resumedSessionData?: ResumedSessionData,
+    signal?: AbortSignal,
   ): Promise<GeminiChat> {
+    const chatSignal = signal
+      ? AbortSignal.any([signal, this.lifecycleController.signal])
+      : this.lifecycleController.signal;
+    chatSignal.throwIfAborted();
     this.forceFullIdeContext = true;
     this.hasFailedCompressionAttempt = false;
     this.lastUsedModelId = undefined;
@@ -427,7 +440,9 @@ export class GeminiClient {
     const toolDeclarations = toolRegistry.getFunctionDeclarations();
     const tools: Tool[] = [{ functionDeclarations: toolDeclarations }];
 
-    const history = await getInitialChatHistory(this.config, extraHistory);
+    const history = await withAbortSignal(chatSignal, () =>
+      getInitialChatHistory(this.config, extraHistory),
+    );
 
     try {
       const systemMemory = this.config.getSystemInstructionMemory();
@@ -446,14 +461,17 @@ export class GeminiClient {
           return [{ functionDeclarations: toolDeclarations }];
         },
       );
-      await chat.initialize(resumedSessionData, 'main');
-      this.contextManager = await initializeContextManager(
-        this.config,
-        chat,
-        this.lastPromptId,
+      await withAbortSignal(chatSignal, () =>
+        chat.initialize(resumedSessionData, 'main'),
       );
+      const contextManager = await withAbortSignal(chatSignal, () =>
+        initializeContextManager(this.config, chat, this.lastPromptId),
+      );
+      chatSignal.throwIfAborted();
+      this.contextManager = contextManager;
       return chat;
     } catch (error) {
+      chatSignal.throwIfAborted();
       await reportError(
         error,
         'Error initializing Gemini chat session.',
