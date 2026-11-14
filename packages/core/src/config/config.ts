@@ -1703,6 +1703,11 @@ export class Config implements McpContext, AgentLoopContext {
     this.initialized = true;
   }
 
+  /** Session shutdown signal shared by delegated work; callers cannot abort it. */
+  getLifecycleSignal(): AbortSignal {
+    return this.lifecycleController.signal;
+  }
+
   getContentGenerator(): ContentGenerator {
     return this.contentGenerator;
   }

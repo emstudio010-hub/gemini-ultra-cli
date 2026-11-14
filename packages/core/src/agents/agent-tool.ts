@@ -34,6 +34,7 @@ import {
 import { AGENT_TOOL_NAME } from '../tools/tool-names.js';
 import { scheduleSubagent } from './subagentScheduler.js';
 import { assertAgentAuthorization } from './agentAuthorization.js';
+import { withAbortSignal } from '../utils/withAbortSignal.js';
 
 /**
  * A unified tool for invoking subagents.
@@ -214,6 +215,10 @@ class DelegateInvocation extends BaseToolInvocation<
   override async shouldConfirmExecute(
     abortSignal: AbortSignal,
   ): Promise<ToolCallConfirmationDetails | false> {
+    abortSignal = AbortSignal.any([
+      abortSignal,
+      this.context.config.getLifecycleSignal(),
+    ]);
     abortSignal.throwIfAborted();
     if (this.definition.kind === 'local')
       assertAgentAuthorization(
@@ -222,11 +227,17 @@ class DelegateInvocation extends BaseToolInvocation<
       );
     const hintedParams = this.withUserHints(this.mappedInputs);
     const invocation = this.buildChildInvocation(hintedParams);
-    return invocation.shouldConfirmExecute(abortSignal);
+    return withAbortSignal(abortSignal, () =>
+      invocation.shouldConfirmExecute(abortSignal),
+    );
   }
 
   async execute(options: ExecuteOptions): Promise<ToolResult> {
-    const { abortSignal: signal, updateOutput } = options;
+    const { updateOutput } = options;
+    const signal = AbortSignal.any([
+      options.abortSignal,
+      this.context.config.getLifecycleSignal(),
+    ]);
     signal.throwIfAborted();
     if (this.definition.kind === 'local')
       assertAgentAuthorization(
@@ -260,6 +271,9 @@ class DelegateInvocation extends BaseToolInvocation<
             abortSignal: signal,
             updateOutput,
           });
+          // Keep the scheduler slot through actual child cleanup, but never
+          // accept a late success after the owning Config has closed.
+          signal.throwIfAborted();
           metadata.output = result;
           return result;
         },
