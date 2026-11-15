@@ -38,7 +38,7 @@ button:hover{filter:brightness(.95)}button:disabled{opacity:.6;cursor:wait}butto
 <section aria-labelledby="task-title"><h2 id="task-title">提交任务</h2>
 <label for="preset">快捷任务</label><select id="preset"><option value="">选择一个起点</option><option value="writing">AI 写作</option><option value="coding">深度编码</option><option value="audit">源码审阅</option><option value="binary">本地样本分析</option></select>
 <form id="task"><label for="prompt">目标与要求</label><textarea id="prompt" required aria-describedby="prompt-help feedback" placeholder="描述目标、文件路径和完成要求…"></textarea>
-<p id="prompt-help" class="subtle">任务进入当前 CLI 对话，执行过程和审批在终端查看。</p><button class="primary" id="submit" type="submit">发送到当前会话</button></form>
+<p id="prompt-help" class="subtle">任务进入当前 CLI 对话，执行过程和审批在终端查看。</p><button class="primary" id="submit" type="submit" disabled>发送到当前会话</button></form>
 <p id="feedback" role="status" aria-live="polite"></p></section>
 <section aria-labelledby="settings-title"><h2 id="settings-title">会话设置</h2>
 <label for="model">供应商 / 模型</label><select id="model"><option value="">当前通道</option></select>
@@ -80,6 +80,8 @@ const tokenKey = 'drill-token';
 const token = location.hash.slice(1) || sessionStorage.getItem(tokenKey) || '';
 if (location.hash) { sessionStorage.setItem(tokenKey, token); history.replaceState(null, '', location.pathname); }
 let statusRequest;
+let taskSubmitting=false;let sessionReady=false;let sessionId='';
+function renderSubmitState(){const ready=sessionReady&&!taskSubmitting;$('submit').disabled=!ready;$('task').setAttribute('aria-busy',String(taskSubmitting));sendIcon.morphTo(ready?shapes.send:shapes.busy);}
 let modelSignature = '';
 let providers=[];let runtime={collaboration:'auto',maxParallel:3,workflow:'general'};let lastEffort='';let lastTaskSignature='';
 function showPage(page) {
@@ -110,7 +112,7 @@ $('prompts').onsubmit=async event=>{
 };
 async function api(path, body, signal) {
   const timeout=AbortSignal.timeout(12000);
-  const response = await fetch('/api/' + path, {method:body ? 'POST':'GET', signal:signal?AbortSignal.any([signal,timeout]):timeout,headers:{'X-Drill-Token':token,'Content-Type':'application/json'},body:body ? JSON.stringify(body):undefined});
+  const response = await fetch('/api/' + path, {method:body ? 'POST':'GET', signal:signal?AbortSignal.any([signal,timeout]):timeout,headers:{'X-Drill-Token':token,'Content-Type':'application/json',...(body?{'X-Drill-Session':sessionId}:{})},body:body ? JSON.stringify(body):undefined});
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || '请求失败。');
   return data;
@@ -137,8 +139,7 @@ async function refresh(force=false) {
     $('effort-description').textContent=effort?.description||'';
     $('state').textContent=(s.ready?t('就绪','Ready'):t('执行中 / 等待终端确认','Running / awaiting terminal approval'))+' · '+s.activeModel;
     if(lastEffort!==s.effort){lastEffort=s.effort;effortIcon?.morphTo(['max','ultra'].includes(s.effort)?shapes.spark:shapes.star,'smooth');$('effort-art').classList.remove('awaken');requestAnimationFrame(()=>{if(!document.hidden)$('effort-art').classList.add('awaken');});}
-    $('submit').disabled=!s.ready;
-    sendIcon.morphTo(s.ready?shapes.send:shapes.busy);
+    sessionId=s.sessionId;sessionReady=s.ready;renderSubmitState();
     const signature=JSON.stringify([locale,s.providers]);
     if (signature!==modelSignature) {
       modelSignature=signature;$('model').replaceChildren();
@@ -155,7 +156,7 @@ async function refresh(force=false) {
     table('patches',t(['目标 / 状态','备份 / 修改副本','Diff / 回滚脚本'],['Target / status','Backup / modified','Diff / rollback']),s.patches.map(p=>[p.original_path+' · '+p.status,p.backup_path+'\\n'+p.modified_path,p.diff_path+'\\n'+p.rollback_script]));
     const states={queued:t('排队','Queued'),running:t('运行中','Running'),completed:t('完成','Completed'),failed:t('失败','Failed'),cancelled:t('已取消','Cancelled')};
     const taskSignature=JSON.stringify([locale,s.collaborationTasks]);if(taskSignature!==lastTaskSignature){lastTaskSignature=taskSignature;table('agent-tasks',t(['代理','状态','结果'],['Agent','State','Result']),(s.collaborationTasks||[]).slice(-20).reverse().map(task=>[task.agent,states[task.status]||task.status,task.error||task.finishedAt||task.startedAt||'—']));}
-  } catch(error) { $('state').textContent=error.message;$('submit').disabled=true; }
+  } catch(error) { $('state').textContent=error.message;sessionReady=false;renderSubmitState(); }
   finally { statusRequest=undefined; }
   })();
   return statusRequest;
@@ -184,10 +185,10 @@ const presets={writing:'请帮助完成以下写作任务：\\n主题：\\n读�
 const englishPresets={writing:'Complete this writing task.\\nTopic:\\nAudience and purpose:\\nLength and style:\\nOutline the structure, then produce usable prose. Do not invent sources.',coding:'Complete this coding task.\\nProject path:\\nGoal:\\nConstraints: Keep it concise. Read relevant code, then implement. Run only necessary checks related to the change.',audit:'Review authorized local source and fix concrete, reproducible defects.\\nPath:\\nScope:',binary:'Analyze this authorized local sample and record evidence and uncertainties.\\nFile path:\\nGoal:'};
 $('preset').onchange=()=>{const template=(locale==='zh'?presets:englishPresets)[$('preset').value];if(template){$('prompt').value=template;$('prompt').focus();}};
 $('task').onsubmit=async event=>{
-  event.preventDefault();$('submit').disabled=true;$('prompt').removeAttribute('aria-invalid');
+  event.preventDefault();if(taskSubmitting||!sessionReady)return;taskSubmitting=true;renderSubmitState();$('feedback').textContent=t('正在提交任务…','Sending task…');$('prompt').removeAttribute('aria-invalid');
   try {const result=await api('prompt',{prompt:$('prompt').value});$('feedback').textContent=result.message;}
   catch(error){$('feedback').textContent=error.message;$('prompt').setAttribute('aria-invalid','true');}
-  await refresh();
+  finally{await refresh(true);taskSubmitting=false;renderSubmitState();}
 };
 let toolPathData;let toolPathsBusy=false;let toolPathRevision=0;
 function showToolPathData(data){toolPathData=data;const selected=$('tool-path-name').value;$('tool-path-name').replaceChildren(...data.tools.map(name=>{const option=document.createElement('option');option.value=name;option.textContent=name;return option;}));if(data.tools.includes(selected))$('tool-path-name').value=selected;selectToolPath();$('tool-path-file').textContent=t('保存位置：','Saved at: ')+data.file;}

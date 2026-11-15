@@ -85,7 +85,7 @@ export async function decompileBinary(
   }
   if (!installation)
     throw new Error(
-      'Set GEMINI_ULTRA_GHIDRA_HOME to the Ghidra installation directory, or configure GEMINI_ULTRA_TOOL_ANALYZEHEADLESS, then run /drill setup.',
+      'Set GEMINI_ULTRA_GHIDRA_HOME to the Ghidra installation directory, set GEMINI_ULTRA_TOOL_ANALYZEHEADLESS, or run /drill tools analyzeHeadless <absolute-path>, then run /drill setup.',
     );
   const ghidraHome = await fs.realpath(installation);
   const utility = path.join(

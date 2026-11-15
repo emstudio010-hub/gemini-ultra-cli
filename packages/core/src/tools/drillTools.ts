@@ -84,7 +84,10 @@ export function checkBinary(cmd: string): {
     }).trim();
     return { available: true, pathOrStatus: out.split('\n')[0].trim() };
   } catch {
-    return { available: false, pathOrStatus: 'not found in PATH' };
+    return {
+      available: false,
+      pathOrStatus: `not found in PATH; set ${toolPathEnv(cmd)} or run /drill tools ${cmd} <absolute-path>`,
+    };
   }
 }
 
@@ -109,7 +112,7 @@ export async function checkBinaryAsync(
     signal?.throwIfAborted();
     return {
       available: false,
-      pathOrStatus: `not found; add to PATH or set ${toolPathEnv(name)}`,
+      pathOrStatus: `not found; add to PATH, set ${toolPathEnv(name)}, or run /drill tools ${name} <absolute-path>`,
     };
   }
 }

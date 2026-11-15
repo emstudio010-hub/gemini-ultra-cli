@@ -22,6 +22,7 @@ afterEach(() => {
 async function pendingRequest(
   config: Config,
   submit: (prompt: string) => Promise<void>,
+  expectedSessionId?: string,
 ) {
   disconnect = connectDrillSession({ config, isReady: () => true, submit });
   const url = new URL(await startDrillCockpit());
@@ -49,6 +50,9 @@ async function pendingRequest(
         headers: {
           'Content-Type': 'application/json',
           'X-Drill-Token': url.hash.slice(1),
+          ...(expectedSessionId === undefined
+            ? {}
+            : { 'X-Drill-Session': expectedSessionId }),
         },
       },
       (res) => {
@@ -115,4 +119,33 @@ it('uses the latest submit callback for a still-ready same Config', async () => 
   expect(await view.response).toBe(202);
   expect(oldSubmit).not.toHaveBeenCalled();
   expect(nextSubmit).toHaveBeenCalledWith('Fixture');
+});
+
+it('refuses a stale browser session identity even when it reaches the new Config', async () => {
+  const config = { getSessionId: () => 'new-session' } as Config;
+  const submit = vi.fn(async () => {});
+  const view = await pendingRequest(config, submit, 'old-session');
+  view.finish();
+  expect(await view.response).toBe(409);
+  expect(submit).not.toHaveBeenCalled();
+});
+
+it('rechecks session identity after the same Config rotates while reading the body', async () => {
+  let sessionId = 'original-session';
+  const config = { getSessionId: () => sessionId } as Config;
+  const submit = vi.fn(async () => {});
+  const view = await pendingRequest(config, submit, sessionId);
+  sessionId = 'rotated-session';
+  view.finish();
+  expect(await view.response).toBe(409);
+  expect(submit).not.toHaveBeenCalled();
+});
+
+it('accepts a browser submission bound to the current session identity', async () => {
+  const config = { getSessionId: () => 'current-session' } as Config;
+  const submit = vi.fn(async () => {});
+  const view = await pendingRequest(config, submit, 'current-session');
+  view.finish();
+  expect(await view.response).toBe(202);
+  expect(submit).toHaveBeenCalledExactlyOnceWith('Fixture');
 });

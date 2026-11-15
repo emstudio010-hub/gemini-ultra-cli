@@ -281,7 +281,14 @@ async function handleRequest(
   if (req.method !== 'POST') throw new RequestError(404, '接口不存在。');
   const body = await readJson(req);
   const latest = session;
-  if (!latest || latest.config !== config)
+  const expectedSessionId = req.headers['x-drill-session'];
+  if (
+    !latest ||
+    latest.config !== config ||
+    (expectedSessionId !== undefined &&
+      (typeof expectedSessionId !== 'string' ||
+        expectedSessionId !== config.getSessionId()))
+  )
     throw new RequestError(
       409,
       I18nManager.getInstance().t(

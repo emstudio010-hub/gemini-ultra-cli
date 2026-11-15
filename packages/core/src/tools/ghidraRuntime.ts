@@ -39,7 +39,7 @@ export async function discoverGhidraJava(
   if (!found.available || !found.pathOrStatus)
     return {
       available: false,
-      pathOrStatus: `No native Java found in ${source}. Configure GEMINI_ULTRA_TOOL_JAVA or JAVA_HOME, or add Java to PATH.`,
+      pathOrStatus: `No native Java found in ${source}. Configure GEMINI_ULTRA_TOOL_JAVA or JAVA_HOME, add Java to PATH, or run /drill tools java <absolute-path>.`,
     };
   const file = path.resolve(found.pathOrStatus);
   if (/\.(cmd|bat)$/i.test(file))

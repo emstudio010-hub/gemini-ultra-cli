@@ -110,7 +110,7 @@ export async function analyzeBinary(
   const discovered = checkBinary('r2');
   if (!discovered.available || !discovered.pathOrStatus)
     throw new Error(
-      'r2 is unavailable. Install radare2, add r2 to PATH or set GEMINI_ULTRA_TOOL_R2 to its executable path, then run /drill setup.',
+      'r2 is unavailable. Install radare2, add r2 to PATH, set GEMINI_ULTRA_TOOL_R2, or run /drill tools r2 <absolute-path>, then run /drill setup.',
     );
   const toolPath = discovered.pathOrStatus;
   if (process.platform === 'win32' && /\.(cmd|bat)$/i.test(toolPath))

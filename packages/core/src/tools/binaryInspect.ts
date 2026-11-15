@@ -77,7 +77,7 @@ export async function inspectBinary(
   const discovered = checkBinary('rabin2');
   if (!discovered.available || !discovered.pathOrStatus) {
     throw new Error(
-      'rabin2 is unavailable. Install radare2, add rabin2 to PATH or set GEMINI_ULTRA_TOOL_RABIN2 to its executable path, then run /drill setup.',
+      'rabin2 is unavailable. Install radare2, add rabin2 to PATH, set GEMINI_ULTRA_TOOL_RABIN2, or run /drill tools rabin2 <absolute-path>, then run /drill setup.',
     );
   }
   const toolPath = discovered.pathOrStatus;
