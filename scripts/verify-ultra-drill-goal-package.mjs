@@ -283,7 +283,7 @@ try {
   assert.deepEqual(failures, []);
   assert.equal(
     fs.readFileSync(path.join(workspace, 'DRILL-REPORT.md'), 'utf8'),
-    'answer=42\n',
+    'answer=42' + os.EOL,
   );
   assert.equal(
     fs.readFileSync(path.join(workspace, 'seed.txt'), 'utf8'),

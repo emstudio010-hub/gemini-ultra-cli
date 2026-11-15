@@ -2021,3 +2021,7 @@ WI-263/E-579至580/F-222：createContentGeneratorConfig 仅 Gemini API 分支读
 ## 2026-11-16 非交互启动重复认证
 
 WI-264/E-581/F-223：main 的非交互最终认证仍先执行策略校验；同一 full Config 已就绪且类型匹配时复用 generator，未就绪/类型变化仍刷新，认证和策略失败不执行任务。新增五场景用真实 main/initializeApp 控制流和 Config 夹具验证，基线 ready 实际多刷新一次；修后分次 11 项不同相关检查最终通过。CLI/core tsc、新两 TS 零 warning lint、六 TS 格式及 diff 通过；并发静态检查 native OOM 保留，串行受限堆完成。旧环境认证测试受个人供应商影响，仅隔离夹具后重验通过；无外部模型/全量/冒烟/打包。上轮密钥库隔离已提交 1e0554f；三份交接见 docs/ultra-noninteractive-auth-reuse-handoff.md。持续目标保持开启，整体首屏性能、真实协作质量及最终三平台仍待。
+
+## 2026-11-16 持续演练台与 preview.84 交付
+
+WI-265/E-582至585/F-224至226：/goal 从单次提示词变为原生 Boost 持久目标；网页、CLI 和 manage_drill_goal 共用计划、验收文件、预算、报告，支持创建/连续执行/暂停续接/导出，原演练台面板保留。7 项定向检查通过，manifest 修正后仅重验 HTTP 单项通过；真实浏览器创建并完成5报告、下载完整JSON与双语切换通过（Agent结果受控）。软件代码 ee569c1 的 Win x64/Linux x64/macOS arm64 包全部生成，后两者 runner 通过，Windows 修正验收脚本 CRLF 断言后同包本机通过；每平台13次loopback/5报告，便携启动实际84，源码与校验清单交付。当前真实 DeepSeek 模型唯一外部请求503，停止转发；目标ready/0阶段/未交付、passed=false保留，临时凭据删且个人provider字节不变。未把夹具或构建当真实供应商成功，未重放旧四真实失败。功能/包交付完成，外部503及旧复杂协作质量边界保留，详见 docs/ultra-drill-goal-delivery-handoff.md。
