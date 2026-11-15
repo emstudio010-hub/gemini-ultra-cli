@@ -35,9 +35,8 @@ export async function performInitialAuth(
   }
 
   try {
-    // The pre-sandbox bootstrap may already have authenticated this Config and
-    // handed its metadata to the full Config. Reusing that ready state avoids a
-    // second provider handshake during the first UI render.
+    // Reuse only this Config's ready generator. A metadata handoff from the
+    // pre-sandbox Config does not authenticate the full Config's generator.
     const alreadyAuthenticated =
       config.isAuthReady?.() === true &&
       config.getContentGeneratorConfig?.()?.authType === authType;

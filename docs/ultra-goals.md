@@ -9,7 +9,7 @@
 
 持续 goal 保持 active，沿用现有成果，不重开项目。
 
-1. **启动与加载稳定**：继续收敛无限等待、取消、关闭后的迟到结果；主聊天、委派、直接执行器、BaseLlmClient、直接生成器及媒体/截图/策略辅助函数已有 Windows 定向证据，多 Config 策略上下文及缓存已隔离；Git worktree 元数据探测有共享 2 秒期限，扩展发现有 5 秒启动期限且已在编译 Config 链验证。下一项回到认证/设置加载等待和其他冷加载路径，再做用户功能收敛；最终包的启动收益仍待收敛后测量。
+1. **启动与加载稳定**：继续收敛无限等待、取消、关闭后的迟到结果；主聊天、委派、直接执行器、BaseLlmClient、直接生成器及媒体/截图/策略辅助函数已有 Windows 定向证据，多 Config 策略上下文及缓存已隔离；Git worktree 元数据探测有共享 2 秒期限，扩展发现有 5 秒启动期限且已在编译 Config 链验证。E-579至580 已消除 Vertex AI/无保存供应商网关对 Gemini 密钥库的无关等待；继续认证/设置其余等待和重复刷新，再做用户功能收敛；最终包的启动收益仍待收敛后测量。
 2. **双语与日常配置**：保持 `/language` 中文/英文、六档推理唯一选项及即时切换；`/provider use <供应商> [模型]` 与模型参数补全已有定向证据，继续完善配置按新增缺陷修复，不重复已通过场景。
 3. **真实多 Agent 协作**：继续维护 Teamwork、Boost、Grill me 和 Swarm 的预算、排队、成果保全、错误恢复及独立审核；Swarm 入口现在会先阻止与运行中工作流并行创建，且已有真实运行锁定向测试。四份真实失败保留；本地受控链通过不等同于真实复杂任务质量通过，不自动付费重跑。
 4. **演练台交互**：保持 `/演练台`、Morphicons 图标、六档动效和减少动态效果支持；E-576至577 已补页面提交防重入/失败保留草稿，以及浏览器 POST 会话 ID 校验，Windows 页面处理器与本地 HTTP 定向通过，浏览器视觉和真实模型执行仍分开验收。
@@ -2011,3 +2011,7 @@ WI-260/E-574至575/F-218：/provider use 在供应商后补全已保存模型，
 ## 2026-11-16 演练台提交与会话归属
 
 WI-261/E-576至577/F-219至220：页面 pending 锁防状态轮询提前解锁与键盘重复提交，失败保留草稿；页面 POST 携带 status 会话 ID，服务端读取请求体后复核，旧视图抵达新 Config/同 Config 轮换均409零提交，匹配ID202一次提交。生成页面完整脚本3项+真实本地HTTP7+4项=14 passed；CLI tsc/四TS零warning lint/格式/diff通过。WI-262/E-578/F-221：续接缺工具诊断中 /drill tools 保存入口；此前工具14项/core tsc单独4GiB通过，首次OOM保留，无新外部模型调用。三份交接见 docs/ultra-cockpit-submission-identity-handoff.md；goal active，首屏速度/真实协作质量/最终分发仍待，不打包。
+
+## 2026-11-16 启动认证密钥库隔离
+
+WI-263/E-579至580/F-222：createContentGeneratorConfig 仅 Gemini API 分支读取保存的 Gemini 密钥；Vertex key/项目和无保存供应商网关不再等待无关密钥库，原密钥优先级保持。新5项 baseline 3失败/2通过；最终受影响配置15 passed/45 skipped、CLI/core tsc、四TS零warning lint/格式/diff通过。Windows实际编译工厂+loadApiKey在受控永久等待storage下三路由零读取且完成，Gemini对照恰好一次读取，0外部模型请求；非完整CLI冷启动或真实账号认证验收。旧测试个人供应商依赖/误选upstream缺依赖/初始测试类型及内部导入夹具错误均记录后解决，个人配置不改。纠正已ready Config复用注释，不将metadata handoff视为新Config已认证。goal active，源码/工程/Obsidian三份同SHA交接见 docs/ultra-auth-storage-routing-handoff.md；暂不打包，下一继续首屏其余等待与协作交付收敛。

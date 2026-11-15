@@ -191,21 +191,23 @@ export async function createContentGeneratorConfig(
     return contentGeneratorConfig;
   }
 
-  const geminiApiKey =
-    apiKey || getEnv('GEMINI_API_KEY') || (await loadApiKey()) || undefined;
+  // Vertex and gateway authentication do not use the saved Gemini key. Keep
+  // their startup independent of a slow or unavailable credential store.
+  if (authType === AuthType.USE_GEMINI) {
+    const geminiApiKey =
+      apiKey || getEnv('GEMINI_API_KEY') || (await loadApiKey()) || undefined;
+    if (geminiApiKey) {
+      contentGeneratorConfig.apiKey = geminiApiKey;
+      contentGeneratorConfig.vertexai = false;
+    }
+    return contentGeneratorConfig;
+  }
   const googleApiKey = getEnv('GOOGLE_API_KEY') || undefined;
   const googleCloudProject =
     getEnv('GOOGLE_CLOUD_PROJECT') ||
     getEnv('GOOGLE_CLOUD_PROJECT_ID') ||
     undefined;
   const googleCloudLocation = getEnv('GOOGLE_CLOUD_LOCATION') || undefined;
-
-  if (authType === AuthType.USE_GEMINI && geminiApiKey) {
-    contentGeneratorConfig.apiKey = geminiApiKey;
-    contentGeneratorConfig.vertexai = false;
-
-    return contentGeneratorConfig;
-  }
 
   if (
     authType === AuthType.USE_VERTEX_AI &&

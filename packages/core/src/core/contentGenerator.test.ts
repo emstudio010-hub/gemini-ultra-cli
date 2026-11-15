@@ -24,6 +24,7 @@ import { FakeContentGenerator } from './fakeContentGenerator.js';
 import { RecordingContentGenerator } from './recordingContentGenerator.js';
 import { resetVersionCache } from '../utils/version.js';
 import type { LlmRole } from '../telemetry/llmRole.js';
+import { ProviderManager } from '../providers/providerManager.js';
 
 vi.mock('../code_assist/codeAssist.js');
 vi.mock('@google/genai');
@@ -1419,9 +1420,13 @@ describe('createContentGeneratorConfig', () => {
     // Reset modules to re-evaluate imports and environment variables
     vi.resetModules();
     vi.clearAllMocks();
+    vi.spyOn(ProviderManager, 'getInstance').mockReturnValue({
+      getActiveProvider: () => undefined,
+    } as ProviderManager);
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllEnvs();
   });
 
