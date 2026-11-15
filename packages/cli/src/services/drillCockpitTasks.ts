@@ -150,16 +150,19 @@ export function cockpitTaskAction(
           I18nManager.getInstance().getLocale(),
         );
   const directory = path.dirname(exported.manifestPath);
-  const manifest = JSON.parse(
-    fs.readFileSync(exported.manifestPath, 'utf8'),
-  ) as {
-    reports: Array<{
-      file: string;
-      bytes: number;
-      sha256: string;
-      label: string;
-    }>;
-  };
+  const manifest = z
+    .object({
+      reports: z.array(
+        z.object({
+          file: z.string().regex(/^\d+\.md$/),
+          bytes: z.number().int().nonnegative(),
+          sha256: z.string().regex(/^[a-f0-9]{64}$/),
+          label: z.string(),
+        }),
+      ),
+    })
+    .passthrough()
+    .parse(JSON.parse(fs.readFileSync(exported.manifestPath, 'utf8')));
   // The on-disk full export remains available if it exceeds browser download size.
   if (
     manifest.reports.reduce((total, item) => total + item.bytes, 0) >
