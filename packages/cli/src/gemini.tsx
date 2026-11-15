@@ -1003,7 +1003,14 @@ export async function main() {
       config,
       settings,
     );
-    await config.refreshAuth(authType);
+    // initializeApp may already have authenticated this full Config. Keep the
+    // final policy validation above, but avoid resetting a ready generator.
+    if (
+      config.isAuthReady?.() !== true ||
+      config.getContentGeneratorConfig()?.authType !== authType
+    ) {
+      await config.refreshAuth(authType);
+    }
 
     if (config.getDebugMode()) {
       debugLogger.log('Session ID: %s', sessionId);

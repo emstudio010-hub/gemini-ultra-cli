@@ -49,6 +49,7 @@ import {
   debugLogger,
   coreEvents,
   AuthType,
+  ProviderManager,
   ExitCodes,
   disableLineWrapping,
 } from '@google/gemini-cli-core';
@@ -1534,7 +1535,96 @@ describe('gemini.tsx main function exit codes', () => {
     }
   });
 
+  it.each([
+    'ready',
+    'not-ready',
+    'changed-type',
+    'auth-failed',
+    'validation-rejected',
+  ] as const)(
+    'should preserve non-interactive auth validation after initialization (%s)',
+    async (state) => {
+      vi.stubEnv('SANDBOX', 'test');
+      vi.stubEnv('GEMINI_API_KEY', 'test-key');
+      let ready = false;
+      let currentType = AuthType.USE_GEMINI;
+      const failure = new Error(state);
+      const refreshAuth = vi.fn(async (authType: AuthType) => {
+        if (state === 'auth-failed') throw failure;
+        ready = true;
+        currentType = authType;
+      });
+      const partialConfig = createMockConfig({
+        isInteractive: () => false,
+        refreshAuth: vi.fn().mockResolvedValue(undefined),
+      });
+      const fullConfig = createMockConfig({
+        isInteractive: () => false,
+        getQuestion: () => 'test prompt',
+        getSandbox: () => undefined,
+        isAuthReady: () => ready,
+        getContentGeneratorConfig: () => ({ authType: currentType }),
+        refreshAuth,
+        initialize: vi.fn(async () => {
+          if (state === 'not-ready') ready = false;
+          if (state === 'changed-type') currentType = AuthType.GATEWAY;
+        }),
+      });
+      vi.mocked(loadCliConfig)
+        .mockResolvedValueOnce(partialConfig)
+        .mockResolvedValueOnce(fullConfig);
+      vi.mocked(validateNonInteractiveAuth).mockResolvedValue(
+        AuthType.USE_GEMINI,
+      );
+      if (state === 'validation-rejected') {
+        vi.mocked(validateNonInteractiveAuth)
+          .mockResolvedValueOnce(AuthType.USE_GEMINI)
+          .mockRejectedValueOnce(failure);
+      }
+      vi.mocked(loadSettings).mockReturnValue(
+        createMockSettings({
+          forScope: vi.fn(() => ({ settings: {} })),
+          merged: {
+            security: { auth: { selectedType: AuthType.USE_GEMINI } },
+          },
+        }),
+      );
+      vi.mocked(parseArguments).mockResolvedValue({} as CliArgs);
+      vi.mocked(runNonInteractive).mockReset().mockResolvedValue(undefined);
+
+      if (state === 'auth-failed' || state === 'validation-rejected') {
+        await expect(main()).rejects.toBe(failure);
+      } else {
+        await main();
+      }
+
+      expect(partialConfig.refreshAuth).toHaveBeenCalledExactlyOnceWith(
+        AuthType.USE_GEMINI,
+      );
+      expect(validateNonInteractiveAuth).toHaveBeenCalledWith(
+        AuthType.USE_GEMINI,
+        undefined,
+        fullConfig,
+        expect.anything(),
+      );
+      expect(refreshAuth).toHaveBeenCalledTimes(
+        state === 'ready' || state === 'validation-rejected' ? 1 : 2,
+      );
+      if (state === 'auth-failed' || state === 'validation-rejected') {
+        expect(runNonInteractive).not.toHaveBeenCalled();
+      } else {
+        expect(runNonInteractive).toHaveBeenCalledExactlyOnceWith(
+          expect.objectContaining({ config: fullConfig, input: 'test prompt' }),
+        );
+      }
+    },
+  );
+
   it('should validate and refresh auth in non-interactive mode when no auth type is selected but env var is present', async () => {
+    vi.spyOn(
+      ProviderManager.getInstance(),
+      'getActiveProvider',
+    ).mockReturnValue(undefined);
     const refreshAuthSpy = vi.fn();
     vi.mocked(loadCliConfig).mockResolvedValue(
       createMockConfig({
