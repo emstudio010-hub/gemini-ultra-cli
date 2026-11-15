@@ -139,9 +139,21 @@ export function readAgentTaskDetails(root: string, selection: unknown) {
     requests: number | null;
     maxRequests: number | null;
   } = { known: false, requests: null, maxRequests: null };
+  let limits:
+    | {
+        maxRequests: number;
+        maxFailedStages: number;
+        maxImplementationRounds: number;
+      }
+    | undefined;
   try {
     regular(path.join(directory, `${id}.budget.json`), false, 16384);
     const budget = savedWorkflowBudgetSummary(root, id);
+    limits = {
+      maxRequests: budget.maxRequests,
+      maxFailedStages: budget.maxFailedStages,
+      maxImplementationRounds: budget.maxImplementationRounds,
+    };
     if (budget.mode !== mode) throw new Error('Budget mode mismatch.');
     usage = {
       known: !budget.accountingUnknown,
@@ -154,6 +166,8 @@ export function readAgentTaskDetails(root: string, selection: unknown) {
   if (!usage.known) warnings.push('budget-unavailable');
   return {
     ...common,
+    drillGoal: record.drillGoal,
+    limits,
     kind: 'workflow' as const,
     phase: record.phase,
     objective: record.objective.slice(0, 2000),

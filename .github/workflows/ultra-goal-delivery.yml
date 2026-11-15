@@ -1,0 +1,50 @@
+name: Ultra goal delivery
+on:
+  push:
+    branches: ['codex/ultra-agent-portable']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  package:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[goal delivery]')
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Check changed CLI sources
+        if: matrix.os == 'ubuntu-latest'
+        run: node --max-old-space-size=4096 node_modules/eslint/bin/eslint.js packages/cli/src/services/drillCockpit.ts packages/cli/src/services/drillCockpitTasks.ts packages/cli/src/services/drillCockpitPage.ts packages/cli/src/services/drillCockpitGoals.test.ts packages/cli/src/services/cockpitLocale.ts packages/cli/src/ui/commands/goalCommand.ts scripts/verify-ultra-drill-goal-package.mjs --max-warnings 0
+      - run: npm run package:ultra
+      - name: Install and verify the delivered goal workflow
+        shell: pwsh
+        run: |
+          $archive = Get-Item artifacts/ultra-release/gemini-ultra-cli-1.0.0-preview.84.tgz
+          $prefix = Join-Path $env:RUNNER_TEMP 'ultra-goal-install'
+          npm install --prefix $prefix --ignore-scripts --no-audit --no-fund $archive.FullName
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $entry = Join-Path $prefix 'node_modules/gemini-ultra-cli/bundle/gemini.js'
+          node $entry --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/verify-ultra-drill-goal-package.mjs $entry artifacts/ultra-release/goal-package-verification.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gemini-ultra-cli-84-${{ matrix.os }}
+          path: |
+            artifacts/ultra-release/*.tgz
+            artifacts/ultra-release/*.sha256
+            artifacts/ultra-release/goal-package-verification.json
+          if-no-files-found: error

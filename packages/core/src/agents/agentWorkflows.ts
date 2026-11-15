@@ -78,6 +78,20 @@ const workflowSchema = workflowPlanSchema.extend({
     'cancelled',
   ]),
   previousApprovalMode: z.string(),
+  drillGoal: z
+    .object({
+      template: z.enum([
+        'general',
+        'coding',
+        'writing',
+        'audit',
+        'binary',
+        'web',
+      ]),
+      scope: z.string().max(4000),
+      sessionId: z.string().max(200),
+    })
+    .optional(),
   approved: z.boolean().default(false),
   budgetVersion: z.literal(1).optional(),
   budgetOwnerPid: z.number().int().positive().optional(),
@@ -474,7 +488,16 @@ export async function runAgentWorkflow(
             'This workflow is bound to another workspace; use its original workspace.',
           );
         current.workspace = workspace;
-        current.reviewFiles = reviewFilesSchema.parse(reviewScope.files);
+        current.reviewFiles = reviewFilesSchema.parse(
+          current.drillGoal
+            ? [
+                ...new Set([
+                  ...(current.reviewFiles ?? []),
+                  ...reviewScope.files,
+                ]),
+              ]
+            : reviewScope.files,
+        );
       }
       if (current.workspace && current.reviewFiles === undefined)
         throw new Error(

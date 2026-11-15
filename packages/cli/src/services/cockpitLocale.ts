@@ -4,6 +4,35 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 export const cockpitTranslations: Record<string, string> = {
+  持续目标工作台: 'Persistent goal workspace',
+  '创建可保存的阶段计划，由原生 Agent 连续推进、独立复核并保留报告。关闭浏览器不停止 CLI；退出 CLI 后可按 ID 续接。受阻时保留成果与原因。':
+    'Save a milestone plan for continuous native Agent execution, independent review and retained reports. Closing the browser does not stop the CLI; resume by ID after restarting it. Blocked work retains its results and reason.',
+  最终交付目标: 'Final deliverable',
+  '描述最终需要交付的结果、约束与完成标准…':
+    'Describe the final outcome, constraints and acceptance criteria…',
+  目标类型: 'Goal type',
+  通用任务: 'General task',
+  授权Web演练: 'Authorized web assessment',
+  '授权 Web 演练': 'Authorized web assessment',
+  范围与边界: 'Scope and boundaries',
+  '项目路径、样本路径或明确授权的目标范围':
+    'Project path, sample path or explicitly authorized target scope',
+  交付文件: 'Deliverable files',
+  '填写工作区相对路径，用逗号分隔。默认报告会参与最终文件复核。':
+    'Enter workspace-relative paths separated by commas. The default report is included in the final file review.',
+  里程碑与验收条件: 'Milestones and acceptance',
+  '每行：阶段标题 | 具体可核对的验收条件':
+    'One per line: milestone title | concrete acceptance criteria',
+  '留空使用调查、实现、验证交接三个阶段；最多 12 个阶段。':
+    'Leave blank for investigation, implementation and verification/handoff. Up to 12 milestones.',
+  模型调度上限: 'Model dispatch limit',
+  失败阶段上限: 'Failed-stage limit',
+  每阶段实施轮数: 'Rounds per milestone',
+  '累计用量跨续接保留；达到上限后停止，修改预算后可手动续接。':
+    'Cumulative usage survives resumes. Work stops at its limits; change limits and resume explicitly.',
+  仅保存计划: 'Save plan only',
+  创建并启动目标: 'Create and start goal',
+  查看目标与历史任务: 'View goals and history',
   '· Gemini Ultra CLI 原生实现 ·': '· Native Gemini Ultra CLI implementation ·',
   演练台: 'Drill cockpit',
   'Gemini Ultra CLI · 当前会话控制中心': 'Gemini Ultra CLI · Session control',

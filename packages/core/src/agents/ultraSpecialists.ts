@@ -107,6 +107,7 @@ export function ultraSpecialists(
                 AGENT_TOOL_NAME,
                 'run_agent_workflow',
                 'draft_agent_workflow',
+                'manage_drill_goal',
               ].includes(name),
           );
         return {

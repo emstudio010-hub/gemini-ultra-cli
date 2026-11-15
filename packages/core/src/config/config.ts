@@ -56,6 +56,7 @@ import { UpdateTopicTool } from '../tools/topicTool.js';
 import { TopicState } from './topicState.js';
 import { AgentTool } from '../agents/agent-tool.js';
 import { SpawnSubagentsTool } from '../agents/spawn-subagents-tool.js';
+import { ManageDrillGoalTool } from '../drill/drillGoalTool.js';
 import { ManageSwarmTool, PostSwarmMessageTool } from '../agents/swarmTools.js';
 import {
   DraftAgentWorkflowTool,
@@ -4472,6 +4473,9 @@ export class Config implements McpContext, AgentLoopContext {
     );
     maybeRegister(RunAgentWorkflowTool, () =>
       registry.registerTool(new RunAgentWorkflowTool(this, this.messageBus)),
+    );
+    maybeRegister(ManageDrillGoalTool, () =>
+      registry.registerTool(new ManageDrillGoalTool(this, this.messageBus)),
     );
 
     // Register Gemini-Ultra Extended Tools (Image Gen, Deep Web, Diagrams, Memory Graph, Drill & Patch)

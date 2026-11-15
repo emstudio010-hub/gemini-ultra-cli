@@ -38,6 +38,7 @@ import {
   type ExternalProviderProfile,
 } from '@google/gemini-cli-core';
 import { registerCleanup } from '../utils/cleanup.js';
+import { createCockpitGoal, cockpitTaskAction } from './drillCockpitTasks.js';
 
 interface DrillSession {
   config: Config;
@@ -296,11 +297,56 @@ async function handleRequest(
         'CLI session closed or changed. Reopen the cockpit in the current session before submitting.',
       ),
     );
-  if (!latest.isReady() || submissions.has(config))
+  const taskControl = pathname === '/api/agent-task/action';
+  const canControlBusyTask =
+    taskControl && ['pause', 'reports'].includes(String(body['action']));
+  if (!canControlBusyTask && (!latest.isReady() || submissions.has(config)))
     throw new RequestError(
       409,
       '会话忙碌或正在等待确认，请回到终端完成当前操作。',
     );
+  if (pathname === '/api/goals' || taskControl) {
+    let action:
+      | ReturnType<typeof createCockpitGoal>
+      | ReturnType<typeof cockpitTaskAction>;
+    try {
+      action =
+        pathname === '/api/goals'
+          ? createCockpitGoal(config, body)
+          : cockpitTaskAction(config, body);
+    } catch (error) {
+      throw new RequestError(
+        400,
+        error instanceof Error ? error.message : 'Task action failed.',
+      );
+    }
+    if (action.submission) {
+      const admittedSessionId = config.getSessionId();
+      const submission = {};
+      submissions.set(config, submission);
+      void Promise.resolve()
+        .then(() => {
+          if (
+            session?.config !== config ||
+            config.getSessionId() !== admittedSessionId
+          )
+            throw new Error('CLI session changed before task dispatch.');
+          return session.submit(action.submission!);
+        })
+        .catch((error: unknown) => {
+          coreEvents.emitFeedback(
+            'error',
+            error instanceof Error ? error.message : 'Goal dispatch failed.',
+          );
+        })
+        .finally(() => {
+          if (submissions.get(config) === submission)
+            submissions.delete(config);
+        });
+    }
+    reply(res, action.submission ? 202 : 200, action.result);
+    return;
+  }
   if (pathname === '/api/tool-paths') {
     const input = z
       .discriminatedUnion('action', [

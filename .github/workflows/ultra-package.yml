@@ -52,7 +52,9 @@ permissions:
 
 jobs:
   package:
-    if: inputs.verification_scope != 'minimum-node' && inputs.verification_scope != 'native-address-recheck'
+    if: >-
+      !contains(github.event.head_commit.message, '[goal delivery]') &&
+      inputs.verification_scope != 'minimum-node' && inputs.verification_scope != 'native-address-recheck'
     timeout-minutes: 20
     strategy:
       fail-fast: false

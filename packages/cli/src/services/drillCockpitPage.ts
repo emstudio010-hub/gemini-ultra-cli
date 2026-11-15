@@ -25,6 +25,7 @@ button:hover{filter:brightness(.95)}button:disabled{opacity:.6;cursor:wait}butto
 .icon{width:19px;height:19px;flex:none;vertical-align:middle;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}button{display:inline-flex;align-items:center;justify-content:center;gap:8px;transition:transform 140ms ease-out,opacity 140ms ease-out}button:active{transform:scale(.98)}button[aria-pressed=true]{background:#246144;color:#fff;border-color:#246144}.session-head{display:flex;gap:16px;align-items:center}.effort-art{width:62px;height:62px;flex:none;position:relative;display:grid;place-items:center;color:#246144}.effort-art svg{width:30px;height:30px}.orbit{position:absolute;inset:5px;border:1px solid #7d9b87;border-radius:50%;transform:rotate(-25deg) scaleY(.55);opacity:.6}.orbit.second{transform:rotate(45deg) scaleY(.55)}.effort-art.awaken .orbit{animation:orbit-arrive 650ms ease-out both}.effort-art.awaken .second{animation-delay:50ms}#effort-title{font-size:22px;font-weight:650;color:#246144}#effort-description{margin:4px 0;max-width:46ch}.status{border:0;padding:0;margin-top:6px;font-size:12px}#locale{width:auto;padding:7px 12px}.runtime-grid{display:grid;grid-template-columns:1fr 90px;gap:12px}#parallel{width:100%;padding:10px;border:1px solid #9ba99e;border-radius:6px}#agent-tasks td:first-child{font-weight:600}details summary{cursor:pointer;padding:8px 0;font-weight:600}details[open]{margin-top:16px}input[type=password],input[type=url],#provider-limits input{width:100%;padding:10px;border:1px solid #9ba99e;border-radius:6px}input{color:inherit;background:#fff}#provider-feedback{white-space:pre-wrap}::selection{background:#c9e1d0;color:#143622}textarea,input{caret-color:#246144}a{text-underline-offset:3px}
 @keyframes orbit-arrive{from{transform:rotate(-110deg) scaleY(.55);opacity:.2}to{transform:rotate(-25deg) scaleY(.55);opacity:.65}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+.goal-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}.goal-limits{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.goal-limits input{width:100%;padding:10px;border:1px solid #9ba99e;border-radius:6px}#goal-objective{min-height:120px}#goal-plan{min-height:180px}#goal-start{width:auto;margin:0}#goal-feedback{white-space:pre-wrap;overflow-wrap:anywhere}.task-actions{margin:16px 0}.goal-progress{accent-color:#246144;width:100%}@media(max-width:800px){.goal-grid{grid-template-columns:1fr}.goal-limits{grid-template-columns:1fr}}
 </style></head><body>
 <header><div><h1>演练台</h1><p>Gemini Ultra CLI · 当前会话控制中心</p></div><div class="session-head"><div id="effort-art" class="effort-art" aria-hidden="true"><span class="orbit"></span><span class="orbit second"></span><svg viewBox="0 0 24 24" class="icon"><path id="effort-path" d="M12 3L14.7 9.3L21 12L14.7 14.7L12 21L9.3 14.7L3 12L9.3 9.3Z"></path></svg></div><div><div id="effort-title">…</div><p id="effort-description" class="subtle"></p><div id="state" class="status" role="status">正在连接 CLI…</div></div></div><div><label for="locale" class="subtle">界面语言</label><select id="locale" aria-describedby="locale-feedback"><option value="zh">中文</option><option value="en">English</option></select><p id="locale-feedback" class="subtle" role="status" aria-live="polite"></p></div></header>
 <nav class="row" aria-label="控制中心页面"><button id="show-config" type="button" aria-pressed="true">提示词与规则</button><button id="show-drill" type="button" aria-pressed="false">演练台</button></nav>
@@ -34,7 +35,8 @@ button:hover{filter:brightness(.95)}button:disabled{opacity:.6;cursor:wait}butto
 <label for="system-prompt">自定义提示词</label><textarea id="system-prompt" aria-describedby="config-feedback" placeholder="填写角色、写作风格、编码习惯或项目要求…"></textarea>
 <h3>规则集</h3><div id="rules"></div><button id="add-rule" type="button">添加规则</button><button class="primary" type="submit">保存并应用到后续请求</button></form>
 <p id="config-feedback" role="status" aria-live="polite"></p><p id="config-path" class="subtle"></p></section><section aria-labelledby="providers-title"><h2 id="providers-title">模型供应商配置</h2><label for="provider-edit">选择配置</label><select id="provider-edit"><option value="">新增供应商</option></select><form id="provider-form"><label for="provider-name">名称</label><input id="provider-name" type="text" maxlength="64" required><label for="provider-url">端点地址</label><input id="provider-url" type="url" required placeholder="https://api.example.com/v1"><label for="provider-protocol">通信协议</label><select id="provider-protocol"><option value="openai-chat">OpenAI Chat</option><option value="openai-responses">OpenAI Responses</option><option value="anthropic">Anthropic Messages</option><option value="gemini">Gemini</option></select><label for="provider-key">密钥</label><input id="provider-key" type="password" autocomplete="new-password" placeholder="留空保留已有密钥"><label for="provider-models">模型名称</label><textarea id="provider-models" aria-describedby="provider-models-help provider-feedback"></textarea><p id="provider-models-help" class="subtle">多个模型用逗号或换行分隔。新增时首个为默认模型，编辑时保留仍可用的默认模型。</p><details id="provider-limits"><summary>生成与上下文设置</summary><p id="provider-limits-help" class="subtle">填写正整数 Token 数。留空清除供应商覆盖；任务自己的输出上限优先。容量应适用于此供应商的所有模型，不能超过实际支持范围。</p><label for="provider-output-limit">输出上限</label><input id="provider-output-limit" type="number" min="1" step="1" max="9007199254740991" placeholder="留空使用默认值" aria-describedby="provider-limits-help provider-feedback"><label for="provider-context-window">上下文容量</label><input id="provider-context-window" type="number" min="1" step="1" max="9007199254740991" placeholder="留空使用默认值" aria-describedby="provider-limits-help provider-feedback"></details><div class="row"><button id="fetch-models" type="button">获取模型清单</button><button type="submit">保存供应商</button></div></form><p id="provider-feedback" role="status" aria-live="polite"></p></section></div>
-<div id="drill" hidden><div class="layout"><div>
+<div id="drill" hidden><section aria-labelledby="goals-title"><h2 id="goals-title">持续目标工作台</h2><p class="subtle">创建可保存的阶段计划，由原生 Agent 连续推进、独立复核并保留报告。关闭浏览器不停止 CLI；退出 CLI 后可按 ID 续接。受阻时保留成果与原因。</p>
+<form id="goal-form" aria-describedby="goal-feedback"><div class="goal-grid"><div><label for="goal-objective">最终交付目标</label><textarea id="goal-objective" required maxlength="16000" placeholder="描述最终需要交付的结果、约束与完成标准…"></textarea><label for="goal-template">目标类型</label><select id="goal-template"><option value="general">通用任务</option><option value="coding">深度编码</option><option value="writing">AI 写作</option><option value="audit">源码审阅</option><option value="binary">本地样本分析</option><option value="web">授权 Web 演练</option></select><label for="goal-scope">范围与边界</label><input id="goal-scope" type="text" maxlength="4000" placeholder="项目路径、样本路径或明确授权的目标范围"><label for="goal-files">交付文件</label><input id="goal-files" type="text" value="DRILL-REPORT.md" aria-describedby="goal-files-help"><p id="goal-files-help" class="subtle">填写工作区相对路径，用逗号分隔。默认报告会参与最终文件复核。</p></div><div><label for="goal-plan">里程碑与验收条件</label><textarea id="goal-plan" placeholder="每行：阶段标题 | 具体可核对的验收条件"></textarea><p class="subtle">留空使用调查、实现、验证交接三个阶段；最多 12 个阶段。</p><div class="goal-limits"><div><label for="goal-requests">模型调度上限</label><input id="goal-requests" type="number" min="1" max="10000" value="120" required></div><div><label for="goal-failures">失败阶段上限</label><input id="goal-failures" type="number" min="1" max="100" value="2" required></div><div><label for="goal-rounds">每阶段实施轮数</label><input id="goal-rounds" type="number" min="1" max="100" value="2" required></div></div><p class="subtle">累计用量跨续接保留；达到上限后停止，修改预算后可手动续接。</p></div></div><div class="row"><button id="goal-save" type="button" disabled>仅保存计划</button><button id="goal-start" class="primary" type="submit" disabled>创建并启动目标</button></div></form><p id="goal-feedback" role="status" aria-live="polite"></p><button id="goal-open-tasks" type="button">查看目标与历史任务</button></section><div class="layout"><div>
 <section aria-labelledby="task-title"><h2 id="task-title">提交任务</h2>
 <label for="preset">快捷任务</label><select id="preset"><option value="">选择一个起点</option><option value="writing">AI 写作</option><option value="coding">深度编码</option><option value="audit">源码审阅</option><option value="binary">本地样本分析</option></select>
 <form id="task"><label for="prompt">目标与要求</label><textarea id="prompt" required aria-describedby="prompt-help feedback" placeholder="描述目标、文件路径和完成要求…"></textarea>
@@ -81,7 +83,7 @@ const token = location.hash.slice(1) || sessionStorage.getItem(tokenKey) || '';
 if (location.hash) { sessionStorage.setItem(tokenKey, token); history.replaceState(null, '', location.pathname); }
 let statusRequest;
 let taskSubmitting=false;let sessionReady=false;let sessionId='';
-function renderSubmitState(){const ready=sessionReady&&!taskSubmitting;$('submit').disabled=!ready;$('task').setAttribute('aria-busy',String(taskSubmitting));sendIcon.morphTo(ready?shapes.send:shapes.busy);}
+function renderSubmitState(){const ready=sessionReady&&!taskSubmitting&&!goalBusy&&!nativeActionBusy;$('submit').disabled=!ready;$('task').setAttribute('aria-busy',String(taskSubmitting));sendIcon.morphTo(ready?shapes.send:shapes.busy);renderGoalState();}
 let modelSignature = '';
 let providers=[];let runtime={collaboration:'auto',maxParallel:3,workflow:'general'};let lastEffort='';let lastTaskSignature='';
 function showPage(page) {
@@ -213,6 +215,82 @@ $('skills-button').onclick=async()=>{
 let nativeCatalogLoaded=false;
 function refreshLocaleViews(){renderPromptConfigPath();renderToolsLocale();renderSkillsLocale();if(toolPathData)$('tool-path-file').textContent=t('保存位置：','Saved at: ')+toolPathData.file;if(nativeCatalogLoaded)void loadNativeTasks(nativePage);if(nativeSelection)void loadNativeDetail();}
 let nativePage=1;let nativeCatalogBusy=false;let nativeDetailBusy=false;let nativeSelection;let nativeDetailSignature='';let nativeSelectionRevision=0;
+
+let goalBusy=false;let nativeActionBusy=false;
+function renderGoalState(){
+  const disabled=goalBusy||taskSubmitting||!sessionReady;
+  $('goal-save').disabled=disabled;$('goal-start').disabled=disabled;
+  $('goal-form').setAttribute('aria-busy',String(goalBusy));
+  for(const button of document.querySelectorAll('[data-task-requires-ready]'))button.disabled=nativeActionBusy||!sessionReady||button.dataset.complete==='true';
+}
+function goalInput(start){
+  const plan=$('goal-plan').value.trim();
+  const milestones=plan?plan.split(/\\r?\\n/).filter(line=>line.trim()).map(line=>{
+    const split=line.indexOf('|');
+    if(split<1||!line.slice(split+1).trim())throw new Error(t('每行需填写：阶段标题 | 验收条件。','Each milestone needs: title | acceptance criteria.'));
+    return {title:line.slice(0,split).trim(),acceptance:line.slice(split+1).trim()};
+  }):undefined;
+  return {objective:$('goal-objective').value,template:$('goal-template').value,scope:$('goal-scope').value,
+    reviewFiles:$('goal-files').value.split(',').map(value=>value.trim()).filter(Boolean),
+    ...(milestones?{milestones}:{}),maxRequests:Number($('goal-requests').value),
+    maxFailedStages:Number($('goal-failures').value),maxImplementationRounds:Number($('goal-rounds').value),start};
+}
+async function saveGoal(start){
+  if(goalBusy||taskSubmitting||!sessionReady)return;
+  goalBusy=true;renderSubmitState();$('goal-feedback').textContent=t('正在保存目标…','Saving goal…');
+  try{
+    const data=await api('goals',goalInput(start));
+    $('goal-feedback').textContent=data.message+'\\nID: '+data.id;
+    nativeSelection={mode:data.mode,id:data.id};nativeSelectionRevision++;nativeDetailSignature='';
+    await loadNativeTasks(1);await loadNativeDetail();
+  }catch(error){$('goal-feedback').textContent=error.message;}
+  finally{await refresh(true);goalBusy=false;renderSubmitState();}
+}
+$('goal-form').onsubmit=event=>{event.preventDefault();void saveGoal(true);};
+$('goal-save').onclick=()=>saveGoal(false);
+$('goal-open-tasks').onclick=async()=>{await loadNativeTasks();$('native-tasks-title').scrollIntoView({block:'start',behavior:'auto'});};
+async function actOnNativeTask(selection,action,limits){
+  if(nativeActionBusy)return;
+  nativeActionBusy=true;renderSubmitState();$('native-tasks-feedback').textContent=t('正在处理…','Processing…');
+  try{
+    const data=await api('agent-task/action',{...selection,action,...(limits?{limits}:{})});
+    if(data.download){
+      const link=document.createElement('a');const url=URL.createObjectURL(new Blob([data.download],{type:'application/json;charset=utf-8'}));
+      link.href=url;link.download=data.filename;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+    }
+    $('native-tasks-feedback').textContent=data.message+(data.indexPath?'\\n'+data.indexPath:'');
+    nativeDetailSignature='';await loadNativeDetail();
+  }catch(error){$('native-tasks-feedback').textContent=error.message;}
+  finally{await refresh(true);nativeActionBusy=false;renderSubmitState();}
+}
+function nativeControls(parent,data){
+  const selection={mode:data.mode,id:data.id};const row=document.createElement('div');row.className='row task-actions';
+  const button=(label,action,requiresReady)=>{
+    const node=document.createElement('button');node.type='button';node.textContent=label;
+    if(requiresReady){node.dataset.taskRequiresReady='true';node.dataset.complete=String(data.phase==='completed');}
+    node.disabled=nativeActionBusy||(requiresReady&&(!sessionReady||data.phase==='completed'));
+    node.onclick=()=>actOnNativeTask(selection,action);row.append(node);return node;
+  };
+  button(t('开始 / 续接','Start / resume'),'resume',true);
+  const pause=button(t('暂停并保留','Pause and retain'),'pause',false);pause.disabled=nativeActionBusy||['completed','cancelled'].includes(data.phase);
+  button(t('导出完整报告','Export full reports'),'reports',false);
+  parent.append(row);
+  if(data.kind==='workflow'){
+    const done=data.milestones.filter(item=>item.completed).length;
+    const progress=document.createElement('progress');progress.className='goal-progress';progress.max=data.milestones.length;progress.value=done;
+    progress.setAttribute('aria-label',t('里程碑完成进度','Milestone progress'));parent.append(progress);
+    nativeParagraph(parent,done+' / '+data.milestones.length+t(' 阶段已完成',' milestones complete'));
+    if(data.drillGoal)nativeParagraph(parent,t('范围：','Scope: ')+(data.drillGoal.scope||t('当前项目工作区','Current project workspace')));
+    if(data.phase!=='completed'){
+      const form=document.createElement('form');form.className='row';
+      const fields=[['maxRequests',t('模型调度上限','Model dispatch limit'),data.limits?.maxRequests??120,10000],['maxFailedStages',t('失败阶段上限','Failed-stage limit'),data.limits?.maxFailedStages??2,100],['maxImplementationRounds',t('每阶段实施轮数','Rounds per milestone'),data.limits?.maxImplementationRounds??2,100]];
+      const values={};for(const [key,label,value,max] of fields){const wrapper=document.createElement('label');wrapper.textContent=label;const input=document.createElement('input');input.type='number';input.min=1;input.max=max;input.required=true;input.value=value;values[key]=input;wrapper.append(input);form.append(wrapper);}
+      const save=document.createElement('button');save.type='submit';save.textContent=t('保存执行预算','Save limits');save.dataset.taskRequiresReady='true';save.disabled=!sessionReady||nativeActionBusy;form.append(save);
+      form.onsubmit=event=>{event.preventDefault();const limits={};for(const [key,input] of Object.entries(values))limits[key]=Number(input.value);void actOnNativeTask(selection,'budget',limits);};parent.append(form);
+    }
+  }
+}
+
 const nativePhases={scoping:['需求对齐中','Scoping'],ready:['已就绪','Ready'],running:['运行中','Running'],active:['进行中','Active'],blocked:['已受阻','Blocked'],completed:['已完成','Completed'],cancelled:['已取消','Cancelled'],queued:['排队','Queued'],working:['工作中','Working'],waiting:['等待','Waiting'],paused:['已暂停','Paused'],killed:['已停止','Stopped']};
 function findingStatus(value){const labels={'unverified':['待验证','Unverified'],'static-reviewed':['已静态审查','Static review'],'verified':['已验证','Verified']};const label=Object.hasOwn(labels,value)?labels[value]:undefined;return label?t(...label):(value||t('未知','Unknown'));}
 function nativePhase(value){const label=nativePhases[value];return label?t(...label):value||t('详情未加载','Details unavailable');}
@@ -239,8 +317,8 @@ async function loadNativeTasks(page=nativePage){
     $('native-tasks-page').textContent=t('第 '+data.page+' 页 · 共 '+data.total+' 项','Page '+data.page+' · '+data.total+' total');$('native-tasks-prev').hidden=data.page===1;$('native-tasks-next').hidden=!data.hasMore;$('native-tasks-feedback').textContent='';
   }catch(error){$('native-tasks-feedback').textContent=error.message;}finally{nativeCatalogBusy=false;$('native-tasks-load').disabled=false;$('native-tasks-prev').disabled=false;$('native-tasks-next').disabled=false;}
 }
-async function loadNativeDetail(){if(!nativeSelection||nativeDetailBusy)return;const revision=nativeSelectionRevision;const selected={...nativeSelection};nativeDetailBusy=true;try{const data=await api('agent-task?mode='+encodeURIComponent(selected.mode)+'&id='+encodeURIComponent(selected.id));if(revision!==nativeSelectionRevision)return;const signature=JSON.stringify([locale,data]);if(signature===nativeDetailSignature)return;nativeDetailSignature=signature;const detail=$('native-task-detail');const openFailures=new Set(detail.dataset.taskId===data.id?Array.from(detail.querySelectorAll('details[data-failure-member][open]')).map(node=>node.dataset.failureMember):[]);detail.dataset.taskId=data.id;detail.hidden=false;detail.replaceChildren();nativeParagraph(detail,data.mode+' · '+nativePhase(data.phase),'h3');nativeParagraph(detail,data.objective);nativeParagraph(detail,t('请求用量：','Requests: ')+(data.usage.known?data.usage.requests+' / '+data.usage.maxRequests:t('未知，未补建预算','Unknown; no budget reconstructed')));for(const warning of data.warnings)nativeParagraph(detail,warning==='budget-unavailable'?t('历史用量不可确认。','Historical usage unavailable.'):t('共享留言无法读取，原文件保留。','Shared board unavailable; original retained.'));if(data.kind==='swarm'){nativeParagraph(detail,t('成员与结果','Members and results'),'h3');for(const member of data.members){nativeParagraph(detail,member.name+' · '+member.agent+' · '+nativePhase(member.state)+t(' · 回合 ',' · turns ')+member.turns,'h4');nativeReview(detail,member.review);nativeResult(detail,member);}if(!data.members.length)nativeParagraph(detail,t('尚未添加成员。','No members yet.'));nativeParagraph(detail,t('最近共享留言','Recent shared messages'),'h3');for(const post of data.posts){nativeParagraph(detail,post.sender+' · '+post.time,'h4');nativeParagraph(detail,post.text,'pre');}if(data.stopReason)nativeParagraph(detail,data.stopReason);}else{nativeParagraph(detail,t('当前阶段：','Stage: ')+(data.stage||'—')+t(' · 已批准：',' · Approved: ')+(data.approved?t('是','Yes'):t('否','No')));nativeReview(detail,data.review);nativeParagraph(detail,t('里程碑','Milestones'),'h3');for(const item of data.milestones){nativeParagraph(detail,(item.completed?'✓ ':'○ ')+item.title,'h4');nativeParagraph(detail,item.acceptance);}nativeParagraph(detail,t('最近阶段结果 · 共 ','Recent stage results · ')+data.reportCount,'h3');for(const report of data.reports){nativeParagraph(detail,report.agent+' · '+report.stage+' · '+t(report.completed?'完成':'未完成',report.completed?'Complete':'Incomplete'),'h4');nativeResult(detail,report);}}nativeParagraph(detail,t('在终端查看或导出完整结果：','Inspect or export full results in the terminal: '));nativeParagraph(detail,data.commands.status,'pre');nativeParagraph(detail,data.commands.reports,'pre');for(const node of detail.querySelectorAll('details[data-failure-member]'))node.open=openFailures.has(node.dataset.failureMember);$('native-tasks-feedback').textContent='';}catch(error){if(revision===nativeSelectionRevision){nativeDetailSignature='';$('native-task-detail').hidden=true;$('native-tasks-feedback').textContent=error.message;}}finally{nativeDetailBusy=false;if(revision!==nativeSelectionRevision)void loadNativeDetail();}}
+async function loadNativeDetail(){if(!nativeSelection||nativeDetailBusy)return;const revision=nativeSelectionRevision;const selected={...nativeSelection};nativeDetailBusy=true;try{const data=await api('agent-task?mode='+encodeURIComponent(selected.mode)+'&id='+encodeURIComponent(selected.id));if(revision!==nativeSelectionRevision)return;const signature=JSON.stringify([locale,data]);if(signature===nativeDetailSignature)return;nativeDetailSignature=signature;const detail=$('native-task-detail');const openFailures=new Set(detail.dataset.taskId===data.id?Array.from(detail.querySelectorAll('details[data-failure-member][open]')).map(node=>node.dataset.failureMember):[]);detail.dataset.taskId=data.id;detail.hidden=false;detail.replaceChildren();nativeParagraph(detail,data.mode+' · '+nativePhase(data.phase),'h3');nativeParagraph(detail,data.objective);nativeParagraph(detail,t('请求用量：','Requests: ')+(data.usage.known?data.usage.requests+' / '+data.usage.maxRequests:t('未知，未补建预算','Unknown; no budget reconstructed')));for(const warning of data.warnings)nativeParagraph(detail,warning==='budget-unavailable'?t('历史用量不可确认。','Historical usage unavailable.'):t('共享留言无法读取，原文件保留。','Shared board unavailable; original retained.'));if(data.kind==='swarm'){nativeParagraph(detail,t('成员与结果','Members and results'),'h3');for(const member of data.members){nativeParagraph(detail,member.name+' · '+member.agent+' · '+nativePhase(member.state)+t(' · 回合 ',' · turns ')+member.turns,'h4');nativeReview(detail,member.review);nativeResult(detail,member);}if(!data.members.length)nativeParagraph(detail,t('尚未添加成员。','No members yet.'));nativeParagraph(detail,t('最近共享留言','Recent shared messages'),'h3');for(const post of data.posts){nativeParagraph(detail,post.sender+' · '+post.time,'h4');nativeParagraph(detail,post.text,'pre');}if(data.stopReason)nativeParagraph(detail,data.stopReason);}else{nativeParagraph(detail,t('当前阶段：','Stage: ')+(data.stage||'—')+t(' · 已批准：',' · Approved: ')+(data.approved?t('是','Yes'):t('否','No')));nativeReview(detail,data.review);nativeParagraph(detail,t('里程碑','Milestones'),'h3');for(const item of data.milestones){nativeParagraph(detail,(item.completed?'✓ ':'○ ')+item.title,'h4');nativeParagraph(detail,item.acceptance);}nativeParagraph(detail,t('最近阶段结果 · 共 ','Recent stage results · ')+data.reportCount,'h3');for(const report of data.reports){nativeParagraph(detail,report.agent+' · '+report.stage+' · '+t(report.completed?'完成':'未完成',report.completed?'Complete':'Incomplete'),'h4');nativeResult(detail,report);}}nativeControls(detail,data);nativeParagraph(detail,t('在终端查看或导出完整结果：','Inspect or export full results in the terminal: '));nativeParagraph(detail,data.commands.status,'pre');nativeParagraph(detail,data.commands.reports,'pre');for(const node of detail.querySelectorAll('details[data-failure-member]'))node.open=openFailures.has(node.dataset.failureMember);$('native-tasks-feedback').textContent='';}catch(error){if(revision===nativeSelectionRevision){nativeDetailSignature='';$('native-task-detail').hidden=true;$('native-tasks-feedback').textContent=error.message;}}finally{nativeDetailBusy=false;if(revision!==nativeSelectionRevision)void loadNativeDetail();}}
 $('native-tasks-load').onclick=()=>loadNativeTasks();$('native-tasks-prev').onclick=()=>loadNativeTasks(nativePage-1);$('native-tasks-next').onclick=()=>loadNativeTasks(nativePage+1);
-void refresh().then(loadPrompts);setInterval(()=>{if(!document.hidden){void refresh();if(!$('drill').hidden)void loadNativeDetail();}},4000);
+showPage('drill');void refresh().then(loadPrompts);setInterval(()=>{if(!document.hidden){void refresh();if(!$('drill').hidden)void loadNativeDetail();}},4000);
 </script></body></html>`;
 }

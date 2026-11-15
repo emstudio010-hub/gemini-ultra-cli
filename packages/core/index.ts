@@ -5,6 +5,7 @@
  */
 
 export * from './src/index.js';
+export * from './src/drill/drillGoals.js';
 export * from './src/agents/agentWorkflows.js';
 export * from './src/agents/agentReports.js';
 export * from './src/agents/workflowBudget.js';
